@@ -35,6 +35,8 @@ constexpr UINT RecordingDone = WM_APP + 7;
 constexpr UINT PreviewClosed = WM_APP + 8;
 constexpr UINT_PTR ConfigurationDebounce = 1;
 constexpr UINT_PTR ConfigurationRetry = 2;
+constexpr UINT_PTR HotkeyRetry = 3;
+constexpr UINT HotkeyRetryIntervalMs = 2000;
 HWND exceptionOwner = nullptr; // Window callbacks run only on the application's UI thread.
 
 struct ModalScope {
@@ -142,9 +144,9 @@ int App::Run(const LaunchOptions& options, const std::wstring& instanceWindowTit
     try { (void)autostart_->RepairIfEnabled(executable_); }
     catch (const std::exception& error) { Notify(ExceptionMessage(error), true); }
     if (selectedPath.usedFallback) { Notify(selectedPath.notice, true); }
-    if (selectedPath.created) {
-        Notify(Text(L"VisPick 已启动：Ctrl+1 截图 · Ctrl+2 GIF · Ctrl+3 参考图。全局热键会覆盖其他软件相同的快捷键，可在配置中修改。",
-            L"VisPick is running: Ctrl+1 screenshot, Ctrl+2 GIF, Ctrl+3 pin. Global shortcuts override the same keys in other apps; edit the configuration to change them."));
+    if (selectedPath.created && hotkeyProblems_.empty()) {
+        Notify(Text(L"VisPick 已启动。Ctrl+1 截图后可贴图、复制或保存。Ctrl+2 录制 GIF。",
+            L"VisPick is running. Ctrl+1 opens a screenshot to pin, copy or save. Ctrl+2 records GIFs."));
     }
     log_.Write(LogLevel::Info, L"ready config=" + configPath_.native());
     if (options.command != AppCommand::None) { Queue(options); }
@@ -176,7 +178,7 @@ void App::ReloadConfiguration(bool announce, bool retry, bool retryHotkeys) {
     if (!loaded.diagnostics.empty()) {
         Notify(configurationProblems_.substr(0, 180) + Text(L"\n无效项沿用上次有效值。关于窗口可查看全部错误。",
             L"\nInvalid values retain their last valid settings. About shows all errors."), true);
-    } else if (announce) {
+    } else if (announce && hotkeyProblems_.empty()) {
         Notify(Text(L"配置已重新加载。", L"Configuration reloaded."));
     }
     log_.Write(LogLevel::Info, L"config_reload accepted=" + std::to_wstring(loaded.accepted) +
@@ -198,19 +200,36 @@ void App::ApplyConfiguration(bool retryHotkeys) {
         catch (const std::exception& error) { Notify(ExceptionMessage(error), true); }
     }
     if (!retryHotkeys && appliedHotkeys_ == config_.hotkeys) { return; }
+    RebindHotkeys(retryHotkeys);
+    appliedHotkeys_ = config_.hotkeys;
+}
+
+void App::RebindHotkeys(bool announceFailure) {
     const std::array bindings{
         HotkeyBinding{AppCommand::Screenshot, config_.hotkeys.screenshot, Text(L"截图", L"Screenshot")},
         HotkeyBinding{AppCommand::Gif, config_.hotkeys.gif, L"GIF"},
-        HotkeyBinding{AppCommand::Pin, config_.hotkeys.pin, Text(L"参考图", L"Pin")},
         HotkeyBinding{AppCommand::PinClipboard, config_.hotkeys.pinClipboard, Text(L"剪贴板贴图", L"Pin clipboard")},
         HotkeyBinding{AppCommand::TogglePins, config_.hotkeys.togglePins, Text(L"隐藏/显示参考图", L"Toggle pins")}
     };
-    const auto conflicts = hotkeys_->Rebind(bindings);
-    appliedHotkeys_ = config_.hotkeys;
-    if (!conflicts.empty()) {
-        std::wstring message = Text(L"以下热键无法注册，其余热键仍然可用：\n", L"These shortcuts could not be registered; others remain available:\n");
-        for (const auto& conflict : conflicts) { message += conflict + L"\n"; }
-        Notify(message, true);
+    const auto failures = hotkeys_->Rebind(bindings);
+    bool retry = false;
+    std::wstring problems;
+    for (const auto& failure : failures) {
+        problems += failure.label + L" (" + FormatHotkey(failure.hotkey) + L")";
+        if (failure.error == ERROR_HOTKEY_ALREADY_REGISTERED) {
+            problems += Text(L" 已被占用。\n", L" is already registered.\n");
+            retry = true;
+        } else {
+            problems += Text(L" 注册失败，错误 ", L" failed to register, error ") + std::to_wstring(failure.error) + L"\n";
+        }
+    }
+    if (retry) { SetTimer(Handle(), HotkeyRetry, HotkeyRetryIntervalMs, nullptr); }
+    else { KillTimer(Handle(), HotkeyRetry); }
+    const bool changed = hotkeyProblems_ != problems;
+    hotkeyProblems_ = std::move(problems);
+    if (!hotkeyProblems_.empty() && (changed || announceFailure)) {
+        Notify(Text(L"以下热键无法注册。请在托盘的「关于」中查看。\n",
+            L"These shortcuts could not be registered. See About in the tray.\n") + hotkeyProblems_, true);
     }
 }
 
@@ -358,6 +377,7 @@ void App::RequestExit() {
             L"VisPick", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) { return; }
     }
     stopping_ = true;
+    KillTimer(Handle(), HotkeyRetry);
     if (overlay_) { overlay_->Cancel(); }
     if (watcher_) { watcher_->Stop(); }
     if (hotkeys_) { hotkeys_->Clear(); }
@@ -369,6 +389,7 @@ void App::EndSession() {
     // Windows has already committed to shutdown. Never enter another dialog;
     // preserve an unsaved completed GIF and synchronously finish owned workers.
     stopping_ = true;
+    KillTimer(Handle(), HotkeyRetry);
     if (hotkeys_) { hotkeys_->Clear(); }
     if (tray_) { tray_->Remove(); }
     if (watcher_) { watcher_->Stop(); }
@@ -453,7 +474,7 @@ void App::Dispatch(AppCommand command, const std::filesystem::path& file) {
         // while MessageBox runs a nested message loop.
         const auto details = Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L"\n截图、标注、参考图与 GIF 录制。\n\n配置：",
             L"VisPick " VISPICK_PRODUCT_VERSION_W L"\nScreenshots, annotations, reference images and GIF recording.\n\nConfiguration: ") +
-            configPath_.native() + L"\n\n" + configurationProblems_;
+            configPath_.native() + L"\n\n" + configurationProblems_ + hotkeyProblems_;
         const ModalScope modal(modalDepth_, Handle());
         MessageBoxW(Handle(), details.c_str(), L"VisPick", MB_OK | MB_ICONINFORMATION);
         break;
@@ -512,6 +533,10 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
         if (parameter == ConfigurationDebounce) {
             KillTimer(Handle(), ConfigurationDebounce);
             if (!stopping_) { ReloadConfiguration(true); }
+            return 0;
+        }
+        if (parameter == HotkeyRetry) {
+            if (!stopping_) { RebindHotkeys(); }
             return 0;
         }
         break;

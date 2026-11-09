@@ -32,6 +32,7 @@ protected:
 private:
     void ReloadConfiguration(bool announce, bool retry = false, bool retryHotkeys = false);
     void ApplyConfiguration(bool retryHotkeys);
+    void RebindHotkeys(bool announceFailure = false);
     void Notify(std::wstring_view message, bool warning = false);
     void Queue(LaunchOptions options);
     void ProcessCommands();
@@ -69,6 +70,7 @@ private:
     std::filesystem::path lastSaveFolder_;
     std::filesystem::path notificationFile_;
     std::wstring configurationProblems_;
+    std::wstring hotkeyProblems_;
     bool performanceLogging_ = false;
     bool stopping_ = false;
     unsigned modalDepth_ = 0;

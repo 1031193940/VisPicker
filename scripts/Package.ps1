@@ -29,7 +29,7 @@ if ((Test-Path -LiteralPath $packageRoot) -or (Test-Path -LiteralPath $archive))
     throw 'Package already exists. Preserve it and choose a new version or move the old package explicitly.'
 }
 [void][IO.Directory]::CreateDirectory($packageRoot)
-foreach ($relative in @('dist\VisPick.exe','dist\VisPick-x86.exe','CHANGELOG.md','res\default.ini')) {
+foreach ($relative in @('dist\VisPick.exe','dist\VisPick-x86.exe','CHANGELOG.md','LICENSE','res\default.ini')) {
     $destination = if ($relative.StartsWith('dist\')) { Join-Path $packageRoot ([IO.Path]::GetFileName($relative)) } else { Join-Path $packageRoot $relative }
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination))
     Copy-Item -LiteralPath (Join-Path $projectRoot $relative) -Destination $destination

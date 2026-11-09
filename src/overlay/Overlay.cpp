@@ -315,12 +315,20 @@ struct Overlay::State {
         };
         add(ButtonKind::Undo, L"↶", Text(L"撤销 (Ctrl+Z)", L"Undo (Ctrl+Z)"));
         add(ButtonKind::Redo, L"↷", Text(L"重做 (Ctrl+Y)", L"Redo (Ctrl+Y)"));
-        add(ButtonKind::Save, Text(L"存", L"Save"), Text(L"保存 (Ctrl+S)", L"Save (Ctrl+S)"));
+        const bool compactActionLabel = slot < Scale(28);
+        add(ButtonKind::Save, compactActionLabel ? Text(L"存", L"S") : Text(L"保存", L"Save"),
+            Text(L"保存到文件 (Ctrl+S)", L"Save to file (Ctrl+S)"));
         if (mode == CaptureMode::Pin) { add(ButtonKind::Copy, Text(L"复", L"Copy"), Text(L"复制 (Ctrl+C)", L"Copy (Ctrl+C)")); }
-        else { add(ButtonKind::Pin, Text(L"钉", L"Pin"), Text(L"钉住 (Ctrl+T)", L"Pin (Ctrl+T)")); }
+        else {
+            add(ButtonKind::Pin, compactActionLabel ? Text(L"钉", L"P") : Text(L"贴图", L"Pin"),
+                Text(L"贴为参考图 (Ctrl+T)", L"Pin as reference (Ctrl+T)"));
+        }
         add(ButtonKind::Cancel, L"×", Text(L"取消 (Esc)", L"Cancel (Esc)"));
-        add(ButtonKind::Confirm, mode == CaptureMode::Pin ? Text(L"✓ 钉住", L"✓ Pin") : Text(L"✓ 复制", L"✓ Copy"),
-            Text(L"确认 (Enter)", L"Confirm (Enter)"), 2);
+        const bool pinMode = mode == CaptureMode::Pin;
+        const wchar_t* confirmLabel = pinMode ? Text(L"✓ 钉住", L"✓ Pin") : Text(L"✓ 复制", L"✓ Copy");
+        add(ButtonKind::Confirm, slot * 2 < Scale(52) ? L"✓" : confirmLabel,
+            pinMode ? Text(L"贴为参考图 (Enter)", L"Pin as reference (Enter)") :
+                Text(L"复制到剪贴板 (Enter)", L"Copy to clipboard (Enter)"), 2);
         if (!properties) { return; }
         const LONG propertySlot = (width - margin * 2) / 14;
         left = toolbar.left + margin;

@@ -12,7 +12,7 @@ TEST_CASE("Config embedded default template is complete and valid") {
     const auto result = vispick::ParseConfig(vispick::LoadDefaultConfigTemplate());
     REQUIRE(result.accepted); CHECK(result.diagnostics.empty());
     CHECK(result.config.hotkeys.screenshot == vispick::Hotkey{2, '1'});
-    CHECK(result.config.hotkeys.gif == vispick::Hotkey{2, '2'}); CHECK(result.config.hotkeys.pin == vispick::Hotkey{2, '3'});
+    CHECK(result.config.hotkeys.gif == vispick::Hotkey{2, '2'});
     CHECK_FALSE(result.config.hotkeys.pinClipboard.Enabled()); CHECK_FALSE(result.config.hotkeys.togglePins.Enabled());
     CHECK(result.config.capture.windowSnap); CHECK(result.config.capture.magnifier); CHECK(result.config.capture.maskOpacity == 45); CHECK_FALSE(result.config.capture.includeCursor);
     CHECK(result.config.save.folder == L"{pictures}"); CHECK(result.config.save.fileName == L"VisPick_{date}_{time}");
@@ -136,10 +136,20 @@ TEST_CASE("Config all alternate tray actions parse") {
 }
 TEST_CASE("Config all hotkey fields parse and invalid Ctrl plus retains prior binding") {
     vispick::Config previous; previous.hotkeys.gif = {MOD_ALT, VK_F4};
-    const auto result = ParseSettings("[Hotkeys]\nScreenshot=Alt+A\nGif=Ctrl+\nPin=\nPinClipboard=F12\nTogglePins=Ctrl++", &previous);
+    const auto result = ParseSettings("[Hotkeys]\nScreenshot=Alt+A\nGif=Ctrl+\nPinClipboard=F12\nTogglePins=Ctrl++", &previous);
     REQUIRE(result.diagnostics.size() == 1); CHECK(result.diagnostics[0].line == 3);
     CHECK(result.config.hotkeys.screenshot == vispick::Hotkey{MOD_ALT, 'A'}); CHECK(result.config.hotkeys.gif == previous.hotkeys.gif);
-    CHECK_FALSE(result.config.hotkeys.pin.Enabled()); CHECK(result.config.hotkeys.pinClipboard.virtualKey == VK_F12); CHECK(result.config.hotkeys.togglePins.virtualKey == VK_OEM_PLUS);
+    CHECK(result.config.hotkeys.pinClipboard.virtualKey == VK_F12); CHECK(result.config.hotkeys.togglePins.virtualKey == VK_OEM_PLUS);
+}
+TEST_CASE("Config ignores the retired Pin hotkey in an existing INI") {
+    for (const auto* value : {"Ctrl+3", "Ctrl+"}) {
+        const auto result = ParseSettings(std::string("[Hotkeys]\nPin=") + value + "\nGif=Alt+F2\n[Pin]\nInstant=true");
+        REQUIRE(result.accepted);
+        CHECK(result.diagnostics.empty());
+        CHECK(result.config.hotkeys.screenshot == vispick::Hotkey{MOD_CONTROL, '1'});
+        CHECK(result.config.hotkeys.gif == vispick::Hotkey{MOD_ALT, VK_F2});
+        CHECK(result.config.pin.instant);
+    }
 }
 TEST_CASE("Config GIF accepts minimum maximum and auto scale") {
     CHECK(ParseSettings("[Gif]\nFps=1\nMaxSeconds=1\nScale=1").diagnostics.empty());

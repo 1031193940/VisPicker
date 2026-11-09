@@ -115,10 +115,9 @@ ConfigLoadResult ParseConfig(std::span<const std::uint8_t> bytes, const Config* 
         if (entry.section == L"hotkeys") {
             if (key == L"screenshot") { hotkey(config.hotkeys.screenshot, retained.hotkeys.screenshot); }
             else if (key == L"gif") { hotkey(config.hotkeys.gif, retained.hotkeys.gif); }
-            else if (key == L"pin") { hotkey(config.hotkeys.pin, retained.hotkeys.pin); }
             else if (key == L"pinclipboard") { hotkey(config.hotkeys.pinClipboard, retained.hotkeys.pinClipboard); }
             else if (key == L"togglepins") { hotkey(config.hotkeys.togglePins, retained.hotkeys.togglePins); }
-            else { recognized = false; }
+            else { recognized = key == L"pin"; } // Ignore the retired shortcut in older files.
         } else if (entry.section == L"capture") {
             if (key == L"windowsnap") { boolean(config.capture.windowSnap, retained.capture.windowSnap); }
             else if (key == L"magnifier") { boolean(config.capture.magnifier, retained.capture.magnifier); }

@@ -16,7 +16,6 @@ struct Config {
     struct Hotkeys {
         Hotkey screenshot{2, '1'};
         Hotkey gif{2, '2'};
-        Hotkey pin{2, '3'};
         Hotkey pinClipboard;
         Hotkey togglePins;
         bool operator==(const Hotkeys&) const = default;

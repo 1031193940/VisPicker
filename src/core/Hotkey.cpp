@@ -7,6 +7,20 @@
 namespace vispick {
 namespace {
 
+struct NamedKey { std::wstring_view name; unsigned code; };
+constexpr NamedKey NamedKeys[] = {
+    {L"printscreen", VK_SNAPSHOT}, {L"left", VK_LEFT}, {L"right", VK_RIGHT},
+    {L"up", VK_UP}, {L"down", VK_DOWN}, {L"home", VK_HOME}, {L"end", VK_END},
+    {L"pageup", VK_PRIOR}, {L"pagedown", VK_NEXT}, {L"insert", VK_INSERT},
+    {L"delete", VK_DELETE}, {L"space", VK_SPACE}, {L"tab", VK_TAB},
+    {L";", VK_OEM_1}, {L"semicolon", VK_OEM_1}, {L"=", VK_OEM_PLUS},
+    {L"+", VK_OEM_PLUS}, {L"plus", VK_OEM_PLUS}, {L"comma", VK_OEM_COMMA}, {L",", VK_OEM_COMMA},
+    {L"minus", VK_OEM_MINUS}, {L"-", VK_OEM_MINUS}, {L"period", VK_OEM_PERIOD}, {L".", VK_OEM_PERIOD},
+    {L"slash", VK_OEM_2}, {L"/", VK_OEM_2}, {L"backtick", VK_OEM_3}, {L"`", VK_OEM_3},
+    {L"[", VK_OEM_4}, {L"leftbracket", VK_OEM_4}, {L"\\", VK_OEM_5}, {L"backslash", VK_OEM_5},
+    {L"]", VK_OEM_6}, {L"rightbracket", VK_OEM_6}, {L"'", VK_OEM_7}, {L"quote", VK_OEM_7}
+};
+
 unsigned KeyCode(std::wstring_view key) {
     if (key.size() == 1) {
         const wchar_t character = key.front();
@@ -24,20 +38,7 @@ unsigned KeyCode(std::wstring_view key) {
     if (key.size() == 4 && key.substr(0, 3) == L"num" && key[3] >= L'0' && key[3] <= L'9') {
         return VK_NUMPAD0 + static_cast<unsigned>(key[3] - L'0');
     }
-    struct NamedKey { std::wstring_view name; unsigned code; };
-    static constexpr NamedKey names[] = {
-        {L"printscreen", VK_SNAPSHOT}, {L"left", VK_LEFT}, {L"right", VK_RIGHT},
-        {L"up", VK_UP}, {L"down", VK_DOWN}, {L"home", VK_HOME}, {L"end", VK_END},
-        {L"pageup", VK_PRIOR}, {L"pagedown", VK_NEXT}, {L"insert", VK_INSERT},
-        {L"delete", VK_DELETE}, {L"space", VK_SPACE}, {L"tab", VK_TAB},
-        {L";", VK_OEM_1}, {L"semicolon", VK_OEM_1}, {L"=", VK_OEM_PLUS},
-        {L"+", VK_OEM_PLUS}, {L"plus", VK_OEM_PLUS}, {L"comma", VK_OEM_COMMA}, {L",", VK_OEM_COMMA},
-        {L"minus", VK_OEM_MINUS}, {L"-", VK_OEM_MINUS}, {L"period", VK_OEM_PERIOD}, {L".", VK_OEM_PERIOD},
-        {L"slash", VK_OEM_2}, {L"/", VK_OEM_2}, {L"backtick", VK_OEM_3}, {L"`", VK_OEM_3},
-        {L"[", VK_OEM_4}, {L"leftbracket", VK_OEM_4}, {L"\\", VK_OEM_5}, {L"backslash", VK_OEM_5},
-        {L"]", VK_OEM_6}, {L"rightbracket", VK_OEM_6}, {L"'", VK_OEM_7}, {L"quote", VK_OEM_7}
-    };
-    for (const auto& named : names) { if (key == named.name) { return named.code; } }
+    for (const auto& named : NamedKeys) { if (key == named.name) { return named.code; } }
     return 0;
 }
 
@@ -72,6 +73,21 @@ HotkeyParseResult ParseHotkey(std::wstring_view text) {
     }
     if (!hotkey.Enabled()) { return {std::nullopt, L"热键缺少主键。"}; }
     return {hotkey, {}};
+}
+
+std::wstring FormatHotkey(Hotkey hotkey) {
+    if (!hotkey.Enabled()) { return {}; }
+    std::wstring text;
+    if (hotkey.modifiers & MOD_CONTROL) { text += L"Ctrl+"; }
+    if (hotkey.modifiers & MOD_ALT) { text += L"Alt+"; }
+    if (hotkey.modifiers & MOD_SHIFT) { text += L"Shift+"; }
+    if (hotkey.modifiers & MOD_WIN) { text += L"Win+"; }
+    const auto key = hotkey.virtualKey;
+    if ((key >= 'A' && key <= 'Z') || (key >= '0' && key <= '9')) { return text + static_cast<wchar_t>(key); }
+    if (key >= VK_F1 && key <= VK_F24) { return text + L"F" + std::to_wstring(key - VK_F1 + 1); }
+    if (key >= VK_NUMPAD0 && key <= VK_NUMPAD9) { return text + L"Num" + std::to_wstring(key - VK_NUMPAD0); }
+    for (const auto& named : NamedKeys) { if (key == named.code) { return text.append(named.name); } }
+    return text + L"VK " + std::to_wstring(key);
 }
 
 } // namespace vispick

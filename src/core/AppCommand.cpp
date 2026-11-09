@@ -64,7 +64,7 @@ LaunchOptions ParseLaunchOptions(std::span<const std::wstring> arguments) {
 
 std::wstring ApplicationHelp() {
     return L"VisPick " VISPICK_PRODUCT_VERSION_W L" — 截图、参考图与 GIF 录制\n\n"
-        L"无参数启动后常驻托盘，Ctrl+1 截图、Ctrl+2 GIF、Ctrl+3 参考图。\n"
+        L"无参数启动后常驻托盘。Ctrl+1 截图，选区后可贴图、复制或保存。Ctrl+2 录制 GIF。\n"
         L"拖出选区后 Enter 复制，R/E/A/P/T/M 标注，Ctrl+S 保存。\n\n"
         L"用法：VisPick.exe [动作] [--config <文件>] [--perf]\n"
         L"动作：--screenshot | --gif | --pin | --pin-clipboard\n"

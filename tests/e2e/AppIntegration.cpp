@@ -290,10 +290,10 @@ void CancelOwnedOverlay(const Child& child) {
     }
 }
 
-std::string Configuration(std::string_view screenshot, unsigned gif, unsigned pin, bool logging = true) {
+std::string Configuration(std::string_view screenshot, unsigned gif, unsigned togglePins, bool logging = true) {
     return "; VisPick E2E 隔离配置\r\n[Hotkeys]\r\nScreenshot=" + std::string(screenshot) +
-        "\r\nGif=Ctrl+Alt+Shift+F" + std::to_string(gif) + "\r\nPin=Ctrl+Alt+Shift+F" +
-        std::to_string(pin) + "\r\nPinClipboard=\r\nTogglePins=\r\n[General]\r\nLanguage=en\r\nLog=" +
+        "\r\nGif=Ctrl+Alt+Shift+F" + std::to_string(gif) + "\r\nPinClipboard=\r\nTogglePins=Ctrl+Alt+Shift+F" +
+        std::to_string(togglePins) + "\r\n[General]\r\nLanguage=en\r\nLog=" +
         (logging ? "true" : "false") + "\r\n";
 }
 
@@ -317,7 +317,7 @@ void DispatchHotkey(Report& report, const Child& child, vispick::test::Foregroun
     PostOwned(child, WM_HOTKEY, identifier, MAKELPARAM(TestModifiers, key));
     report.Require(WaitUntil([&] { return Occurrences(ReadFile(log), record) > previous; }),
         "wm_hotkey_dispatch_" + std::string(command), "Synthetic WM_HOTKEY; actual registration is probed independently, without SendInput.");
-    CancelOwnedOverlay(child);
+    if (command == "screenshot" || command == "gif") { CancelOwnedOverlay(child); }
 }
 
 std::uint64_t ProcessCpu100ns(HANDLE process) {
@@ -391,16 +391,27 @@ void RunChecks(Report& report, const std::filesystem::path& product,
     report.Require(HotkeyAvailable(VK_F13) && !HotkeyAvailable(VK_F16), "old_binding_released_new_binding_registered");
     DispatchHotkey(report, application, foreground, log, 1, VK_F16, "screenshot");
     DispatchHotkey(report, application, foreground, log, 2, VK_F14, "gif");
-    DispatchHotkey(report, application, foreground, log, 3, VK_F15, "pin");
+    DispatchHotkey(report, application, foreground, log, 4, VK_F15, "toggle-pins");
+    const auto occupiedConfiguration = Configuration("Ctrl+Alt+Shift+F16", 17, 15);
+    std::size_t reloadsWhileOccupied = 0;
     {
         const HotkeyLease conflict(VK_F17);
         report.Require(conflict.Registered(), "external_conflict_probe_registered");
-        Reload(report, config, log, Configuration("Ctrl+Alt+Shift+F16", 17, 15), "conflict_reload");
+        Reload(report, config, log, occupiedConfiguration, "conflict_reload");
         report.Require(ReadFile(log).find("These shortcuts could not be registered") != std::string::npos &&
             HotkeyAvailable(VK_F14) && !HotkeyAvailable(VK_F16) && !HotkeyAvailable(VK_F15), "conflict_reported_other_hotkeys_preserved");
         DispatchHotkey(report, application, foreground, log, 1, VK_F16, "screenshot");
+        reloadsWhileOccupied = Occurrences(ReadFile(log), "config_reload ");
     }
-    Reload(report, config, log, Configuration("Ctrl+Alt+Shift+F16", 18, 15), "conflict_recovery");
+    const auto releasedAt = Clock::now();
+    report.Require(WaitUntil([&] { return !HotkeyAvailable(VK_F17); }) &&
+        ReadFile(config) == occupiedConfiguration && Occurrences(ReadFile(log), "config_reload ") == reloadsWhileOccupied,
+        "occupied_hotkey_recovers_without_configuration_reload", "Waits for real registration after releasing the test lease. No reload command or file edit.");
+    report.measurements.emplace_back("automatic_hotkey_recovery_milliseconds",
+        std::chrono::duration<double, std::milli>(Clock::now() - releasedAt).count());
+    DispatchHotkey(report, application, foreground, log, 2, VK_F17, "gif");
+    Reload(report, config, log, Configuration("Ctrl+Alt+Shift+F16", 18, 15), "hotkey_change_after_automatic_recovery");
+    report.Require(HotkeyAvailable(VK_F17) && !HotkeyAvailable(VK_F18), "recovered_hotkey_releases_when_changed");
     Reload(report, config, log, Configuration("Ctrl+", 18, 15), "invalid_hotkey_reload", false, "config_reload accepted=1 diagnostics=1");
     report.Require(!HotkeyAvailable(VK_F16) && !HotkeyAvailable(VK_F18) && !HotkeyAvailable(VK_F15) &&
         ReadFile(log).find("Configuration line ") != std::string::npos, "invalid_value_retains_previous_bindings_with_line_diagnostic");

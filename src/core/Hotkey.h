@@ -22,5 +22,6 @@ struct HotkeyParseResult {
 // Punctuation uses Windows OEM virtual keys; Ctrl++ / Ctrl+Plus denote VK_OEM_PLUS.
 // Ctrl+ is invalid because it has no main key.
 [[nodiscard]] HotkeyParseResult ParseHotkey(std::wstring_view text);
+[[nodiscard]] std::wstring FormatHotkey(Hotkey hotkey);
 
 } // namespace vispick

@@ -1,4 +1,5 @@
 #include "overlay/Overlay.h"
+#include "overlay/Selection.h"
 #include "platform/Compat.h"
 #include "platform/Gdi.h"
 #include "capture/ScreenGrab.h"
@@ -90,17 +91,37 @@ void Drag(vispick::Overlay& overlay, const RECT selection, const RECT desktop) {
     GdiFlush();
 }
 
-void CheckPixels(const vispick::OverlayResult& result, const RECT rectangle) {
-    Require(result.selection.left == rectangle.left && result.selection.top == rectangle.top &&
-        result.selection.right == rectangle.right && result.selection.bottom == rectangle.bottom, "Overlay output rectangle mismatch");
-    Require(result.image.Width() == rectangle.right - rectangle.left && result.image.Height() == rectangle.bottom - rectangle.top,
+enum class ScreenshotToolbarSlot : LONG { Save = 8, Pin = 9, Copy = 11 };
+
+void ClickScreenshotButton(vispick::Overlay& overlay, const RECT selection, const RECT desktop,
+    const vispick::MonitorInfo& monitor, const ScreenshotToolbarSlot button) {
+    const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
+    const LONG width = std::min<LONG>(scale(470), monitor.bounds.right - monitor.bounds.left);
+    const RECT toolbar = vispick::PlaceToolbar(selection, {width, scale(36)}, monitor.bounds, scale(6));
+    const LONG margin = scale(4);
+    const LONG slotWidth = (width - margin * 2) / 13;
+    const LONG offset = button == ScreenshotToolbarSlot::Copy ? slotWidth : slotWidth / 2;
+    const POINT center{toolbar.left + margin + static_cast<LONG>(button) * slotWidth + offset,
+        toolbar.top + (margin + scale(32)) / 2};
+    const auto client = Position(center, desktop);
+    SendMessageW(overlay.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, client);
+    SendMessageW(overlay.Handle(), WM_LBUTTONUP, 0, client);
+}
+
+void CheckPixels(const vispick::BitmapView image, const RECT rectangle) {
+    Require(image.Width() == rectangle.right - rectangle.left && image.Height() == rectangle.bottom - rectangle.top,
         "Overlay output dimensions mismatch");
-    for (int row = 0; row < result.image.Height(); ++row) {
-        for (int column = 0; column < result.image.Width(); ++column) {
-            Require(result.image.Row(row)[column] == Pattern(rectangle.left + column, rectangle.top + row),
+    for (int row = 0; row < image.Height(); ++row) {
+        for (int column = 0; column < image.Width(); ++column) {
+            Require(image.Row(row)[column] == Pattern(rectangle.left + column, rectangle.top + row),
                 "Overlay output differs from owned frozen RGB pattern");
         }
     }
+}
+
+void CheckPixels(const vispick::OverlayResult& result, const RECT rectangle) {
+    Require(EqualRect(&result.selection, &rectangle) != FALSE, "Overlay output rectangle mismatch");
+    CheckPixels(result.image.View(), rectangle);
 }
 
 void Run(const std::filesystem::path& visualOutput) {
@@ -127,8 +148,9 @@ void Run(const std::filesystem::path& visualOutput) {
         result.reset();
         begin(vispick::CaptureMode::Screenshot);
         Drag(overlay, rectangle, desktop);
-        SendMessageW(overlay.Handle(), WM_KEYDOWN, VK_RETURN, 0);
-        Require(result && result->action == vispick::OverlayAction::Copy, "Enter did not produce copy completion");
+        ClickScreenshotButton(overlay, rectangle, desktop, monitor, ScreenshotToolbarSlot::Copy);
+        Require(result && result->mode == vispick::CaptureMode::Screenshot && result->action == vispick::OverlayAction::Copy,
+            "Screenshot checkmark did not produce copy completion");
         CheckPixels(*result, rectangle);
         Require(!overlay.Active() && !IsWindowVisible(overlay.Handle()), "Completed overlay remained visible");
         std::printf("monitor origin=(%ld,%ld) dpi=%u output=64x48 exact; appearance=%.3f ms\n",
@@ -136,6 +158,14 @@ void Run(const std::filesystem::path& visualOutput) {
     }
     const RECT monitor = monitors.front().bounds;
     const RECT rectangle{monitor.left + 40, monitor.top + 40, monitor.left + 104, monitor.top + 88};
+
+    result.reset();
+    begin(vispick::CaptureMode::Screenshot);
+    Drag(overlay, rectangle, desktop);
+    ClickScreenshotButton(overlay, rectangle, desktop, monitors.front(), ScreenshotToolbarSlot::Pin);
+    Require(result && result->mode == vispick::CaptureMode::Screenshot && result->action == vispick::OverlayAction::Pin,
+        "Screenshot Pin button did not produce reference completion");
+    CheckPixels(*result, rectangle);
 
     if (!visualOutput.empty()) {
         // Only the deterministic full-screen fixture and our overlay are visible.
@@ -173,7 +203,7 @@ void Run(const std::filesystem::path& visualOutput) {
     result.reset();
     begin(vispick::CaptureMode::Screenshot,
         [&](vispick::Bitmap image, RECT bounds) {
-            Require(bounds.left == rectangle.left, "Save lost selection origin");
+            Require(EqualRect(&bounds, &rectangle) != FALSE, "Save lost selection geometry");
             ++saveRequests;
             if (chooseSave) { saved = std::move(image); }
             return chooseSave;
@@ -189,10 +219,11 @@ void Run(const std::filesystem::path& visualOutput) {
     Require(SetKeyboardState(originalKeys) != FALSE, "Restore thread keyboard state failed");
     Require(saveRequests == 1 && overlay.Active() && !result, "Cancelled save discarded the selection session");
     chooseSave = true;
-    Require(SetKeyboardState(keys) != FALSE, "Set thread keyboard state failed");
-    SendMessageW(overlay.Handle(), WM_KEYDOWN, 'S', 0);
-    Require(SetKeyboardState(originalKeys) != FALSE, "Restore thread keyboard state failed");
-    Require(saved && result && result->action == vispick::OverlayAction::Save && result->image.Empty(), "Accepted save was not handed off exactly once");
+    ClickScreenshotButton(overlay, rectangle, desktop, monitors.front(), ScreenshotToolbarSlot::Save);
+    Require(saveRequests == 2 && saved && result && result->mode == vispick::CaptureMode::Screenshot &&
+        result->action == vispick::OverlayAction::Save && result->image.Empty(), "Screenshot Save button did not hand off the image exactly once");
+    CheckPixels(saved->View(), rectangle);
+    std::puts("Screenshot toolbar: Copy, Pin and Save clicks returned the expected output and pixels");
     saved.reset(); result.reset();
 
     // A monitor change or session shutdown can cancel while the save dialog pumps messages.

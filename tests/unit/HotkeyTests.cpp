@@ -12,6 +12,14 @@ vispick::Hotkey ParseValid(std::wstring_view text) {
 
 TEST_CASE("Hotkey empty input disables registration") { CHECK_FALSE(ParseValid(L"").Enabled()); CHECK_FALSE(ParseValid(L"  \t").Enabled()); }
 TEST_CASE("Hotkey defaults use Control and digits") { CHECK(ParseValid(L"Ctrl+1") == vispick::Hotkey{MOD_CONTROL, '1'}); }
+TEST_CASE("Hotkey diagnostics format the configured chord") {
+    CHECK(vispick::FormatHotkey(ParseValid(L"Ctrl+1")) == L"Ctrl+1");
+    CHECK(vispick::FormatHotkey(ParseValid(L"Alt+Ctrl+F17")) == L"Ctrl+Alt+F17");
+    for (const auto* chord : {L"", L"Win+Shift+Num1", L"Alt+PrintScreen", L"Ctrl++"}) {
+        const auto hotkey = ParseValid(chord);
+        CHECK(ParseValid(vispick::FormatHotkey(hotkey)) == hotkey);
+    }
+}
 TEST_CASE("Hotkey modifiers are case insensitive and order independent") {
     CHECK(ParseValid(L"alt + WIN + shift + cTrL + a") == vispick::Hotkey{MOD_ALT | MOD_WIN | MOD_SHIFT | MOD_CONTROL, 'A'});
 }

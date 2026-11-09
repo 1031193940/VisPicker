@@ -10,7 +10,7 @@ void HotkeyRegistration::Clear() noexcept {
     registered_.clear();
 }
 
-std::vector<std::wstring> HotkeyRegistration::Rebind(std::span<const HotkeyBinding> bindings) {
+std::vector<HotkeyFailure> HotkeyRegistration::Rebind(std::span<const HotkeyBinding> bindings) {
     registered_.reserve(bindings.size());
     // Release changed entries together to support swaps. Keep unrelated keys
     // registered throughout reload so another process cannot take them.
@@ -21,7 +21,7 @@ std::vector<std::wstring> HotkeyRegistration::Rebind(std::span<const HotkeyBindi
         UnregisterHotKey(window_, current.identifier);
         return true;
     });
-    std::vector<std::wstring> conflicts;
+    std::vector<HotkeyFailure> failures;
     int identifier = 1;
     for (const auto& binding : bindings) {
         if (binding.hotkey.Enabled() && std::none_of(registered_.begin(), registered_.end(),
@@ -29,12 +29,13 @@ std::vector<std::wstring> HotkeyRegistration::Rebind(std::span<const HotkeyBindi
             if (RegisterHotKey(window_, identifier, binding.hotkey.modifiers | MOD_NOREPEAT, binding.hotkey.virtualKey)) {
                 registered_.push_back({identifier, binding.command, binding.hotkey});
             } else {
-                conflicts.push_back(binding.label + L"（注册失败，错误 " + std::to_wstring(GetLastError()) + L"）");
+                const DWORD error = GetLastError();
+                failures.push_back({binding.hotkey, binding.label, error});
             }
         }
         ++identifier;
     }
-    return conflicts;
+    return failures;
 }
 
 AppCommand HotkeyRegistration::CommandFor(int identifier) const noexcept {

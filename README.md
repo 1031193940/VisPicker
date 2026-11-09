@@ -2,11 +2,13 @@
 
 面向 Windows 的便携截图、参考图和 GIF 工具。
 
-Windows 11 x64 便携版 0.5.3，下载 `VisPick-0.5.3.zip`。 [GitHub 发布页](https://github.com/1031193940/VisPicker/releases/tag/v0.5.3)
+已发布的 Windows 11 x64 便携版为 0.5.3，可下载 `VisPick-0.5.3.zip`。 [GitHub 0.5.3 发布页](https://github.com/1031193940/VisPicker/releases/tag/v0.5.3)
 
 功能回归在 Windows 11 x64 的单屏 RDP 会话完成。Win10、Win7、干净系统、物理多屏和第三方软件粘贴等项目仍待验证。
 
 ## 使用
+
+以下流程对应当前源码的本地 0.5.4 构建。
 
 双击适合系统架构的 exe，程序常驻托盘。首次启动生成带中文注释的 `VisPick.ini`；exe 所在目录不可写时使用 `%APPDATA%\VisPick\VisPick.ini`。编辑配置并保存后自动生效，不需要重启，也不会覆盖你的注释。
 
@@ -14,12 +16,14 @@ Windows 11 x64 便携版 0.5.3，下载 `VisPick-0.5.3.zip`。 [GitHub 发布页
 
 | 操作 | 快捷键与流程 |
 |---|---|
-| 截图 | Ctrl+1 → 拖出选区，或单击窗口 → Enter / 双击复制 |
-| GIF | Ctrl+2 → 选区 → Enter 开始；再次 Ctrl+2 或点停止打开预览；空格暂停播放，Ctrl+S 保存 |
-| 参考图 | Ctrl+3 → 选区 → Enter 钉在原位置；`Pin.Instant=true` 可松手即贴 |
+| 截图 | Ctrl+1 打开截图。拖出选区或单击窗口，按需调整和标注 |
+| 复制截图 | 选区工具条点「✓ 复制」，也可按 Enter 或双击选区 |
+| 保存截图 | 选区工具条点「保存」，选择文件位置与格式 |
+| 参考图 | 选区工具条点「贴图」，把截图和标注钉在原位置 |
+| GIF | Ctrl+2 → 选区 → Enter 开始。再次按 Ctrl+2 或点停止打开预览。空格暂停播放，Ctrl+S 保存 |
 | 调整选区 | 拖动内部、8 个手柄；方向键移动 1 px，Shift+方向键 10 px |
 | 标注 | R 矩形、E 椭圆、A 箭头、P 画笔、T 文字、M 马赛克；再次点击工具取消选择 |
-| 编辑输出 | Ctrl+Z / Ctrl+Y 撤销重做；Ctrl+C 复制、Ctrl+S 保存、Ctrl+T 钉住 |
+| 编辑输出 | Ctrl+Z / Ctrl+Y 撤销重做。Ctrl+C 复制，Ctrl+S 保存，Ctrl+T 贴图 |
 | 取消 | Esc 取消选区。文字输入时 Esc 结束文字输入。录制请点工具条的取消按钮 |
 
 截图保存支持 PNG/JPG/BMP；PNG 与剪贴板 PNG 保留像素和透明度，DIB 提供不透明兼容副本。文件编码在后台进行，失败不会截断已有目标文件。GIF 最长 60 秒，临时文件在 `%TEMP%\VisPick`；预览保存或确认放弃后完成清理，启动时清理一天前本程序遗留的录制。
@@ -43,7 +47,11 @@ Windows 11 x64 便携版 0.5.3，下载 `VisPick-0.5.3.zip`。 [GitHub 发布页
 
 右键参考图可设置缩放、透明度、置顶和鼠标穿透。托盘菜单可隐藏/显示全部、关闭全部、恢复最近关闭，并解除所有参考图的鼠标穿透。参考图与回收站仅保留在本次进程中。
 
-全局热键默认会占用 Ctrl+1/2/3；冲突时通知具体失败项，其余热键继续工作。可在 `[Hotkeys]` 中改键，或留空禁用。默认不开日志、不设置自启；自启仅修改当前用户的 VisPick Run 项。完整配置模板见 [default.ini](res/default.ini)。
+默认全局热键为 Ctrl+1 截图和 Ctrl+2 GIF。可在 `[Hotkeys]` 中修改热键或留空禁用。升级前先退出托盘中的旧进程，再启动新版 exe。新版会忽略旧配置 `[Hotkeys]` 段的 `Pin` 项，因此原来的 Ctrl+3 绑定会释放。托盘的「截取参考图」和 `--pin` 仍可直接打开贴图选区，该入口支持 `Pin.Instant=true` 松手即贴。
+
+注册失败时托盘会提示对应热键，其余热键照常工作。可右键托盘打开「关于」，查看未注册的按键和失败原因。被其他程序占用的热键会自动重试，对方释放后即可使用。
+
+默认关闭日志和自启。自启仅修改当前用户的 VisPick Run 项。完整配置模板见 [default.ini](res/default.ini)。
 
 ```powershell
 VisPick.exe --screenshot
