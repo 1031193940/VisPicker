@@ -1,5 +1,6 @@
 #include "overlay/Overlay.h"
 #include "overlay/Selection.h"
+#include "core/Paths.h"
 #include "platform/Compat.h"
 #include "platform/Gdi.h"
 #include "capture/ScreenGrab.h"
@@ -79,6 +80,89 @@ public:
     ~FocusWindow() override { Destroy(); }
 };
 
+constexpr wchar_t FocusLockClass[] = L"VisPick.Tests.OverlayFocusLock";
+constexpr UINT LockFocus = WM_APP + 1;
+constexpr UINT UnlockFocus = WM_APP + 2;
+constexpr UINT ChangeFocus = WM_APP + 3;
+
+class ForegroundLockWindow final : public vispick::Window {
+public:
+    explicit ForegroundLockWindow(HWND alternative) : alternative_(alternative) {
+        MONITORINFO primary{sizeof(primary)};
+        Require(GetMonitorInfoW(MonitorFromPoint({}, MONITOR_DEFAULTTOPRIMARY), &primary) != FALSE,
+            "Cannot locate the foreground lock fixture monitor");
+        const auto bounds = primary.rcMonitor;
+        Create({FocusLockClass, 0, IDC_ARROW}, std::to_wstring(GetCurrentProcessId()).c_str(), WS_POPUP,
+            WS_EX_TOOLWINDOW | WS_EX_TOPMOST, {bounds.left, bounds.top, bounds.left + 32, bounds.top + 32},
+            vispick::WindowActivation::Interactive);
+    }
+    ~ForegroundLockWindow() override {
+        if (GetForegroundWindow() == Handle()) { LockSetForegroundWindow(LSFW_UNLOCK); }
+        Destroy();
+    }
+
+protected:
+    LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override {
+        if (message == LockFocus) {
+            if (GetForegroundWindow() == alternative_) { SetForegroundWindow(Handle()); }
+            return GetForegroundWindow() == Handle() && LockSetForegroundWindow(LSFW_LOCK);
+        }
+        if (message == UnlockFocus || message == ChangeFocus) {
+            return GetForegroundWindow() == Handle() && LockSetForegroundWindow(LSFW_UNLOCK) &&
+                (message == UnlockFocus || SetForegroundWindow(alternative_));
+        }
+        return Window::OnMessage(message, parameter, data);
+    }
+
+private:
+    HWND alternative_;
+};
+
+template <class Predicate>
+bool WaitUntil(Predicate ready, DWORD timeoutMs = 5000) {
+    const auto deadline = GetTickCount64() + timeoutMs;
+    do {
+        vispick::PumpWindowMessages();
+        if (ready()) { return true; }
+        Sleep(10);
+    } while (GetTickCount64() < deadline);
+    return false;
+}
+
+class ForegroundProbeProcess final {
+public:
+    ForegroundProbeProcess() {
+        const auto executable = vispick::ExecutablePath();
+        auto command = L"\"" + executable.native() + L"\" --foreground-lock-child " + std::to_wstring(GetCurrentProcessId());
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION child{};
+        Require(CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, TRUE, 0,
+            nullptr, nullptr, &startup, &child) != FALSE, "Cannot start the foreground test child");
+        process_ = child.hProcess;
+        CloseHandle(child.hThread);
+    }
+    ~ForegroundProbeProcess() {
+        if (WaitForSingleObject(process_, 0) == WAIT_TIMEOUT) {
+            TerminateProcess(process_, 1); // Restricted to this fixture's process handle.
+            WaitForSingleObject(process_, 1000);
+        }
+        CloseHandle(process_);
+    }
+    ForegroundProbeProcess(const ForegroundProbeProcess&) = delete;
+    ForegroundProbeProcess& operator=(const ForegroundProbeProcess&) = delete;
+
+    void WaitForSuccess() const {
+        Require(WaitUntil([&] { return WaitForSingleObject(process_, 0) == WAIT_OBJECT_0; }, 15000),
+            "Foreground test child did not finish");
+        DWORD exitCode = 1;
+        Require(GetExitCodeProcess(process_, &exitCode) != FALSE && exitCode == 0, "Foreground denial regression failed");
+    }
+
+private:
+    HANDLE process_ = nullptr;
+};
+
 LPARAM Position(const POINT point, const RECT desktop) {
     return MAKELPARAM(static_cast<WORD>(point.x - desktop.left), static_cast<WORD>(point.y - desktop.top));
 }
@@ -141,8 +225,88 @@ void CheckPixels(const vispick::OverlayResult& result, const RECT rectangle) {
     CheckPixels(result.image.View(), rectangle);
 }
 
-void Run(const std::filesystem::path& visualOutput) {
+void CheckDeniedForeground(DWORD parentProcess) {
+    const HWND lockedWindow = FindWindowW(FocusLockClass, std::to_wstring(parentProcess).c_str());
+    DWORD ownerProcess = 0;
+    if (lockedWindow) { GetWindowThreadProcessId(lockedWindow, &ownerProcess); }
+    Require(lockedWindow && ownerProcess == parentProcess && GetForegroundWindow() == lockedWindow,
+        "The foreground test parent lost its owned lock window before the child started");
+    const auto sendToParent = [&](UINT message) {
+        DWORD_PTR response = 0;
+        Require(SendMessageTimeoutW(lockedWindow, message, 0, 0, SMTO_ABORTIFHUNG, 1000, &response) && response != 0,
+            "The foreground test parent could not change its owned focus state");
+    };
     vispick::InitializeDpiAwareness();
+    const RECT desktop = vispick::VirtualDesktopBounds();
+    const auto monitors = vispick::EnumerateMonitors();
+    Require(!monitors.empty(), "No monitor available for foreground denial test");
+    const RECT monitor = monitors.front().bounds;
+    const RECT rectangle{monitor.left + 40, monitor.top + 40, monitor.left + 104, monitor.top + 88};
+    PatternWindow pattern(desktop);
+    vispick::Overlay overlay(nullptr);
+    vispick::Config config;
+    config.capture.includeCursor = false;
+    config.capture.magnifier = false;
+    config.capture.windowSnap = false;
+    std::optional<vispick::OverlayResult> result;
+    const auto completed = [&](vispick::OverlayResult value) { result = std::move(value); };
+    const auto beginDenied = [&] {
+        result.reset();
+        Require(GetForegroundWindow() == lockedWindow, "Foreground lock fixture unexpectedly lost activation");
+        overlay.Begin(vispick::CaptureMode::Screenshot, config, completed);
+        vispick::PumpWindowMessages();
+        Require(overlay.Active() && IsWindowVisible(overlay.Handle()) && GetForegroundWindow() == lockedWindow,
+            "Denied foreground activation did not leave the overlay visible without taking focus");
+    };
+
+    beginDenied();
+    const auto point = Position({rectangle.left, rectangle.top}, desktop);
+    SendMessageW(overlay.Handle(), WM_RBUTTONUP, 0, point);
+    Require(result && result->action == vispick::OverlayAction::Cancel && !overlay.Active() &&
+        !IsWindowVisible(overlay.Handle()) && GetForegroundWindow() == lockedWindow,
+        "Right-click did not dismiss the waiting overlay without changing foreground");
+
+    beginDenied();
+    sendToParent(ChangeFocus);
+    Require(WaitUntil([&] { return !overlay.Active(); }) && result && result->action == vispick::OverlayAction::Cancel &&
+        !IsWindowVisible(overlay.Handle()) && GetForegroundWindow() != lockedWindow,
+        "Waiting overlay did not dismiss when foreground changed to another window");
+
+    sendToParent(LockFocus);
+    beginDenied();
+    Require(SendMessageW(overlay.Handle(), WM_MOUSEACTIVATE, reinterpret_cast<WPARAM>(overlay.Handle()),
+        MAKELPARAM(HTCLIENT, WM_LBUTTONDOWN)) == MA_ACTIVATE,
+        "Waiting overlay did not allow normal mouse activation and delivery of the initial click");
+    // The fixture simulates the OS activation step without injecting a real click.
+    sendToParent(UnlockFocus);
+    Require(GetForegroundWindow() == lockedWindow, "Foreground lock fixture was interrupted before the test click");
+    vispick::test::ActivateOwnedWindow(overlay.Handle());
+    Drag(overlay, rectangle, desktop);
+    SendMessageW(overlay.Handle(), WM_KEYDOWN, VK_RETURN, 0);
+    Require(result && result->action == vispick::OverlayAction::Copy && !overlay.Active(),
+        "Activated overlay did not accept drag and keyboard confirmation after foreground denial");
+    CheckPixels(*result, rectangle);
+
+    std::puts("Foreground denial: pending overlay, right-click, activation and external focus change passed");
+}
+
+void RunForegroundDenialTest() {
+    FocusWindow alternate({0, 0});
+    ForegroundLockWindow foreground(alternate.Handle());
+    constexpr UINT showWithoutActivation = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW;
+    Require(SetWindowPos(alternate.Handle(), HWND_TOPMOST, 0, 0, 0, 0, showWithoutActivation) &&
+        SetWindowPos(foreground.Handle(), HWND_TOPMOST, 0, 0, 0, 0, showWithoutActivation),
+        "Cannot show the owned foreground lock fixture");
+    vispick::test::ActivateOwnedWindow(foreground.Handle());
+    Require(LockSetForegroundWindow(LSFW_LOCK) != FALSE, "Could not lock the owned test foreground window");
+    ForegroundProbeProcess child;
+    child.WaitForSuccess();
+}
+
+void Run(const std::filesystem::path& visualOutput, bool focusOnly) {
+    vispick::InitializeDpiAwareness();
+    RunForegroundDenialTest();
+    if (focusOnly) { return; }
     const RECT desktop = vispick::VirtualDesktopBounds();
     const auto monitors = vispick::EnumerateMonitors();
     Require(!monitors.empty(), "No monitor available for overlay integration");
@@ -361,9 +525,14 @@ void Run(const std::filesystem::path& visualOutput) {
 int wmain(int count, wchar_t** arguments) {
     try {
         std::filesystem::path output;
+        const bool focusOnly = count == 2 && std::wstring_view(arguments[1]) == L"--focus-only";
+        if (count == 3 && std::wstring_view(arguments[1]) == L"--foreground-lock-child") {
+            CheckDeniedForeground(std::stoul(arguments[2]));
+            return 0;
+        }
         if (count == 3 && std::wstring_view(arguments[1]) == L"--visual-output") { output = arguments[2]; }
-        else if (count != 1) { throw std::invalid_argument("Usage: VisPickOverlayTests [--visual-output image.png]"); }
-        Run(output); std::puts("Overlay integration passed"); return 0;
+        else if (count != 1 && !focusOnly) { throw std::invalid_argument("Usage: VisPickOverlayTests [--focus-only | --visual-output image.png]"); }
+        Run(output, focusOnly); std::puts("Overlay integration passed"); return 0;
     }
     catch (const std::exception& error) { std::fprintf(stderr, "Overlay integration failed: %s\n", error.what()); return 1; }
 }

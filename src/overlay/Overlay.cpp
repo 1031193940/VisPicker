@@ -16,6 +16,7 @@
 #include <cwchar>
 #include <exception>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@ namespace {
 
 constexpr UINT CommitTextMessage = WM_APP + 51;
 constexpr UINT CheckFocusMessage = WM_APP + 52;
+constexpr UINT_PTR ActivationWatch = 1;
 constexpr std::array<std::uint32_t, 8> PresetColors{
     0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759, 0x00C7BE, 0x007AFF, 0xAF52DE, 0xFFFFFF};
 constexpr std::array<int, 3> StrokeWidths{2, 4, 6};
@@ -130,6 +132,8 @@ struct Overlay::State {
     RECT toolbar{};
     POINT pointer{};
     HWND previousForeground = nullptr;
+    std::optional<std::chrono::steady_clock::time_point> activationDeadline;
+    RECT activationHint{};
     Selection selection;
     std::vector<RECT> windows;
     std::vector<MonitorInfo> monitors;
@@ -152,10 +156,49 @@ struct Overlay::State {
         return focus == window.Handle() || (textInput && focus && focus == textInput->Handle());
     }
 
-    void CheckFocusLater() {
-        if (!saving && !PostMessageW(window.Handle(), CheckFocusMessage, 0, 0) && !HasFocus()) {
-            Finish(OverlayAction::Cancel);
+    [[nodiscard]] bool TryFocus() const noexcept {
+        if (GetForegroundWindow() != window.Handle()) { SetForegroundWindow(window.Handle()); }
+        if (GetForegroundWindow() == window.Handle() && !HasFocus()) { SetFocus(window.Handle()); }
+        return HasFocus();
+    }
+
+    void AwaitActivation() {
+        const RECT monitor = MonitorAt(pointer);
+        const LONG width = std::min<LONG>(Scale(420), monitor.right - monitor.left);
+        const LONG left = monitor.left + (monitor.right - monitor.left - width) / 2;
+        const LONG top = monitor.top + Scale(32);
+        activationHint = {left, top, left + width, top + Scale(34)};
+        activationDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+        if (!SetTimer(window.Handle(), ActivationWatch, 100, nullptr)) {
+            throw std::runtime_error("Cannot schedule selection activation timeout");
         }
+    }
+
+    void EndActivationWait() noexcept {
+        if (!activationDeadline) { return; }
+        KillTimer(window.Handle(), ActivationWatch);
+        activationDeadline.reset();
+    }
+
+    void Activated() {
+        if (!activationDeadline || !HasFocus()) { return; }
+        EndActivationWait();
+        AddDamage(activationHint);
+    }
+
+    void CheckFocus() {
+        if (!active || saving) { return; }
+        if (HasFocus()) { Activated(); return; }
+        if (activationDeadline) {
+            const HWND foreground = GetForegroundWindow();
+            if (std::chrono::steady_clock::now() < *activationDeadline &&
+                (!foreground || foreground == previousForeground || foreground == window.Handle())) { return; }
+        }
+        Finish(OverlayAction::Cancel);
+    }
+
+    void CheckFocusLater() {
+        if (!saving && !PostMessageW(window.Handle(), CheckFocusMessage, 0, 0)) { CheckFocus(); }
     }
 
     [[nodiscard]] int Scale(const int logical) const noexcept { return MulDiv(logical, static_cast<int>(dpi), 96); }
@@ -517,6 +560,12 @@ struct Overlay::State {
             Fill(context, hint, RGB(55, 58, 65));
             DrawTextW(context, hovered->hint, -1, &hint, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         }
+        if (activationDeadline) {
+            RECT hint = Local(activationHint);
+            Fill(context, hint, RGB(30, 32, 36));
+            DrawTextW(context, Text(L"拖动鼠标选择区域，右键取消", L"Drag to select an area or right-click to cancel"),
+                -1, &hint, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
     }
 
     void Paint() {
@@ -562,6 +611,7 @@ struct Overlay::State {
 
     void ResetSession() noexcept {
         active = false;
+        EndActivationWait();
         saving = false;
         drawing = false;
         choosingGifFrameRate = false;
@@ -791,7 +841,9 @@ void Overlay::Cancel() { state_->Finish(OverlayAction::Cancel); }
 
 void Overlay::SwitchMode(const CaptureMode mode) {
     auto& state = *state_;
-    if (!state.active || state.saving || state.mode == mode || !state.CommitText()) { return; }
+    if (!state.active || state.saving) { return; }
+    if (state.activationDeadline && state.TryFocus()) { state.Activated(); }
+    if (state.mode == mode || !state.CommitText()) { return; }
     const auto old = state.Snapshot();
     state.CancelGesture();
     if (GetCapture() == Handle()) { ReleaseCapture(); }
@@ -842,19 +894,16 @@ void Overlay::Begin(const CaptureMode mode, const Config& config, std::function<
         state.saveRequested = std::move(saveRequested);
         state.active = true;
         if (!SetWindowPos(Handle(), HWND_TOPMOST, state.desktop.left, state.desktop.top,
-            static_cast<int>(width), static_cast<int>(height), SWP_SHOWWINDOW)) {
+            static_cast<int>(width), static_cast<int>(height), SWP_SHOWWINDOW | SWP_NOACTIVATE)) {
             throw std::runtime_error("Show selection overlay failed");
         }
         RECT visibleBounds{};
         if (!GetWindowRect(Handle(), &visibleBounds) || !EqualRect(visibleBounds, state.desktop)) {
             throw std::runtime_error("Selection overlay bounds changed during activation");
         }
-        if (GetForegroundWindow() != Handle()) { SetForegroundWindow(Handle()); }
-        if (GetForegroundWindow() == Handle()) { SetFocus(Handle()); }
-        if (!state.HasFocus()) {
-            throw std::runtime_error(state.english ? "The selection overlay could not take focus. Please invoke the shortcut again from the foreground app."
-                : "选区浮层未能获得焦点。请在前台应用中再次按下快捷键。");
-        }
+        // The global hotkey requests capture even if Windows denies activation.
+        // A click on the overlay can activate it without synthetic input.
+        if (!state.TryFocus()) { state.AwaitActivation(); }
         state.AddDamage(state.desktop);
         UpdateWindow(Handle());
         GdiFlush();
@@ -880,12 +929,29 @@ LRESULT Overlay::OnMessage(const UINT message, const WPARAM parameter, const LPA
     case WM_KILLFOCUS:
         if (!state_->textInput || reinterpret_cast<HWND>(parameter) != state_->textInput->Handle()) { state_->CheckFocusLater(); }
         break;
+    case WM_SETFOCUS:
+        state_->Activated();
+        break;
     case CheckFocusMessage:
-        if (!state_->saving && !state_->HasFocus()) { Cancel(); }
+        state_->CheckFocus();
         return 0;
+    case WM_TIMER:
+        if (parameter == ActivationWatch) {
+            if (state_->activationDeadline) { state_->CheckFocus(); }
+            return 0;
+        }
+        break;
     case WM_DPICHANGED: return 0; // The overlay spans the physical virtual desktop, independent of its HWND DPI.
-    case WM_MOUSEMOVE: state_->PointerMove(point); return 0;
-    case WM_LBUTTONDOWN: state_->PointerDown(point); return 0;
+    case WM_MOUSEMOVE:
+        if (!state_->activationDeadline) { state_->PointerMove(point); }
+        return 0;
+    case WM_LBUTTONDOWN:
+        if (state_->activationDeadline) {
+            if (!state_->TryFocus()) { return 0; }
+            state_->Activated();
+        }
+        state_->PointerDown(point);
+        return 0;
     case WM_LBUTTONUP: state_->PointerUp(point); return 0;
     case WM_LBUTTONDBLCLK:
         if (const auto bounds = state_->selection.Bounds(); PtInRect(&bounds, point) && !state_->HoverButton()) { state_->Finish(state_->DefaultAction()); }

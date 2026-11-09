@@ -2,6 +2,7 @@
 #include "platform/FileCommit.h"
 
 #include <Windows.h>
+#include <atomic>
 #include <cstdint>
 #include <stdexcept>
 #include <system_error>
@@ -9,6 +10,10 @@
 
 namespace vispick::recording {
 namespace {
+
+constexpr std::wstring_view RecordingPrefix = L"rec_vispick_";
+constexpr std::wstring_view ClipboardPrefix = L"clip_vispick_";
+constexpr std::wstring_view GifExtension = L".gif";
 
 class File final {
 public:
@@ -40,6 +45,26 @@ public:
 };
 
 } // namespace
+
+TemporaryGif::TemporaryGif(TemporaryGifKind kind) {
+    const auto directory = std::filesystem::temp_directory_path() / L"VisPick";
+    std::filesystem::create_directories(directory);
+    const std::wstring prefix(kind == TemporaryGifKind::Recording ? RecordingPrefix : ClipboardPrefix);
+    static std::atomic<unsigned> sequence{0};
+    for (unsigned attempt = 0; attempt < 8; ++attempt) {
+        path = directory / (prefix + std::to_wstring(GetCurrentProcessId()) + L"_" +
+            std::to_wstring(GetTickCount64()) + L"_" + std::to_wstring(sequence.fetch_add(1)) + GifExtension.data());
+        const auto extended = ExtendedFilePath(path);
+        const File reserved(CreateFileW(extended.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr));
+        if (reserved.Get() != INVALID_HANDLE_VALUE) { return; }
+        if (GetLastError() != ERROR_FILE_EXISTS) { throw std::runtime_error("Cannot reserve temporary GIF"); }
+    }
+    throw std::runtime_error("Cannot find an unused GIF filename");
+}
+
+TemporaryGif::~TemporaryGif() {
+    if (!keep) { std::error_code ignored; std::filesystem::remove(path,ignored); }
+}
 
 void CommitFile(const std::filesystem::path& temporary, const std::filesystem::path& destination) {
     const auto sourcePath = ExtendedFilePath(temporary);
@@ -91,16 +116,18 @@ void CommitFile(const std::filesystem::path& temporary, const std::filesystem::p
     static_cast<void>(DeleteFileW(sourcePath.c_str()));
 }
 
-void CleanOldFiles(const std::filesystem::path& directory, std::filesystem::file_time_type cutoff) {
+void CleanOldFiles(const std::filesystem::path& directory, std::filesystem::file_time_type cutoff,
+                   TemporaryGifKind kind, const std::filesystem::path& preserved) {
+    const auto prefix = kind == TemporaryGifKind::Recording ? RecordingPrefix : ClipboardPrefix;
     std::error_code error;
     auto current = std::filesystem::directory_iterator(directory,error);
     const std::filesystem::directory_iterator end;
     while (!error && current != end) {
         const auto& entry = *current;
         const auto name = entry.path().filename().wstring();
-        bool valid = name.starts_with(L"rec_vispick_") && name.ends_with(L".gif");
+        bool valid = name.starts_with(prefix) && name.ends_with(GifExtension) && entry.path() != preserved;
         if (valid) {
-            const auto identity = std::wstring_view(name).substr(12,name.size()-16);
+            const auto identity = std::wstring_view(name).substr(prefix.size(),name.size()-prefix.size()-GifExtension.size());
             unsigned separators = 0;
             unsigned digits = 0;
             for (const auto character : identity) {

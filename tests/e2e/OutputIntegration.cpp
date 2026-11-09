@@ -2,11 +2,20 @@
 // station. The user's clipboard and visible desktop are never changed.
 #include "imaging/Clipboard.h"
 #include "imaging/ImageCodec.h"
+#include "gif/GifWriter.h"
+#include "platform/Compat.h"
 #include "platform/Window.h"
+#include "recording/GifPreview.h"
+#include "recording/RecordingFiles.h"
+#include <shellapi.h>
+#include <shlobj.h>
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 
 namespace {
@@ -62,6 +71,91 @@ void PublishFixture(UINT format, std::span<const std::uint8_t> bytes) {
     GlobalUnlock(memory);
     if (!SetClipboardData(format, memory)) { GlobalFree(memory); throw std::runtime_error("Publish clipboard fixture failed"); }
 }
+
+std::vector<char> ReadFileBytes(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) { throw std::runtime_error("Open GIF clipboard test file failed"); }
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+void CheckGifPreviewCopy(HWND owner) {
+    // The executable uses this fixture last. Only its own process environment
+    // changes, so clipboard cleanup cannot see production temporary GIFs.
+    const auto temporary = std::filesystem::temp_directory_path() / (L"VisPick-output-" +
+        std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64()));
+    if (!std::filesystem::create_directory(temporary) || !SetEnvironmentVariableW(L"TMP", temporary.c_str()) ||
+        !SetEnvironmentVariableW(L"TEMP", temporary.c_str())) {
+        throw std::runtime_error("Isolate GIF clipboard fixture files failed");
+    }
+    vispick::recording::TemporaryGif recording(vispick::recording::TemporaryGifKind::Recording);
+    {
+        vispick::gif::GifWriter writer(recording.path, 2, 1);
+        const std::array first{0xFF33AA33U, 0xFF7777AAU};
+        const std::array second{0xFFFF1111U, 0xFF773311U};
+        writer.WriteFrame(vispick::gif::EncodeFrame(first), 40);
+        writer.WriteFrame(vispick::gif::EncodeFrame(second), 60);
+        writer.Finish();
+    }
+    const auto original = ReadFileBytes(recording.path);
+    {
+        vispick::GifPreview preview({recording.path, 2, 1, 2, 100}, {}, owner, WM_APP + 1,
+            [](HWND, int, int) -> std::optional<std::filesystem::path> { return std::nullopt; }, true);
+        preview.Show();
+        RECT client{};
+        if (!GetClientRect(preview.Handle(), &client)) { throw std::runtime_error("Read GIF preview bounds failed"); }
+        const auto dpi = static_cast<int>(vispick::DpiForWindow(preview.Handle()));
+        const auto x = client.right - MulDiv(252, dpi, 96);
+        const auto y = client.bottom - MulDiv(20, dpi, 96);
+        SendMessageW(preview.Handle(), WM_LBUTTONUP, 0, MAKELPARAM(x,y));
+        if (!preview.Busy()) { throw std::runtime_error("GIF Copy button did not start publishing"); }
+        const auto timeout = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (preview.Busy() && std::chrono::steady_clock::now() < timeout) {
+            vispick::PumpWindowMessages();
+            Sleep(1);
+        }
+        Require(!preview.Busy() && !preview.Closed() && std::filesystem::exists(recording.path),
+            "GIF Copy completes while preserving the preview and recording");
+    }
+    Require(!std::filesystem::exists(recording.path), "Original recording is removed when the preview closes");
+
+    if (!OpenClipboard(owner)) { throw std::runtime_error("Open isolated GIF clipboard failed"); }
+    std::filesystem::path copied;
+    try {
+        const auto drop = static_cast<HDROP>(GetClipboardData(CF_HDROP));
+        const auto count = drop ? DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0) : 0;
+        const auto length = count == 1 ? DragQueryFileW(drop, 0, nullptr, 0) : 0;
+        std::wstring path(length + 1, L'\0');
+        if (!length || DragQueryFileW(drop, 0, path.data(), length + 1) != length) {
+            throw std::runtime_error("GIF file drop missing after preview closes");
+        }
+        path.resize(length);
+        copied = std::filesystem::path(path);
+        const auto ownPrefix = L"clip_vispick_" + std::to_wstring(GetCurrentProcessId()) + L"_";
+        Require(copied.parent_path() == recording.path.parent_path() && copied.filename().native().starts_with(ownPrefix),
+            "GIF clipboard file is a separately owned copy");
+        const auto effect = GetClipboardData(RegisterClipboardFormatW(CFSTR_PREFERREDDROPEFFECT));
+        if (!effect || GlobalSize(effect) < sizeof(DWORD)) { throw std::runtime_error("GIF clipboard drop effect missing"); }
+        const auto* dropEffect = static_cast<const DWORD*>(GlobalLock(effect));
+        const bool copy = dropEffect && *dropEffect == DROPEFFECT_COPY;
+        if (dropEffect) { GlobalUnlock(effect); }
+        Require(copy, "GIF file drop requests copy instead of move");
+        const auto memory = GetClipboardData(RegisterClipboardFormatW(L"image/gif"));
+        if (!memory || GlobalSize(memory) < original.size()) { throw std::runtime_error("GIF clipboard animation missing"); }
+        const auto* data = static_cast<const char*>(GlobalLock(memory));
+        const bool matches = data && std::equal(original.begin(), original.end(), data);
+        if (data) { GlobalUnlock(memory); }
+        Require(matches, "Clipboard image/gif bytes retain the complete animation");
+        EmptyClipboard();
+    } catch (...) { CloseClipboard(); throw; }
+    CloseClipboard();
+    const auto info = vispick::gif::InspectGif(copied);
+    Require(ReadFileBytes(copied) == original && info.frameCount == 2 && info.durationCentiseconds == 100,
+        "Clipboard file drop preserves both frames after the preview closes");
+    std::filesystem::remove(copied);
+    std::filesystem::remove(temporary / L"VisPick");
+    std::filesystem::remove(temporary);
+}
+
 void Run() {
     const PrivateClipboard isolated;
     Owner owner;
@@ -107,6 +201,7 @@ void Run() {
     Require(OpenClipboard(owner.Handle()) != FALSE, "open isolated clipboard for cleanup");
     EmptyClipboard(); CloseClipboard();
     Require(!vispick::ReadClipboardImage(owner.Handle()), "empty clipboard returns no image");
+    CheckGifPreviewCopy(owner.Handle());
 }
 }
 int main() {

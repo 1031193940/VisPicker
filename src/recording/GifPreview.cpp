@@ -2,8 +2,10 @@
 #include "recording/FrameChange.h"
 #include "recording/RecordingFiles.h"
 #include "gif/GifReader.h"
+#include "imaging/Clipboard.h"
 #include "platform/Compat.h"
 #include "platform/Console.h"
+#include "platform/FileCommit.h"
 #include "platform/Gdi.h"
 #include "platform/Window.h"
 
@@ -37,6 +39,36 @@ struct TimelineEntry {
     unsigned restartFrame;
 };
 
+class PreparedGifCopy final {
+public:
+    explicit PreparedGifCopy(const std::filesystem::path& source)
+        : data_(StageFile(source, file_.path)) {}
+
+    [[nodiscard]] GifClipboardFormats Publish(HWND owner) {
+        const auto formats = data_.Publish(owner);
+        file_.keep = formats.fileDrop;
+        // Clipboard publication has completed. Previous file drops may now be
+        // pruned when old, while startup leaves the current paste source alone.
+        try {
+            recording::CleanOldFiles(file_.path.parent_path(),
+                std::filesystem::file_time_type::clock::now() - std::chrono::hours(24),
+                recording::TemporaryGifKind::Clipboard, file_.path);
+        } catch (...) { /* Best-effort cleanup must not change the copy result. */ }
+        return formats;
+    }
+
+private:
+    static const std::filesystem::path& StageFile(const std::filesystem::path& source,
+                                                  const std::filesystem::path& destination) {
+        std::filesystem::copy_file(ExtendedFilePath(source), ExtendedFilePath(destination),
+            std::filesystem::copy_options::overwrite_existing);
+        return destination;
+    }
+
+    recording::TemporaryGif file_{recording::TemporaryGifKind::Clipboard};
+    GifClipboardData data_;
+};
+
 std::wstring FormatTime(std::int64_t milliseconds) {
     const auto seconds = milliseconds / 1000;
     const auto minuteSeconds = seconds % 60;
@@ -61,6 +93,9 @@ struct GifPreview::Implementation final : Window {
     std::vector<std::uint32_t> prefetchedPixels;
     std::optional<std::int64_t> seekRequest;
     std::optional<std::filesystem::path> saveDestination;
+    bool copyRequested = false;
+    std::unique_ptr<PreparedGifCopy> preparedCopy;
+    std::exception_ptr copyFailure;
     bool saveComplete = false;
     std::exception_ptr saveFailure;
     std::exception_ptr playbackFailure;
@@ -75,7 +110,8 @@ struct GifPreview::Implementation final : Window {
     bool paused = false;
     bool modal = false;
     bool saving = false;
-    bool resumeAfterSave = false;
+    bool copying = false;
+    bool resumeAfterOutput = false;
     bool playbackUnavailable = false;
     bool closed = false;
     bool ownsTemporary = true;
@@ -83,7 +119,7 @@ struct GifPreview::Implementation final : Window {
     UniqueGdiObject<HFONT> interfaceFont;
     std::wstring durationText;
     std::wstring information;
-    std::wstring saveError;
+    std::wstring outputStatus;
 
     struct BusyScope {
         Implementation& preview;
@@ -119,7 +155,7 @@ struct GifPreview::Implementation final : Window {
         if (ownsTemporary) { std::error_code ignored; std::filesystem::remove(result.path,ignored); }
     }
 
-    [[nodiscard]] bool Busy() const noexcept { return modal || saving; }
+    [[nodiscard]] bool Busy() const noexcept { return modal || saving || copying; }
 
     void JoinWorker() noexcept {
         {
@@ -139,17 +175,19 @@ struct GifPreview::Implementation final : Window {
         bool decodingDone = false;
         const auto interrupted = [&] {
             const std::lock_guard lock(workerMutex);
-            return stopWorker || seekRequest || (activeSeek && saveDestination);
+            return stopWorker || seekRequest || (activeSeek && (saveDestination || copyRequested));
         };
         for (;;) {
             std::optional<std::filesystem::path> destination;
+            bool copy = false;
             {
                 std::unique_lock lock(workerMutex);
-                workerChanged.wait(lock,[&] { return stopWorker || saveDestination || seekRequest ||
+                workerChanged.wait(lock,[&] { return stopWorker || saveDestination || copyRequested || seekRequest ||
                     (!prefetchedTiming && (!decodingDone || activeSeek)); });
                 // A committed UI save request finishes even during shutdown.
                 if (stopWorker && !saveDestination) { return; }
                 destination = std::exchange(saveDestination,std::nullopt);
+                copy = std::exchange(copyRequested,false);
                 if (seekRequest) { activeSeek = std::exchange(seekRequest,std::nullopt); }
             }
             if (destination) {
@@ -163,6 +201,14 @@ struct GifPreview::Implementation final : Window {
                     saveFailure = failure;
                     saveComplete = true;
                 }
+            } else if (copy) {
+                std::unique_ptr<PreparedGifCopy> prepared;
+                std::exception_ptr failure;
+                try { prepared = std::make_unique<PreparedGifCopy>(result.path); }
+                catch (...) { failure = std::current_exception(); }
+                const std::lock_guard lock(workerMutex);
+                preparedCopy = std::move(prepared);
+                copyFailure = failure;
             } else {
                 try {
                     if (!reader) { reader = std::make_unique<gif::GifReader>(result.path); }
@@ -215,7 +261,7 @@ struct GifPreview::Implementation final : Window {
                     // With no published timing, the worker exclusively owns this buffer.
                     prefetchedPixels.assign(canvas->Pixels().begin(),canvas->Pixels().end());
                     const std::lock_guard lock(workerMutex);
-                    if (stopWorker || seekRequest || (activeSeek && saveDestination)) { continue; }
+                    if (stopWorker || seekRequest || (activeSeek && (saveDestination || copyRequested))) { continue; }
                     prefetchedTiming = FrameTiming{targetFrame == 0 ? 0 : timeline[targetFrame - 1].end, end};
                     activeSeek.reset();
                     decodingDone = document.frameCount == 1;
@@ -257,6 +303,10 @@ struct GifPreview::Implementation final : Window {
         const auto save = SaveButton();
         const LONG width = save.right-save.left;
         return {save.right+Scale(10),save.top,save.right+Scale(10)+width,save.bottom};
+    }
+    RECT CopyButton() const noexcept {
+        const auto save = SaveButton();
+        return {save.left-Scale(114),save.top,save.left-Scale(10),save.bottom};
     }
     RECT ProgressArea() const noexcept {
         RECT client{}; GetClientRect(Handle(),&client);
@@ -336,11 +386,15 @@ struct GifPreview::Implementation final : Window {
             if (!failure) { ownsTemporary = false; Close(); return; }
             try { std::rethrow_exception(failure); }
             catch (const std::exception& error) {
-                saveError = (english ? L"Save failed. " : L"保存失败。") + ExceptionMessage(error);
-            } catch (...) { saveError = english ? L"Could not save the recording." : L"无法保存录制。"; }
-            if (resumeAfterSave) { SetPaused(false); }
+                outputStatus = (english ? L"Save failed. " : L"保存失败。") + ExceptionMessage(error);
+            } catch (...) { outputStatus = english ? L"Could not save the recording." : L"无法保存录制。"; }
+            if (resumeAfterOutput) { SetPaused(false); }
             InvalidateRect(Handle(),nullptr,FALSE);
             PostMessageW(owner,closedMessage,0,0);
+            return;
+        }
+        if (copying) {
+            CompleteCopy();
             return;
         }
         const auto now = PreviewClock::now();
@@ -445,8 +499,8 @@ struct GifPreview::Implementation final : Window {
         catch (...) { if (resume) { SetPaused(false); } throw; }
         if (!destination) { if (resume) { SetPaused(false); } return; }
         WakeWithin(50); // Also recover if the worker's window message cannot be queued.
-        saveError.clear();
-        resumeAfterSave = resume;
+        outputStatus.clear();
+        resumeAfterOutput = resume;
         saving = true;
         {
             const std::lock_guard lock(workerMutex);
@@ -454,6 +508,44 @@ struct GifPreview::Implementation final : Window {
         }
         workerChanged.notify_one();
         InvalidateRect(Handle(),nullptr,FALSE);
+    }
+    void Copy() {
+        if (Busy() || closed) { return; }
+        FinishScrub(false);
+        resumeAfterOutput = !paused;
+        SetPaused(true);
+        WakeWithin(50);
+        outputStatus.clear();
+        copying = true;
+        {
+            const std::lock_guard lock(workerMutex);
+            copyRequested = true;
+        }
+        workerChanged.notify_one();
+        InvalidateProgress();
+    }
+    void CompleteCopy() {
+        std::unique_ptr<PreparedGifCopy> prepared;
+        std::exception_ptr failure;
+        {
+            const std::lock_guard lock(workerMutex);
+            prepared = std::move(preparedCopy);
+            failure = std::exchange(copyFailure,{});
+        }
+        if (!prepared && !failure) { WakeWithin(50); return; }
+        try {
+            if (failure) { std::rethrow_exception(failure); }
+            const auto formats = prepared->Publish(Handle());
+            outputStatus = formats.animation ? (english ? L"GIF copied to clipboard" : L"GIF 已复制到剪贴板") :
+                (english ? L"GIF copied as a file" : L"已将 GIF 文件复制到剪贴板");
+        } catch (const std::exception& error) {
+            outputStatus = (english ? L"Copy failed. " : L"复制失败。") + ExceptionMessage(error);
+        } catch (...) { outputStatus = english ? L"Could not copy the recording." : L"无法复制录制。"; }
+        copying = false;
+        if (resumeAfterOutput) { SetPaused(false); }
+        Schedule();
+        InvalidateProgress();
+        PostMessageW(owner,closedMessage,0,0);
     }
     void PaintProgress(HDC context) {
         const auto area = ProgressArea();
@@ -508,18 +600,22 @@ struct GifPreview::Implementation final : Window {
         RECT informationArea{Scale(12),imageHeight+Scale(35),client.right-Scale(12),imageHeight+Scale(58)};
         const wchar_t* status = information.c_str();
         if (saving) { status = english ? L"Saving…" : L"正在保存…"; }
-        else if (!saveError.empty()) { status = saveError.c_str(); }
-        else if (playbackUnavailable) { status = english ? L"Preview unavailable" : L"无法预览"; }
+        else if (copying) { status = english ? L"Copying GIF…" : L"正在复制 GIF…"; }
         else if (pendingSeek) { status = english ? L"Seeking…" : L"正在跳转…"; }
+        else if (!outputStatus.empty()) { status = outputStatus.c_str(); }
+        else if (playbackUnavailable) { status = english ? L"Preview unavailable" : L"无法预览"; }
         DrawTextW(context,status,-1,&informationArea,
             DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
         auto save = SaveButton();
         auto discard = DiscardButton();
+        auto copy = CopyButton();
         SetDCBrushColor(context,RGB(60,65,75));
         FillRect(context,&save,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
         FillRect(context,&discard,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+        FillRect(context,&copy,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
         DrawTextW(context,english ? L"Save..." : L"保存…",-1,&save,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         DrawTextW(context,english ? L"Discard" : L"放弃",-1,&discard,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        DrawTextW(context,english ? L"Copy GIF" : L"复制 GIF",-1,&copy,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
     LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override {
         try {
@@ -557,6 +653,11 @@ struct GifPreview::Implementation final : Window {
                 if (parameter == VK_SPACE) { if (!Busy() && !scrubPosition) { SetPaused(!paused); } return 0; }
                 if (parameter == VK_ESCAPE) { Discard(); return 0; }
                 if (parameter == 'S' && (GetKeyState(VK_CONTROL)&0x8000) != 0) { Save(); return 0; }
+                if (parameter == 'C' && (GetKeyState(VK_CONTROL)&0x8000) != 0) {
+                    constexpr LPARAM wasAlreadyDown = 1L << 30;
+                    if ((data & wasAlreadyDown) == 0) { Copy(); }
+                    return 0;
+                }
                 break;
             case WM_LBUTTONDOWN: {
                 const POINT point{GET_X_LPARAM(data),GET_Y_LPARAM(data)};
@@ -583,8 +684,10 @@ struct GifPreview::Implementation final : Window {
                 if (scrubPosition) { scrubPosition = SeekPosition(point.x); FinishScrub(true); return 0; }
                 const auto save = SaveButton();
                 const auto discard = DiscardButton();
+                const auto copy = CopyButton();
                 if (PtInRect(&save,point)) { Save(); }
                 else if (PtInRect(&discard,point)) { Discard(); }
+                else if (PtInRect(&copy,point)) { Copy(); }
                 return 0;
             }
             }

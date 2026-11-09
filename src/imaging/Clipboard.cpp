@@ -1,10 +1,13 @@
 #include "imaging/Clipboard.h"
 #include "imaging/ImageCodec.h"
+#include "platform/FileCommit.h"
 #include <shellapi.h>
+#include <shlobj.h>
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <thread>
@@ -24,8 +27,8 @@ struct ClipboardScope {
 };
 struct Memory {
     HGLOBAL handle = nullptr;
-    explicit Memory(std::size_t size) {
-        handle = GlobalAlloc(GMEM_MOVEABLE, size);
+    explicit Memory(std::size_t size, UINT flags = GMEM_MOVEABLE) {
+        handle = GlobalAlloc(flags, size);
         if (!handle) { throw std::bad_alloc(); }
     }
     explicit Memory(HGLOBAL encoded) noexcept : handle(encoded) {}
@@ -33,7 +36,7 @@ struct Memory {
     Memory(const Memory&) = delete;
     Memory& operator=(const Memory&) = delete;
     [[nodiscard]] bool Publish(UINT format) noexcept {
-        if (!SetClipboardData(format, handle)) { return false; }
+        if (!handle || !SetClipboardData(format, handle)) { return false; }
         handle = nullptr;
         return true;
     }
@@ -102,6 +105,71 @@ void WriteDib(std::uint8_t* bytes, BitmapView image) {
         destination += sizeof(pixel);
     }
 }
+}
+
+struct GifClipboardData::Implementation {
+    UINT nativeFormat = 0;
+    UINT preferredDropEffectFormat = 0;
+    std::optional<Memory> animation;
+    std::optional<Memory> fileDrop;
+    std::optional<Memory> preferredDropEffect;
+
+    explicit Implementation(const std::filesystem::path& file) {
+        const auto& path = file.native();
+        if (!file.is_absolute() || path.find(L'\0') != std::wstring::npos || path.size() >= 32768) {
+            throw std::invalid_argument("Invalid clipboard GIF file path");
+        }
+        const auto extended = ExtendedFilePath(file);
+        const auto size = std::filesystem::file_size(extended);
+        if (size == 0) { throw std::invalid_argument("Clipboard GIF file is empty"); }
+        fileDrop.emplace(sizeof(DROPFILES) + (path.size() + 2) * sizeof(wchar_t), GHND);
+        {
+            const LockedMemory drop(fileDrop->handle);
+            const DROPFILES header{sizeof(DROPFILES), {}, FALSE, TRUE};
+            std::memcpy(drop.data, &header, sizeof(header));
+            std::memcpy(drop.data + sizeof(header), path.data(), path.size() * sizeof(wchar_t));
+        }
+        preferredDropEffectFormat = RegisterClipboardFormatW(CFSTR_PREFERREDDROPEFFECT);
+        if (preferredDropEffectFormat) {
+            preferredDropEffect.emplace(sizeof(DWORD), GHND);
+            const LockedMemory effect(preferredDropEffect->handle);
+            const DWORD copy = DROPEFFECT_COPY;
+            std::memcpy(effect.data, &copy, sizeof(copy));
+        }
+        // Avoid duplicating large recordings into a contiguous clipboard allocation.
+        // The file drop still carries the complete animation at any size.
+        constexpr std::uintmax_t MaximumNativeGifBytes = 64ULL * 1024 * 1024;
+        if (size > MaximumNativeGifBytes) { return; }
+        nativeFormat = RegisterClipboardFormatW(L"image/gif");
+        if (nativeFormat == 0) { return; }
+        try { animation.emplace(static_cast<std::size_t>(size), GHND); }
+        catch (const std::bad_alloc&) { return; }
+        std::ifstream input(extended, std::ios::binary);
+        const LockedMemory bytes(animation->handle);
+        if (!input.read(reinterpret_cast<char*>(bytes.data), static_cast<std::streamsize>(size))) {
+            throw std::runtime_error("Read clipboard GIF file failed");
+        }
+    }
+};
+
+GifClipboardData::GifClipboardData(const std::filesystem::path& file)
+    : implementation_(std::make_unique<Implementation>(file)) {}
+
+GifClipboardData::~GifClipboardData() = default;
+
+GifClipboardFormats GifClipboardData::Publish(HWND owner) {
+    if (!owner) { throw std::invalid_argument("Clipboard publishing requires an owner window"); }
+    auto& data = *implementation_;
+    if (!data.fileDrop->handle) { throw std::logic_error("Clipboard GIF file was already published"); }
+    const ClipboardScope clipboard(owner);
+    if (!EmptyClipboard()) { throw std::runtime_error("Empty clipboard failed"); }
+    const bool animationPublished = data.animation && data.animation->Publish(data.nativeFormat);
+    const bool filePublished = data.fileDrop->Publish(CF_HDROP);
+    if (filePublished && data.preferredDropEffect) {
+        static_cast<void>(data.preferredDropEffect->Publish(data.preferredDropEffectFormat));
+    }
+    if (!animationPublished && !filePublished) { throw std::runtime_error("Publish clipboard GIF failed"); }
+    return {animationPublished, filePublished};
 }
 
 std::vector<std::uint8_t> EncodeDib(BitmapView image) {

@@ -505,7 +505,14 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
     }
     case WM_HOTKEY: {
         const auto command = hotkeys_ ? hotkeys_->CommandFor(static_cast<int>(parameter)) : AppCommand::None;
-        if (command != AppCommand::None) { LaunchOptions request; request.command = command; Queue(std::move(request)); }
+        if (command != AppCommand::None) {
+            const bool beginCapture = commands_.empty() && (command == AppCommand::Screenshot || command == AppCommand::Gif);
+            LaunchOptions request;
+            request.command = command;
+            Queue(std::move(request));
+            // Honor the hotkey's foreground eligibility before returning to the message loop.
+            if (beginCapture) { ProcessCommands(); }
+        }
         return 0;
     }
     case TrayMessage: {

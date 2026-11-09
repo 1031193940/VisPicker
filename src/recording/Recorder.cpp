@@ -93,28 +93,6 @@ private:
     std::vector<std::thread>& threads_;
 };
 
-class TemporaryRecording final {
-public:
-    TemporaryRecording() {
-        const auto directory = std::filesystem::temp_directory_path() / L"VisPick";
-        std::filesystem::create_directories(directory);
-        static std::atomic<unsigned> sequence{0};
-        for (unsigned attempt = 0; attempt < 8; ++attempt) {
-            path = directory / (L"rec_vispick_" + std::to_wstring(GetCurrentProcessId()) + L"_" +
-                std::to_wstring(GetTickCount64()) + L"_" + std::to_wstring(sequence.fetch_add(1)) + L".gif");
-            const KernelHandle reserved(CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
-            if (reserved.Get() != INVALID_HANDLE_VALUE) { return; }
-            if (GetLastError() != ERROR_FILE_EXISTS) { throw std::runtime_error("Cannot reserve temporary recording"); }
-        }
-        throw std::runtime_error("Cannot find an unused recording filename");
-    }
-    ~TemporaryRecording() { if (!keep) { std::error_code ignored; std::filesystem::remove(path, ignored); } }
-    TemporaryRecording(const TemporaryRecording&) = delete;
-    TemporaryRecording& operator=(const TemporaryRecording&) = delete;
-    std::filesystem::path path;
-    bool keep = false;
-};
-
 class RecordBorder final : public Window {
 public:
     ~RecordBorder() override { Destroy(); }
@@ -642,7 +620,7 @@ struct Recorder::Implementation {
 
     void Run() noexcept {
         try {
-            TemporaryRecording temporary;
+            recording::TemporaryGif temporary(recording::TemporaryGifKind::Recording);
             slots.resize(plan.slotCount);
             const auto pixels = static_cast<std::size_t>(width)*static_cast<std::size_t>(height);
             for (auto& slot : slots) { slot.current.reserve(pixels); slot.previous.reserve(pixels); }
