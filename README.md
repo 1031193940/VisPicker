@@ -164,3 +164,9 @@ Remove-Item Env:\VISPICK_QUALITY_INPUT
 桌面测试须串行运行。集成回归只对自身窗口发消息，剪贴板检查使用独立窗口站。便携包包含两个 exe、使用说明和配置模板。
 
 需要长时间资源诊断时，可选用 `.\tests\e2e\RunSoak.ps1 -Seconds 28800 -IntervalSeconds 30`。八小时浸泡已退出发布验收。 [诊断口径](docs/P6_CHECKLIST.md#浸泡测试的覆盖与口径)
+
+## 许可证
+
+VisPick 项目代码采用 MIT 许可证。 [LICENSE](LICENSE)
+
+第三方依赖和测试素材沿用各自的许可证。 [测试依赖说明](tests/third_party/README.md) · [测试素材许可](docs/reports/data/quality-input/README.md)
