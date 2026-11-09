@@ -104,7 +104,7 @@ void CheckGifPreviewCopy(HWND owner) {
         RECT client{};
         if (!GetClientRect(preview.Handle(), &client)) { throw std::runtime_error("Read GIF preview bounds failed"); }
         const auto dpi = static_cast<int>(vispick::DpiForWindow(preview.Handle()));
-        const auto x = client.right - MulDiv(252, dpi, 96);
+        const auto x = MulDiv(87, dpi, 96);
         const auto y = client.bottom - MulDiv(20, dpi, 96);
         SendMessageW(preview.Handle(), WM_LBUTTONUP, 0, MAKELPARAM(x,y));
         if (!preview.Busy()) { throw std::runtime_error("GIF Copy button did not start publishing"); }

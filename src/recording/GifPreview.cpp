@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -117,6 +118,7 @@ struct GifPreview::Implementation final : Window {
     bool ownsTemporary = true;
     int dpi = 96;
     UniqueGdiObject<HFONT> interfaceFont;
+    std::optional<DibSection> paintBuffer;
     std::wstring durationText;
     std::wstring information;
     std::wstring outputStatus;
@@ -295,18 +297,16 @@ struct GifPreview::Implementation final : Window {
         const auto bounds = AdjustWindowBoundsForDpi({0,0,clientWidth,clientHeight},WS_OVERLAPPEDWINDOW,0,static_cast<UINT>(dpi));
         return {bounds.right-bounds.left,bounds.bottom-bounds.top};
     }
-    RECT SaveButton() const noexcept {
+    struct ActionButtons { RECT clipboard; RECT save; RECT discard; };
+    ActionButtons LayoutActions() const noexcept {
         RECT client{}; GetClientRect(Handle(),&client);
-        return {client.right-Scale(190),client.bottom-Scale(36),client.right-Scale(100),client.bottom-Scale(6)};
-    }
-    RECT DiscardButton() const noexcept {
-        const auto save = SaveButton();
-        const LONG width = save.right-save.left;
-        return {save.right+Scale(10),save.top,save.right+Scale(10)+width,save.bottom};
-    }
-    RECT CopyButton() const noexcept {
-        const auto save = SaveButton();
-        return {save.left-Scale(114),save.top,save.left-Scale(10),save.bottom};
+        const LONG top = client.bottom-Scale(36);
+        const LONG bottom = client.bottom-Scale(6);
+        const LONG right = client.right-Scale(10);
+        const LONG discardLeft = right-Scale(78);
+        const LONG saveRight = discardLeft-Scale(8);
+        return {{Scale(10),top,Scale(164),bottom}, {saveRight-Scale(76),top,saveRight,bottom},
+            {discardLeft,top,right,bottom}};
     }
     RECT ProgressArea() const noexcept {
         RECT client{}; GetClientRect(Handle(),&client);
@@ -570,33 +570,46 @@ struct GifPreview::Implementation final : Window {
         const auto time = FormatTime(shownPosition) + L" / " + durationText;
         DrawTextW(context,time.c_str(),-1,&timeArea,DT_SINGLELINE | DT_RIGHT | DT_VCENTER | DT_NOPREFIX);
     }
-    void Paint(HDC context, const RECT* dirty = nullptr) {
-        RECT client{}; GetClientRect(Handle(),&client);
+    void DrawClient(HDC context, const RECT& client, const RECT& dirty) {
         SetDCBrushColor(context,RGB(28,30,35));
-        FillRect(context,&client,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+        const auto brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
+        const auto fillBackground = [&](const RECT& bounds) {
+            RECT clipped{};
+            if (IntersectRect(&clipped,&dirty,&bounds)) { FillRect(context,&clipped,brush); }
+        };
         const int imageHeight = std::max(1,static_cast<int>(client.bottom)-FooterHeight());
-        const RECT imageArea{0,0,client.right,imageHeight};
         RECT intersection{};
-        if (!displayedPixels.empty() && (!dirty || IntersectRect(&intersection,dirty,&imageArea))) {
+        if (displayedPixels.empty()) { fillBackground(client); }
+        else {
             const double scale = std::min(static_cast<double>(std::max(1L,client.right))/result.width,static_cast<double>(imageHeight)/result.height);
             const int shownWidth = std::max(1,static_cast<int>(result.width*scale));
             const int shownHeight = std::max(1,static_cast<int>(result.height*scale));
-            BITMAPINFO bitmap{};
-            bitmap.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bitmap.bmiHeader.biWidth = result.width;
-            bitmap.bmiHeader.biHeight = -result.height;
-            bitmap.bmiHeader.biPlanes = 1;
-            bitmap.bmiHeader.biBitCount = 32;
-            bitmap.bmiHeader.biCompression = BI_RGB;
-            SetStretchBltMode(context,COLORONCOLOR);
-            StretchDIBits(context,(client.right-shownWidth)/2,(imageHeight-shownHeight)/2,shownWidth,shownHeight,
-                0,0,result.width,result.height,displayedPixels.data(),&bitmap,DIB_RGB_COLORS,SRCCOPY);
+            const int left = (client.right-shownWidth)/2;
+            const int top = (imageHeight-shownHeight)/2;
+            const RECT frame{left,top,left+shownWidth,top+shownHeight};
+            // Even in the low-memory drawing path, leave the previous image visible until its replacement is ready.
+            fillBackground({0,0,client.right,frame.top});
+            fillBackground({0,frame.bottom,client.right,client.bottom});
+            fillBackground({0,frame.top,frame.left,frame.bottom});
+            fillBackground({frame.right,frame.top,client.right,frame.bottom});
+            if (IntersectRect(&intersection,&dirty,&frame)) {
+                BITMAPINFO bitmap{};
+                bitmap.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bitmap.bmiHeader.biWidth = result.width;
+                bitmap.bmiHeader.biHeight = -result.height;
+                bitmap.bmiHeader.biPlanes = 1;
+                bitmap.bmiHeader.biBitCount = 32;
+                bitmap.bmiHeader.biCompression = BI_RGB;
+                SetStretchBltMode(context,COLORONCOLOR);
+                StretchDIBits(context,left,top,shownWidth,shownHeight,0,0,result.width,result.height,
+                    displayedPixels.data(),&bitmap,DIB_RGB_COLORS,SRCCOPY);
+            }
         }
         const SelectObjectGuard font(context,interfaceFont.Get());
         SetBkMode(context,TRANSPARENT);
         SetTextColor(context,RGB(235,235,240));
         const auto progress = ProgressArea();
-        if (!dirty || IntersectRect(&intersection,dirty,&progress)) { PaintProgress(context); }
+        if (IntersectRect(&intersection,&dirty,&progress)) { PaintProgress(context); }
         RECT informationArea{Scale(12),imageHeight+Scale(35),client.right-Scale(12),imageHeight+Scale(58)};
         const wchar_t* status = information.c_str();
         if (saving) { status = english ? L"Saving…" : L"正在保存…"; }
@@ -606,16 +619,41 @@ struct GifPreview::Implementation final : Window {
         else if (playbackUnavailable) { status = english ? L"Preview unavailable" : L"无法预览"; }
         DrawTextW(context,status,-1,&informationArea,
             DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
-        auto save = SaveButton();
-        auto discard = DiscardButton();
-        auto copy = CopyButton();
+        auto actions = LayoutActions();
         SetDCBrushColor(context,RGB(60,65,75));
-        FillRect(context,&save,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-        FillRect(context,&discard,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-        FillRect(context,&copy,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-        DrawTextW(context,english ? L"Save..." : L"保存…",-1,&save,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        DrawTextW(context,english ? L"Discard" : L"放弃",-1,&discard,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        DrawTextW(context,english ? L"Copy GIF" : L"复制 GIF",-1,&copy,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        FillRect(context,&actions.save,brush);
+        FillRect(context,&actions.discard,brush);
+        SetDCBrushColor(context,RGB(33,90,173));
+        FillRect(context,&actions.clipboard,brush);
+        DrawTextW(context,english ? L"Save..." : L"保存…",-1,&actions.save,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        DrawTextW(context,english ? L"Discard" : L"放弃",-1,&actions.discard,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        DrawTextW(context,english ? L"Copy to Clipboard" : L"复制到剪贴板",-1,&actions.clipboard,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+    void Paint(HDC context, const RECT* update = nullptr) {
+        RECT client{};
+        GetClientRect(Handle(),&client);
+        RECT dirty{};
+        if (!IntersectRect(&dirty,&client,update ? update : &client)) { return; }
+        if (!update) { DrawClient(context,client,dirty); return; } // WM_PRINTCLIENT supplies its own surface.
+
+        constexpr std::int64_t maximumBufferPixels = 64 * 1024 * 1024 / sizeof(std::uint32_t);
+        if (static_cast<std::int64_t>(client.right)*client.bottom > maximumBufferPixels) {
+            paintBuffer.reset();
+            DrawClient(context,client,dirty);
+            return;
+        }
+        if (!paintBuffer || paintBuffer->Width() != client.right || paintBuffer->Height() != client.bottom) {
+            try { paintBuffer.emplace(client.right,client.bottom); }
+            catch (const std::exception&) { DrawClient(context,client,dirty); return; }
+        }
+        // Fill and scale off-screen so intermediate draws cannot flash on the window.
+        const auto bufferedContext = paintBuffer->DeviceContext();
+        DrawClient(bufferedContext,client,dirty);
+        if (!BitBlt(context,dirty.left,dirty.top,dirty.right-dirty.left,dirty.bottom-dirty.top,
+                    bufferedContext,dirty.left,dirty.top,SRCCOPY)) {
+            throw std::runtime_error("Present GIF preview failed");
+        }
     }
     LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override {
         try {
@@ -682,12 +720,10 @@ struct GifPreview::Implementation final : Window {
             case WM_LBUTTONUP: {
                 const POINT point{GET_X_LPARAM(data),GET_Y_LPARAM(data)};
                 if (scrubPosition) { scrubPosition = SeekPosition(point.x); FinishScrub(true); return 0; }
-                const auto save = SaveButton();
-                const auto discard = DiscardButton();
-                const auto copy = CopyButton();
-                if (PtInRect(&save,point)) { Save(); }
-                else if (PtInRect(&discard,point)) { Discard(); }
-                else if (PtInRect(&copy,point)) { Copy(); }
+                const auto actions = LayoutActions();
+                if (PtInRect(&actions.clipboard,point)) { Copy(); }
+                else if (PtInRect(&actions.save,point)) { Save(); }
+                else if (PtInRect(&actions.discard,point)) { Discard(); }
                 return 0;
             }
             }

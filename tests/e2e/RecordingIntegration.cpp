@@ -342,6 +342,7 @@ void SaveOwnedClient(HWND window, const std::filesystem::path& path) {
 
 void CheckPreviewDpi(Report& report, HWND window, const std::filesystem::path& output) {
     const auto originalDpi = vispick::DpiForWindow(window);
+    const auto originalClient = OwnedClient(window);
     RECT original{};
     if (!GetWindowRect(window,&original)) { throw std::runtime_error("Cannot read owned preview bounds"); }
     MINMAXINFO minimum{};
@@ -350,19 +351,85 @@ void CheckPreviewDpi(Report& report, HWND window, const std::filesystem::path& o
         MulDiv(180,static_cast<int>(originalDpi),96)},WS_OVERLAPPEDWINDOW,0,originalDpi);
     report.Require(minimum.ptMinTrackSize.x >= expected.right-expected.left && minimum.ptMinTrackSize.y >= expected.bottom-expected.top,
         "preview_minimum_client_size_scales_with_dpi");
-    const auto scaled = vispick::AdjustWindowBoundsForDpi({0,0,720,360},WS_OVERLAPPEDWINDOW,0,192);
-    RECT suggested{original.left,original.top,original.left+scaled.right-scaled.left,original.top+scaled.bottom-scaled.top};
+    // A synthetic DPI message updates our renderer; Windows keeps the real monitor's nonclient metrics.
+    constexpr int testDpi = 192;
+    const auto scale = [](int logical) { return MulDiv(logical,testDpi,96); };
+    const LONG frameWidth = original.right-original.left-originalClient.right;
+    const LONG frameHeight = original.bottom-original.top-originalClient.bottom;
+    RECT suggested{original.left,original.top,original.left+scale(360)+frameWidth,original.top+scale(180)+frameHeight};
     SendMessageW(window,WM_DPICHANGED,MAKELONG(192,192),reinterpret_cast<LPARAM>(&suggested));
     try {
-        RECT client{};
-        if (!GetClientRect(window,&client)) { throw std::runtime_error("Cannot read scaled preview client"); }
-        report.Require(client.right >= 380 && client.bottom >= 132,"preview_192dpi_buttons_fit_client");
-        SaveOwnedClient(window,output/L"preview-dpi192-client.png");
+        auto client = OwnedClient(window);
+        if (client.right != scale(360) || client.bottom != scale(180)) {
+            // Adjust from the actual post-change nonclient size, which can differ from the pre-change size.
+            RECT resized{};
+            if (!GetWindowRect(window,&resized) || !SetWindowPos(window,nullptr,0,0,
+                resized.right-resized.left+scale(360)-client.right,resized.bottom-resized.top+scale(180)-client.bottom,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING)) { throw std::runtime_error("Cannot correct scaled preview client size"); }
+            client = OwnedClient(window);
+        }
+        report.values.emplace_back("preview_192dpi_client_width",client.right);
+        report.values.emplace_back("preview_192dpi_client_height",client.bottom);
+        RECT resized{};
+        if (!GetWindowRect(window,&resized)) { throw std::runtime_error("Cannot read scaled preview bounds"); }
+        MINMAXINFO scaledMinimum{};
+        SendMessageW(window,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&scaledMinimum));
+        // Allow only the discrepancy between the synthetic tracking minimum and the real nonclient frame.
+        const LONG maximumWidth = std::max<LONG>(scale(360),scaledMinimum.ptMinTrackSize.x-(resized.right-resized.left-client.right));
+        const LONG maximumHeight = std::max<LONG>(scale(180),scaledMinimum.ptMinTrackSize.y-(resized.bottom-resized.top-client.bottom));
+        report.Require(client.right >= scale(360) && client.right <= maximumWidth &&
+            client.bottom >= scale(180) && client.bottom <= maximumHeight,"preview_192dpi_minimum_client_size");
+        vispick::DibSection image(client.right,client.bottom);
+        PrintOwnedClient(window,image);
+        const vispick::BitmapView rendered(image.Width(),image.Height(),image.Pixels());
+        constexpr std::uint32_t copyFill = 0xFF215AADU;
+        const RECT copy{scale(10),client.bottom-scale(36),scale(164),client.bottom-scale(6)};
+        const auto buttonEdge = rendered.Row(copy.top+scale(3));
+        const auto hasLabel = [&] {
+            for (LONG row = copy.top+scale(5); row < copy.bottom-scale(5); ++row) {
+                const auto pixels = rendered.Row(row);
+                for (LONG column = copy.left+scale(5); column < copy.right-scale(5); ++column) {
+                    const auto pixel = pixels[column];
+                    if (((pixel>>16)&0xFF) >= 180 && ((pixel>>8)&0xFF) >= 180 && (pixel&0xFF) >= 180) { return true; }
+                }
+            }
+            return false;
+        };
+        report.Require(buttonEdge[copy.left+scale(3)] == copyFill && buttonEdge[copy.right-scale(3)] == copyFill &&
+            buttonEdge[copy.right+scale(3)] != copyFill && hasLabel(),"preview_192dpi_clipboard_button_visible_at_minimum_size");
+        vispick::SaveImage(output/L"preview-dpi192-client.png",rendered,vispick::SaveFormat::Png);
     } catch (...) {
         SendMessageW(window,WM_DPICHANGED,MAKELONG(originalDpi,originalDpi),reinterpret_cast<LPARAM>(&original));
         throw;
     }
     SendMessageW(window,WM_DPICHANGED,MAKELONG(originalDpi,originalDpi),reinterpret_cast<LPARAM>(&original));
+}
+
+void CheckPreviewDirtyPaint(Report& report, HWND window) {
+    const auto client = OwnedClient(window);
+    const auto dpi = static_cast<int>(vispick::DpiForWindow(window));
+    const LONG y = (client.bottom-MulDiv(100,dpi,96))/2;
+    const POINT damaged{client.right/2-8,y};
+    const POINT unchanged{client.right/2+8,y};
+    const auto isVisible = [window](POINT point) {
+        return ClientToScreen(window,&point) && WindowFromPoint(point) == window;
+    };
+    if (!isVisible(damaged) || !isVisible(unchanged)) {
+        std::cout << "SKIP preview_dirty_paint_preserves_unrelated_pixels (fixture is covered)" << std::endl;
+        return;
+    }
+    UpdateWindow(window);
+    const vispick::ScreenDc dc(window);
+    const COLORREF expected = GetPixel(dc.Get(),damaged.x,damaged.y);
+    constexpr auto sentinel = RGB(239,79,163);
+    const RECT damage{damaged.x,damaged.y,damaged.x+1,damaged.y+1};
+    const bool presented = expected != CLR_INVALID && expected != sentinel &&
+        SetPixelV(dc.Get(),damaged.x,damaged.y,sentinel) && SetPixelV(dc.Get(),unchanged.x,unchanged.y,sentinel) && GdiFlush() &&
+        InvalidateRect(window,&damage,FALSE) && UpdateWindow(window) && GdiFlush() &&
+        GetPixel(dc.Get(),damaged.x,damaged.y) == expected && GetPixel(dc.Get(),unchanged.x,unchanged.y) == sentinel;
+    InvalidateRect(window,nullptr,FALSE);
+    UpdateWindow(window);
+    report.Require(presented,"preview_dirty_paint_preserves_unrelated_pixels");
 }
 
 struct PreviewFixture {
@@ -428,6 +495,7 @@ void CheckPreviewTimeline(Report& report, Owner& owner, const std::filesystem::p
         constexpr std::array middle{blue,green};
         constexpr std::array last{blue,red};
         WaitUntil([&] { return fixture.FrameColors() == initial; },fixtureTimeout);
+        CheckPreviewDirtyPaint(report,window);
         // 20% by duration is the second frame, unlike equal frame divisions.
         fixture.Click(fixture.AtPercent(20));
         WaitUntil([&] { return fixture.FrameColors() == middle; },fixtureTimeout);
