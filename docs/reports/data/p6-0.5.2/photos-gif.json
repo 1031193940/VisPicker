@@ -1,0 +1,480 @@
+﻿{
+    "started_utc":  "2026-11-06T10:24:07.3668691Z",
+    "photos_version":  "2026.11090.22001.0",
+    "gif_sha256":  "BA26E52C91064FF5F894C6809F3C0BDA8243E855D920F4183C9CCD814BF621CE",
+    "source_duration_ms":  1970,
+    "status":  "passed",
+    "samples":  [
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  87,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  149,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  211,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  274,
+                        "marker":  5
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  351,
+                        "marker":  6
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  430,
+                        "marker":  7
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  492,
+                        "marker":  7
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  556,
+                        "marker":  0
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  619,
+                        "marker":  0
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  680,
+                        "marker":  1
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  742,
+                        "marker":  2
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  805,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  868,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  930,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  992,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1054,
+                        "marker":  5
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1117,
+                        "marker":  6
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1180,
+                        "marker":  7
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1242,
+                        "marker":  7
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1304,
+                        "marker":  0
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1366,
+                        "marker":  1
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1429,
+                        "marker":  1
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1491,
+                        "marker":  2
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1553,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1616,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1679,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1741,
+                        "marker":  0
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1804,
+                        "marker":  0
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1867,
+                        "marker":  1
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1930,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  1991,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2053,
+                        "marker":  3
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2115,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2178,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2240,
+                        "marker":  5
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2303,
+                        "marker":  6
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2366,
+                        "marker":  6
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2428,
+                        "marker":  7
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2491,
+                        "marker":  7
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2553,
+                        "marker":  0
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2615,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2677,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2740,
+                        "marker":  3
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2801,
+                        "marker":  3
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2865,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2928,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2991,
+                        "marker":  5
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3053,
+                        "marker":  6
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3116,
+                        "marker":  6
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3179,
+                        "marker":  7
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3242,
+                        "marker":  0
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3305,
+                        "marker":  0
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3367,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3429,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3492,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3554,
+                        "marker":  3
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3618,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3680,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3742,
+                        "marker":  0
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3804,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3866,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3929,
+                        "marker":  2
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  3992,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4054,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4115,
+                        "marker":  4
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4178,
+                        "marker":  5
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4241,
+                        "marker":  5
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4304,
+                        "marker":  6
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4366,
+                        "marker":  7
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4428,
+                        "marker":  7
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4491,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4554,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4617,
+                        "marker":  1
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4679,
+                        "marker":  2
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4742,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4806,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4869,
+                        "marker":  4
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4930,
+                        "marker":  5
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4992,
+                        "marker":  5
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5054,
+                        "marker":  6
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5117,
+                        "marker":  7
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5180,
+                        "marker":  7
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5242,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5304,
+                        "marker":  1
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5367,
+                        "marker":  1
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5429,
+                        "marker":  2
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5491,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5553,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5615,
+                        "marker":  4
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5677,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5740,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5803,
+                        "marker":  1
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5866,
+                        "marker":  2
+                    }
+                ],
+    "finished_utc":  "2026-11-06T10:24:14.7116799Z"
+}

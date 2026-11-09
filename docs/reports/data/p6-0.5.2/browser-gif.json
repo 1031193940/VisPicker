@@ -1,0 +1,1142 @@
+{
+  "started_utc": "2026-11-06T10:23:36.857Z",
+  "fixture": {
+    "width": 400,
+    "height": 240,
+    "frame_count": 21,
+    "duration_ms": 1970,
+    "name": "automatic-saved.gif",
+    "sha256": "ba26e52c91064ff5f894c6809f3c0bda8243e855d920f4183c9ccd814bf621ce"
+  },
+  "method": "Installed browsers, isolated headless profiles, rendered GIF row samples over three source-duration periods",
+  "browsers": [
+    {
+      "browser": "Chrome",
+      "status": "passed",
+      "version": "Chrome/156.0.8078.81",
+      "samples": [
+        [
+          {
+            "elapsed_ms": 0,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 265,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 390,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 544,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 671,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 827,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 984,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1109,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 1236,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 1393,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 1517,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 1674,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1831,
+            "marker": 0
+          }
+        ],
+        [
+          {
+            "elapsed_ms": 1971,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 2064,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 2190,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 2301,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 2459,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 2617,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 2742,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 2866,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 2992,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3116,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 3242,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 3367,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 3507,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 3679,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3803,
+            "marker": 0
+          }
+        ],
+        [
+          {
+            "elapsed_ms": 3944,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 4116,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 4272,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 4428,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 4585,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 4710,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 4865,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5022,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 5179,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 5320,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 5460,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 5616,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5741,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5897,
+            "marker": 0
+          }
+        ]
+      ]
+    },
+    {
+      "browser": "Edge",
+      "status": "passed",
+      "version": "Edg/156.0.4314.58",
+      "samples": [
+        [
+          {
+            "elapsed_ms": 0,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 261,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 387,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 557,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 682,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 838,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 980,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1105,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 1276,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 1430,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 1587,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 1743,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1869,
+            "marker": 0
+          }
+        ],
+        [
+          {
+            "elapsed_ms": 1994,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 2135,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 2291,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 2463,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 2620,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 2729,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 2855,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3012,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 3169,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 3294,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 3448,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 3575,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3730,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3855,
+            "marker": 0
+          }
+        ],
+        [
+          {
+            "elapsed_ms": 4025,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 4182,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 4307,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 4462,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 4619,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 4775,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 4901,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5025,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5150,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 5306,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 5463,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 5617,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5773,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5898,
+            "marker": 1
+          }
+        ]
+      ]
+    },
+    {
+      "browser": "Firefox",
+      "status": "passed",
+      "version": "150.0.2",
+      "samples": [
+        [
+          {
+            "elapsed_ms": 0,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 38,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 69,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 101,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 132,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 164,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 195,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 227,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 259,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 290,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 321,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 352,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 384,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 416,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 448,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 481,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 513,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 544,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 576,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 608,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 639,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 671,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 702,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 733,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 765,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 797,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 828,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 860,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 891,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 923,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 954,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 986,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 1017,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1048,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1080,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1111,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1142,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 1174,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 1205,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 1236,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 1269,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 1299,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 1330,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 1360,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 1391,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 1422,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 1453,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 1484,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 1515,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 1547,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 1578,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 1610,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 1641,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 1673,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 1703,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 1734,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 1765,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1796,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1827,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1859,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 1890,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 1922,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 1954,
+            "marker": 4
+          }
+        ],
+        [
+          {
+            "elapsed_ms": 1985,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 2016,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 2048,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 2079,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 2111,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 2142,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 2174,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 2204,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 2235,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 2267,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 2299,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 2330,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 2362,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 2393,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 2424,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 2455,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 2486,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 2517,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 2548,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 2578,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 2610,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 2641,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 2673,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 2704,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 2735,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 2766,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 2813,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 2844,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 2876,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 2907,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 2938,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 2968,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 2999,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3031,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3062,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3093,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 3125,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 3157,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 3187,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 3219,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 3250,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 3281,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 3312,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 3344,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 3376,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 3408,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 3438,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 3471,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 3503,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 3533,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 3565,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 3596,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 3627,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 3658,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 3689,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 3719,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3751,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3784,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3814,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 3846,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 3877,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 3909,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 3940,
+            "marker": 4
+          }
+        ],
+        [
+          {
+            "elapsed_ms": 3971,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 4002,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 4033,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 4065,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 4096,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 4127,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 4159,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 4189,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 4221,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 4252,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 4283,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 4315,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 4347,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 4377,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 4408,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 4439,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 4470,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 4501,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 4532,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 4564,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 4596,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 4627,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 4657,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 4688,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 4720,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 4751,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 4782,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 4814,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 4846,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 4878,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 4909,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 4940,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 4971,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5002,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5033,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5065,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5097,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5127,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5158,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 5189,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 5220,
+            "marker": 5
+          },
+          {
+            "elapsed_ms": 5250,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 5282,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 5313,
+            "marker": 6
+          },
+          {
+            "elapsed_ms": 5344,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 5376,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 5408,
+            "marker": 7
+          },
+          {
+            "elapsed_ms": 5439,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 5469,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 5501,
+            "marker": 0
+          },
+          {
+            "elapsed_ms": 5532,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 5564,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 5594,
+            "marker": 1
+          },
+          {
+            "elapsed_ms": 5626,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 5658,
+            "marker": 2
+          },
+          {
+            "elapsed_ms": 5689,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5721,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5752,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5783,
+            "marker": 3
+          },
+          {
+            "elapsed_ms": 5815,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5847,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5878,
+            "marker": 4
+          },
+          {
+            "elapsed_ms": 5910,
+            "marker": 4
+          }
+        ]
+      ]
+    }
+  ],
+  "finished_utc": "2026-11-06T10:23:59.994Z"
+}

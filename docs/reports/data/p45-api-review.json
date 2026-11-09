@@ -1,0 +1,87 @@
+[
+  {
+    "Symbol": "gdi32.dll!CreatePen",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-createpen.md"
+  },
+  {
+    "Symbol": "gdi32.dll!SetTextAlign",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-settextalign.md"
+  },
+  {
+    "Symbol": "gdi32.dll!StretchBlt",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-stretchblt.md"
+  },
+  {
+    "Symbol": "gdi32.dll!TextOutW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-textoutw.md"
+  },
+  {
+    "Symbol": "kernel32.dll!CancelWaitableTimer",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/synchapi/nf-synchapi-cancelwaitabletimer.md"
+  },
+  {
+    "Symbol": "kernel32.dll!CopyFileW",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-copyfilew.md"
+  },
+  {
+    "Symbol": "kernel32.dll!GetFileInformationByHandle",
+    "Minimum": "Windows XP [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/fileapi/nf-fileapi-getfileinformationbyhandle.md"
+  },
+  {
+    "Symbol": "kernel32.dll!GetNativeSystemInfo",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/sysinfoapi/nf-sysinfoapi-getnativesysteminfo.md"
+  },
+  {
+    "Symbol": "kernel32.dll!GlobalSize",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globalsize.md"
+  },
+  {
+    "Symbol": "shell32.dll!DragQueryFileW",
+    "Minimum": "Windows XP [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/shellapi/nf-shellapi-dragqueryfilew.md"
+  },
+  {
+    "Symbol": "user32.dll!AdjustWindowRectEx",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-adjustwindowrectex.md"
+  },
+  {
+    "Symbol": "user32.dll!GetAsyncKeyState",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getasynckeystate.md"
+  },
+  {
+    "Symbol": "user32.dll!GetClipboardData",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getclipboarddata.md"
+  },
+  {
+    "Symbol": "user32.dll!IsClipboardFormatAvailable",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-isclipboardformatavailable.md"
+  },
+  {
+    "Symbol": "user32.dll!SetLayeredWindowAttributes",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setlayeredwindowattributes.md"
+  },
+  {
+    "Symbol": "wtsapi32.dll!WTSRegisterSessionNotification",
+    "Minimum": "Windows Vista",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wtsapi32/nf-wtsapi32-wtsregistersessionnotification.md"
+  },
+  {
+    "Symbol": "wtsapi32.dll!WTSUnRegisterSessionNotification",
+    "Minimum": "Windows Vista",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wtsapi32/nf-wtsapi32-wtsunregistersessionnotification.md"
+  }
+]

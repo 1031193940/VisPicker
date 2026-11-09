@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "native_edit_pixels": 600600,
+  "mismatched_pixels": 0,
+  "sessions": 200,
+  "gdi_before": 0,
+  "gdi_after": 0,
+  "user_before": 1,
+  "user_after": 1,
+  "private_bytes_before": 88088576,
+  "private_bytes_after": 184422400,
+  "working_set_before": 53538816,
+  "working_set_after": 148557824,
+  "synthetic_ime_completion_tested": true,
+  "real_ime_input_tested": false,
+  "method": "hidden native EDIT WM_SETTEXT and WM_PRINTCLIENT; exact RGB comparison; no external windows or clipboard"
+}

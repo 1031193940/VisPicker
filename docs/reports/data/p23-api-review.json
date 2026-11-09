@@ -1,0 +1,314 @@
+[
+  {
+    "Symbol": "dwmapi.dll!DwmGetWindowAttribute",
+    "Minimum": "Windows Vista [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/dwmapi/nf-dwmapi-dwmgetwindowattribute.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!CreateFontIndirectW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-createfontindirectw.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!CreateFontW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-createfontw.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!CreatePatternBrush",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-createpatternbrush.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!Ellipse",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-ellipse.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!GetTextFaceW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-gettextfacew.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!GetTextMetricsW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-gettextmetricsw.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!LineTo",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-lineto.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!MoveToEx",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-movetoex.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!Rectangle",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-rectangle.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!SetBrushOrgEx",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-setbrushorgex.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!SetDCPenColor",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-setdcpencolor.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "gdi32.dll!SetStretchBltMode",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-setstretchbltmode.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "imm32.dll!ImmGetContext",
+    "Minimum": "Windows XP [desktop apps only],East Asian language support installed.",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/imm/nf-imm-immgetcontext.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "imm32.dll!ImmNotifyIME",
+    "Minimum": "Windows XP [desktop apps only],East Asian language support installed.",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/imm/nf-imm-immnotifyime.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "imm32.dll!ImmReleaseContext",
+    "Minimum": "Windows XP [desktop apps only],East Asian language support installed.",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/imm/nf-imm-immreleasecontext.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "kernel32.dll!GlobalAlloc",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globalalloc.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "kernel32.dll!GlobalFree",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globalfree.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "kernel32.dll!GlobalLock",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globallock.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "kernel32.dll!GlobalUnlock",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globalunlock.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "kernel32.dll!MoveFileExW",
+    "Minimum": "Windows XP [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-movefileexw.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "ole32.dll!CoTaskMemFree",
+    "Minimum": "Windows 2000 Professional [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/combaseapi/nf-combaseapi-cotaskmemfree.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "ole32.dll!CreateStreamOnHGlobal",
+    "Minimum": "Windows 2000 Professional [desktop apps \\| UWP apps]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/combaseapi/nf-combaseapi-createstreamonhglobal.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "shell32.dll!SHCreateItemFromParsingName",
+    "Minimum": "Windows Vista [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/shobjidl_core/nf-shobjidl_core-shcreateitemfromparsingname.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!CallWindowProcW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-callwindowprocw.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!CloseClipboard",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-closeclipboard.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!DrawIconEx",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-drawiconex.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!EmptyClipboard",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-emptyclipboard.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!GetCapture",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getcapture.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!GetClientRect",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getclientrect.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!GetCursorInfo",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getcursorinfo.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!GetForegroundWindow",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getforegroundwindow.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!GetIconInfo",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-geticoninfo.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!GetKeyState",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getkeystate.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!GetShellWindow",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getshellwindow.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!IsIconic",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-isiconic.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!IsWindow",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-iswindow.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!MonitorFromPoint",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-monitorfrompoint.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!MonitorFromRect",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-monitorfromrect.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!OffsetRect",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-offsetrect.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!OpenClipboard",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-openclipboard.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!PtInRect",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-ptinrect.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!RegisterClipboardFormatW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-registerclipboardformatw.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!ReleaseCapture",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-releasecapture.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!ScreenToClient",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-screentoclient.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!SendMessageW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-sendmessagew.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!SetCapture",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setcapture.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!SetClipboardData",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setclipboarddata.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!SetCursor",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setcursor.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!SetFocus",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setfocus.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!TabbedTextOutW",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-tabbedtextoutw.md",
+    "Status": "read"
+  },
+  {
+    "Symbol": "user32.dll!UnionRect",
+    "Minimum": "Windows 2000 Professional [desktop apps only]",
+    "Source": "https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-unionrect.md",
+    "Status": "read"
+  }
+]

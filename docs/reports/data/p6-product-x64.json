@@ -1,0 +1,44 @@
+{
+  "architecture": "x64",
+  "configuration": "Release",
+  "recorded_utc": "2026-11-06T06:53:59.1156666Z",
+  "product_sha256": "45851A936AD57C74A53CDB0CFB1EFD42838CF4C9B52FC3F707055ABA33D51766",
+  "physical_display_acceptance": "not_assessed_by_this_runner",
+  "checks": [
+    {
+      "name": "output",
+      "exit_code": 0,
+      "seconds": 11.7881351
+    },
+    {
+      "name": "overlay",
+      "exit_code": 0,
+      "seconds": 10.1502267
+    },
+    {
+      "name": "editor",
+      "exit_code": 0,
+      "seconds": 1.7095372
+    },
+    {
+      "name": "pins",
+      "exit_code": 0,
+      "seconds": 1.869281
+    },
+    {
+      "name": "recording",
+      "exit_code": 0,
+      "seconds": 64.4549271
+    },
+    {
+      "name": "lifecycle",
+      "exit_code": 0,
+      "seconds": 1.3810365
+    },
+    {
+      "name": "resident",
+      "exit_code": 0,
+      "seconds": 2.409799
+    }
+  ]
+}

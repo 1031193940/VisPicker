@@ -1,0 +1,50 @@
+P6 GIF decode heap attribution, 2026-11-06
+
+The VirtualQuery probe compiled with /W4 /WX /analyze in x64 and x86 and reported
+exact +262,144 and -262,144 B deltas across a controlled VirtualAlloc/VirtualFree.
+Fixed sampler commit was 69,632 B (x64) and 36,864 B (x86), reported separately.
+The heap walk is bounded to 65,536 default-process-heap entries while locked.
+The process PrivateUsage counters include sampler commit. MEM_PRIVATE sums exclude
+the diagnostic workspace and do not include copy-on-write MEM_IMAGE/MEM_MAPPED.
+
+DecodeProbe.exe ran the unmodified production reader and canvas over 100 cycles,
+alternating two saved VisPick recordings. Post-decode PrivateUsage from cycle 4
+ranged 6,336,512–8,364,032 B and ended at 7,139,328 B. Default heap busy payload
+ranged 454,786–456,626 B, free payload 2,534,960–3,049,696 B, and enumerated
+region commit 3,182,592–3,727,360 B. This isolates a large allocator capacity
+effect without comparable persistent live allocation growth.
+
+DecodeReuseProbe.exe compared fresh per-frame vectors against one reused frame
+vector per decode cycle using a scratch copy of the production reader.
+The scratch overload resets metadata each frame. Both modes use one Release
+x64 executable, a 20 ms inter-cycle delay, same decode/composition and same
+sampled pixel/timing checksum. No desktop, product source edits, heap trims or
+COM-lifetime changes. Each fixture ran three pairs of fresh/reuse in alternating
+order, 100 cycles per process with cycles 1–3 warmup and cycle 3 as baseline.
+Owned is the generated fixed 10-frame 256×144 fixture (out/wic-commit-probe/owned.gif).
+Recorded is the prior saved production recording
+(out/reports/review-recording-x64/automatic-saved.gif).
+Owned checksums all 5258003809725740940 and recorded all 14045013509410912076.
+All default-heap walks completed. Sizes are bytes. PeakPct is percent above
+cycle-3 PrivateUsage. Heap region commit omits large blocks outside walked regions.
+
+Run              Baseline     Min  Median     P95     Max PeakPct BusyRange MaxFree MaxHeapCommit
+---              --------     ---  ------     ---     --- ------- --------- ------- -------------
+owned-fresh-1     6217728 6160384 6238208 6582272 6619136    6.46      1520  924880       1490944
+owned-fresh-2     6004736 6049792 6246400 6586368 6680576   11.26      1824  907712       1474560
+owned-fresh-3     6234112 6008832 6242304 6352896 6770688    8.61      1520 1124768       1671168
+owned-reuse-1     6205440 6135808 6254592 6582272 6807552    9.70      1824 1018848       1601536
+owned-reuse-2     6238208 6012928 6238208 6549504 6619136    6.11      2128  985984       1519616
+owned-reuse-3     6193152 6164480 6225920 6574080 6668288    7.67      1824  909136       1478656
+recorded-fresh-1  6598656 6565888 7118848 7376896 7479296   13.35      1520 2870944       3837952
+recorded-fresh-2  6594560 6561792 7114752 7372800 7475200   13.35      5472 2870208       3837952
+recorded-fresh-3  6864896 6594560 7176192 7557120 7757824   13.01      4560 2813248       3772416
+recorded-reuse-1  6868992 6508544 6807552 7221248 7348224    6.98      1824 2749968       3604480
+recorded-reuse-2  6467584 6496256 7057408 7372800 7614464   17.73      1520 2786544       3751936
+recorded-reuse-3  6316032 6447104 7016448 7356416 7499776   18.74      5472 2673232       3620864
+
+The reuse variant did not deliver a repeatable reduction in PrivateUsage peaks
+for either fixture. The recorded fixture had lower median commit with reuse,
+while peak growth remained above 5% in every run. Variation from the
+allocator is large relative to the measured effect of the C++ frame vector.
+Retain the production API until there is independent justification for a change.

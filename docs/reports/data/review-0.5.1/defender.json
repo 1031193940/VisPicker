@@ -1,0 +1,18 @@
+{
+  "scanned_utc": "2026-11-06T08:59:28.8799567Z",
+  "scanner_version": "4.18.26100.4 (79b015c6fabb20b1ccd067f376e490f0bac19809)",
+  "scans": [
+    {
+      "file": "VisPick.exe",
+      "sha256": "4A57C949FC90F0671D1BE950CAB21B3D473893DC8B215D572E78397F94CC1C3C",
+      "exit_code": 0,
+      "output": "Scan starting...\nScan finished.\nScanning D:\\Workspace\\VisPick\\dist\\VisPick.exe found no threats."
+    },
+    {
+      "file": "VisPick-x86.exe",
+      "sha256": "F0D4795B425EB7500E888B48ABBA9977B3CF98FA4CB0EB43A2C4DC08B94F7D65",
+      "exit_code": 0,
+      "output": "Scan starting...\nScan finished.\nScanning D:\\Workspace\\VisPick\\dist\\VisPick-x86.exe found no threats."
+    }
+  ]
+}

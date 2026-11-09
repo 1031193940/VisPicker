@@ -1,0 +1,202 @@
+=== x64 console ===
+[PASS] console (exit 0)
+[PASS] file (exit 0)
+[PASS] pipe (exit 0)
+[PASS] detached (exit 0)
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "crash",
+  "exception_code": "0xE0421001",
+  "processor_architecture": 9,
+  "process_exit": -532541439,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x64-crash\\dumps\\VisPick-crash-20261106-201219-761-21948-83220-0.dmp",
+  "dump_bytes": 45492,
+  "sha256": "30fb81857ed9ccbfa130af0c0e1af56b4158abf847e96f0619fdb5d1ae932287"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "terminate",
+  "exception_code": "0xE0421002",
+  "processor_architecture": 9,
+  "process_exit": -532541438,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x64-terminate\\dumps\\VisPick-crash-20261106-201220-232-34520-75576-0.dmp",
+  "dump_bytes": 46348,
+  "sha256": "e17047eb430f1eec90ce46c82fb679d49154a72f9191d8b5611cb46fc1b9ad0c"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "worker-exception",
+  "exception_code": "0xE0421003",
+  "processor_architecture": 9,
+  "process_exit": -532541437,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x64-worker-exception\\dumps\\VisPick-crash-20261106-201220-652-66608-572-0.dmp",
+  "dump_bytes": 52150,
+  "sha256": "cae2ed1fc64b62da6ed95c3b4aa712ed29045a21eaa97139b10d87bef23c7947"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "abort",
+  "exception_code": "0xE0421003",
+  "processor_architecture": 9,
+  "process_exit": -532541437,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x64-abort\\dumps\\VisPick-crash-20261106-201221-073-62252-70000-0.dmp",
+  "dump_bytes": 44212,
+  "sha256": "2bf80e586e12aee4bfd397fbcb3113f947015771e4804705a15370d082220916"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "invalid-parameter",
+  "exception_code": "0xE0421004",
+  "processor_architecture": 9,
+  "process_exit": -532541436,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x64-invalid-parameter\\dumps\\VisPick-crash-20261106-201221-518-51764-12988-0.dmp",
+  "dump_bytes": 45212,
+  "sha256": "b37cdbf78252f5dd83f52c448ae96ecaa636496956960678633d21b18b87ebd4"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "purecall",
+  "exception_code": "0xE0421005",
+  "processor_architecture": 9,
+  "process_exit": -532541435,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x64-purecall\\dumps\\VisPick-crash-20261106-201221-940-59516-81092-0.dmp",
+  "dump_bytes": 44394,
+  "sha256": "e8060d8457ca2110b3392ed97a0c35feb3f14928165cce90b97a489cf200d478"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "concurrent",
+  "exception_code": "0xE0421001",
+  "processor_architecture": 9,
+  "process_exit": -532541439,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x64-concurrent\\dumps\\VisPick-crash-20261106-201222-369-82980-404-0.dmp",
+  "dump_bytes": 59665,
+  "sha256": "4e16ea751650a41bc1bc233c9b2a9b4ccba76e31a0630e1707dd199de9116dd2"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "stack-overflow",
+  "exception_code": "0xC00000FD",
+  "processor_architecture": 9,
+  "process_exit": -1073741571,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x64-stack-overflow\\dumps\\VisPick-crash-20261106-201222-833-32272-41096-0.dmp",
+  "dump_bytes": 1015542,
+  "sha256": "983a70b0d42bc09c05e5b076f302a7b6434cedcea9b65e6b8e5646f12ec65de8"
+}
+=== x86 console ===
+[PASS] console (exit 0)
+[PASS] file (exit 0)
+[PASS] pipe (exit 0)
+[PASS] detached (exit 0)
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "crash",
+  "exception_code": "0xE0421001",
+  "processor_architecture": 0,
+  "process_exit": -532541439,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x86-crash\\dumps\\VisPick-crash-20261106-201223-888-51880-75228-0.dmp",
+  "dump_bytes": 30289,
+  "sha256": "7b8a81acd842f44f18e36cc003555d87ddc31765a1ff0abfc69e0024900e8267"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "terminate",
+  "exception_code": "0xE0421002",
+  "processor_architecture": 0,
+  "process_exit": -532541438,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x86-terminate\\dumps\\VisPick-crash-20261106-201224-457-30816-25216-0.dmp",
+  "dump_bytes": 29549,
+  "sha256": "fa2407bc8b3337ef331aae9454dd7edb122de42e12a42211e4a4f9b3669aae94"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "worker-exception",
+  "exception_code": "0xE0421003",
+  "processor_architecture": 0,
+  "process_exit": -532541437,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x86-worker-exception\\dumps\\VisPick-crash-20261106-201225-010-52652-59664-0.dmp",
+  "dump_bytes": 36367,
+  "sha256": "69babbacee6fe8cb87bc26e852ba1f0c58f4f9c7491eb57ad69839c8a4b14481"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "abort",
+  "exception_code": "0xE0421003",
+  "processor_architecture": 0,
+  "process_exit": -532541437,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x86-abort\\dumps\\VisPick-crash-20261106-201225-562-75912-76496-0.dmp",
+  "dump_bytes": 30053,
+  "sha256": "2e2d3810d05325f69f51a20c24fb0f4af826719f469f4c5f302a63bd902e06ba"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "invalid-parameter",
+  "exception_code": "0xE0421004",
+  "processor_architecture": 0,
+  "process_exit": -532541436,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x86-invalid-parameter\\dumps\\VisPick-crash-20261106-201226-137-57044-79708-0.dmp",
+  "dump_bytes": 31473,
+  "sha256": "5491ad149104bef46a3f7dee7f0676896681c0166695baf993c7a68e20757499"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "purecall",
+  "exception_code": "0xE0421005",
+  "processor_architecture": 0,
+  "process_exit": -532541435,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x86-purecall\\dumps\\VisPick-crash-20261106-201226-690-81196-51552-0.dmp",
+  "dump_bytes": 31039,
+  "sha256": "8b69f2894f7b896e4025ecab9e728f702ba83bf6c957137feeb44275593b2969"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "concurrent",
+  "exception_code": "0xE0421001",
+  "processor_architecture": 0,
+  "process_exit": -532541439,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x86-concurrent\\dumps\\VisPick-crash-20261106-201227-244-82396-27340-0.dmp",
+  "dump_bytes": 40830,
+  "sha256": "0ea4917a67fa13eaf815653760da8359c6a286a5f3719d510ddd42802fd75925"
+}
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "mode": "stack-overflow",
+  "exception_code": "0xC00000FD",
+  "processor_architecture": 0,
+  "process_exit": -1073741571,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-053-resume-20261106-194309\\crash-x86-stack-overflow\\dumps\\VisPick-crash-20261106-201227-807-4028-13832-0.dmp",
+  "dump_bytes": 999633,
+  "sha256": "2a74265cb0c453f135d4c50b271b935477c56dcaa5702cc777a310c956e3ff05"
+}

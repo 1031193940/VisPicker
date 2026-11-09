@@ -1,0 +1,40 @@
+P6 process creation and persistent GIF validation control, 2026-11-06
+
+Windows console-only tests compiled x64 Release with the real test helpers and
+production WIC GIF inspection. The fixed GIF was out/wic-commit-probe/owned.gif
+(256×144, 10 frames, 100 centiseconds). Each experiment interleaved 60 cycles
+per mode in the same parent process with 30 ms of idle after the test action.
+Heap/virtual memory samples were taken at each boundary; no walk errors occurred.
+
+CreateProcessProbe.jsonl
+  Without parent WIC activity, 60 no-op child launches, 60 WIC validation child
+  launches and 60 no-child control cycles left parent PrivateUsage unchanged at
+  exactly 6,172,672 B across all 540 samples. Initial child startup populated
+  8,846 B of default-heap busy payload within already committed pages.
+
+CreateProcessPngProbe.jsonl
+  With a deterministic 256×144 production PNG encode/decode round trip in the
+  parent before every action, post-PNG parent commit increased by:
+    No child: 0 B in every cycle.
+    No-op child: 24,576–184,320 B.
+    WIC validation child: 24,576–335,872 B.
+  At the 335,872 B peak, VirtualQuery tracked +299,008 B at the default heap
+  base and +36,864 B at another fixed private allocation base. Default-heap
+  busy payload stayed at 463,126 B. Mapped/image commit stayed flat. The full
+  delta remained after 30 ms idle.
+
+GifWorkerMixedProbe.jsonl
+  With the same parent PNG round trip, compared a fresh production WIC
+  validation child against a persistent production WIC validation worker
+  started before the baseline and a no-child control. Parent commit changes:
+    Fresh WIC child: 28,672–176,128 B.
+    Persistent worker: 0 B in every cycle.
+    No child: 0 B in every cycle.
+  Persistent worker requests used the actual SoakGifWorker.h implementation
+  and reported no change in committed regions or default heap live payload.
+
+The no-op reproduction shows GIF decoding in the child is unnecessary for
+parent commit churn. Launching repeatedly after parent WIC initialization
+changes parent heap behavior in this experiment. The persistent worker removed
+that per-request effect. The larger integrated-run spike and exact Windows
+allocation call stack require evidence from the integrated soak.

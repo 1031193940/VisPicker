@@ -1,0 +1,8 @@
+{
+  "executable": "D:\\Workspace\\VisPick\\out\\runners\\VisPickSoak-p6-baseline.exe",
+  "executable_sha256": "C6634FFCA8A53ECFE95A8D02907ADAE2A47F92A1E35D7F35006FFA4FAE7D0988",
+  "requested_seconds": 420,
+  "interval_seconds": 30,
+  "memory_diagnostics_enabled": true,
+  "started_utc": "2026-11-06T10:00:20.7456935Z"
+}

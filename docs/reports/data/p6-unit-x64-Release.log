@@ -1,0 +1,24 @@
+Start testing: Nov 06 15:24 China Standard Time
+----------------------------------------------------------
+1/1 Testing: unit
+1/1 Test: unit
+Command: "D:/Workspace/VisPick/out/build/x64-Release/VisPickUnitTests.exe" "--no-colors"
+Directory: D:/Workspace/VisPick/out/build/x64-Release
+"unit" start time: Nov 06 15:24 China Standard Time
+Output:
+----------------------------------------------------------
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   281 |   281 passed | 0 failed | 0 skipped
+[doctest] assertions: 56916 | 56916 passed | 0 failed |
+[doctest] Status: SUCCESS!
+<end of output>
+Test time =   1.63 sec
+----------------------------------------------------------
+Test Passed.
+"unit" end time: Nov 06 15:24 China Standard Time
+"unit" time elapsed: 00:00:01
+----------------------------------------------------------
+
+End testing: Nov 06 15:24 China Standard Time

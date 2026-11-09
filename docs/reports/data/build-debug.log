@@ -1,0 +1,159 @@
+MSVC 14.42.34433 / x64
+Preset CMake variables:
+
+  CMAKE_BUILD_TYPE="Debug"
+  CMAKE_CXX_COMPILER="cl.exe"
+  VISPICK_BUILD_TESTS="ON"
+  VISPICK_ENABLE_ASAN="ON"
+  VISPICK_EXPECTED_BITS="64"
+
+-- The CXX compiler identification is MSVC 19.42.34444.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/14.42.34433/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (1.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: D:/Workspace/VisPick/out/build/x64-Debug
+[1/55] Scanning D:\Workspace\VisPick\src\imaging\Bitmap.cpp for CXX dependencies
+[2/55] Scanning D:\Workspace\VisPick\src\gif\Lzw.cpp for CXX dependencies
+[3/55] Scanning D:\Workspace\VisPick\src\gif\Quantizer.cpp for CXX dependencies
+[4/55] Scanning D:\Workspace\VisPick\tests\unit\ReportTests.cpp for CXX dependencies
+[5/55] Scanning D:\Workspace\VisPick\tests\unit\CommandLineTests.cpp for CXX dependencies
+[6/55] Scanning D:\Workspace\VisPick\src\platform\Window.cpp for CXX dependencies
+[7/55] Scanning D:\Workspace\VisPick\src\platform\Gdi.cpp for CXX dependencies
+[8/55] Scanning D:\Workspace\VisPick\src\capture\ScreenGrab.cpp for CXX dependencies
+[9/55] Scanning D:\Workspace\VisPick\src\platform\Compat.cpp for CXX dependencies
+[10/55] Scanning D:\Workspace\VisPick\tests\unit\BitmapTests.cpp for CXX dependencies
+[11/55] Building RC object CMakeFiles\VisPick.dir\res\VisPick.rc.res
+[12/55] Scanning D:\Workspace\VisPick\src\core\CommandLine.cpp for CXX dependencies
+[13/55] Scanning D:\Workspace\VisPick\src\main.cpp for CXX dependencies
+[14/55] Scanning D:\Workspace\VisPick\tests\unit\TestMain.cpp for CXX dependencies
+[15/55] Scanning D:\Workspace\VisPick\src\spikes\CaptureSpike.cpp for CXX dependencies
+[16/55] Scanning D:\Workspace\VisPick\src\core\Report.cpp for CXX dependencies
+[17/55] Scanning D:\Workspace\VisPick\tests\unit\GifTests.cpp for CXX dependencies
+[18/55] Scanning D:\Workspace\VisPick\src\spikes\PinSpike.cpp for CXX dependencies
+[19/55] Scanning D:\Workspace\VisPick\tests\e2e\main.cpp for CXX dependencies
+[20/55] Generating CXX dyndep file CMakeFiles\VisPick.dir\CXX.dd
+[21/55] Scanning D:\Workspace\VisPick\tests\e2e\DesktopTests.cpp for CXX dependencies
+[22/55] Scanning D:\Workspace\VisPick\src\spikes\OverlaySpike.cpp for CXX dependencies
+[23/55] Scanning D:\Workspace\VisPick\src\spikes\GifSpike.cpp for CXX dependencies
+[24/55] Generating CXX dyndep file CMakeFiles\VisPickUnitTests.dir\CXX.dd
+[25/55] Generating CXX dyndep file CMakeFiles\VisPickTest.dir\CXX.dd
+[26/55] Generating CXX dyndep file CMakeFiles\vispick_spikes.dir\CXX.dd
+[27/55] Scanning D:\Workspace\VisPick\src\gif\GifWriter.cpp for CXX dependencies
+[28/55] Generating CXX dyndep file CMakeFiles\vispick_core.dir\CXX.dd
+[29/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\BitmapTests.cpp.obj
+[30/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\ReportTests.cpp.obj
+[31/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\CommandLineTests.cpp.obj
+[32/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\TestMain.cpp.obj
+[33/55] Building CXX object CMakeFiles\vispick_core.dir\src\gif\Lzw.cpp.obj
+[34/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\platform\Window.cpp.obj
+[35/55] Building CXX object CMakeFiles\vispick_core.dir\src\gif\Quantizer.cpp.obj
+[36/55] Building CXX object CMakeFiles\vispick_core.dir\src\imaging\Bitmap.cpp.obj
+[37/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\GifTests.cpp.obj
+[38/55] Building CXX object CMakeFiles\vispick_core.dir\src\platform\Gdi.cpp.obj
+[39/55] Building CXX object CMakeFiles\vispick_core.dir\src\platform\Compat.cpp.obj
+[40/55] Building CXX object CMakeFiles\vispick_core.dir\src\capture\ScreenGrab.cpp.obj
+[41/55] Building CXX object CMakeFiles\vispick_core.dir\src\core\CommandLine.cpp.obj
+[42/55] Building CXX object CMakeFiles\VisPickTest.dir\tests\e2e\main.cpp.obj
+[43/55] Building CXX object CMakeFiles\VisPick.dir\src\main.cpp.obj
+[44/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\CaptureSpike.cpp.obj
+[45/55] Building CXX object CMakeFiles\VisPickTest.dir\tests\e2e\DesktopTests.cpp.obj
+[46/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\PinSpike.cpp.obj
+[47/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\OverlaySpike.cpp.obj
+[48/55] Building CXX object CMakeFiles\vispick_core.dir\src\core\Report.cpp.obj
+[49/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\GifSpike.cpp.obj
+[50/55] Building CXX object CMakeFiles\vispick_core.dir\src\gif\GifWriter.cpp.obj
+[51/55] Linking CXX static library vispick_core.lib
+[52/55] Linking CXX static library vispick_spikes.lib
+[53/55] Linking CXX executable VisPickUnitTests.exe
+[54/55] Linking CXX executable VisPickTest.exe
+[55/55] Linking CXX executable VisPick.exe
+Test project D:/Workspace/VisPick/out/build/x64-Debug
+    Start 1: unit
+1/1 Test #1: unit .............................   Passed   23.56 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =  23.57 sec
+MSVC 14.42.34433 / x86
+Preset CMake variables:
+
+  CMAKE_BUILD_TYPE="Debug"
+  CMAKE_CXX_COMPILER="cl.exe"
+  VISPICK_BUILD_TESTS="ON"
+  VISPICK_EXPECTED_BITS="32"
+
+-- The CXX compiler identification is MSVC 19.42.34444.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/14.42.34433/bin/Hostx64/x86/cl.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (1.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: D:/Workspace/VisPick/out/build/x86-Debug
+[1/55] Scanning D:\Workspace\VisPick\src\imaging\Bitmap.cpp for CXX dependencies
+[2/55] Scanning D:\Workspace\VisPick\src\gif\Quantizer.cpp for CXX dependencies
+[3/55] Scanning D:\Workspace\VisPick\src\gif\Lzw.cpp for CXX dependencies
+[4/55] Scanning D:\Workspace\VisPick\tests\unit\CommandLineTests.cpp for CXX dependencies
+[5/55] Scanning D:\Workspace\VisPick\tests\unit\ReportTests.cpp for CXX dependencies
+[6/55] Scanning D:\Workspace\VisPick\src\platform\Compat.cpp for CXX dependencies
+[7/55] Scanning D:\Workspace\VisPick\src\platform\Window.cpp for CXX dependencies
+[8/55] Building RC object CMakeFiles\VisPick.dir\res\VisPick.rc.res
+[9/55] Scanning D:\Workspace\VisPick\src\capture\ScreenGrab.cpp for CXX dependencies
+[10/55] Scanning D:\Workspace\VisPick\src\platform\Gdi.cpp for CXX dependencies
+[11/55] Scanning D:\Workspace\VisPick\tests\unit\BitmapTests.cpp for CXX dependencies
+[12/55] Scanning D:\Workspace\VisPick\src\core\CommandLine.cpp for CXX dependencies
+[13/55] Scanning D:\Workspace\VisPick\src\main.cpp for CXX dependencies
+[14/55] Scanning D:\Workspace\VisPick\src\core\Report.cpp for CXX dependencies
+[15/55] Scanning D:\Workspace\VisPick\tests\unit\TestMain.cpp for CXX dependencies
+[16/55] Scanning D:\Workspace\VisPick\src\spikes\CaptureSpike.cpp for CXX dependencies
+[17/55] Scanning D:\Workspace\VisPick\src\spikes\OverlaySpike.cpp for CXX dependencies
+[18/55] Scanning D:\Workspace\VisPick\src\spikes\PinSpike.cpp for CXX dependencies
+[19/55] Scanning D:\Workspace\VisPick\src\spikes\GifSpike.cpp for CXX dependencies
+[20/55] Generating CXX dyndep file CMakeFiles\VisPick.dir\CXX.dd
+[21/55] Scanning D:\Workspace\VisPick\tests\unit\GifTests.cpp for CXX dependencies
+[22/55] Scanning D:\Workspace\VisPick\tests\e2e\main.cpp for CXX dependencies
+[23/55] Scanning D:\Workspace\VisPick\src\gif\GifWriter.cpp for CXX dependencies
+[24/55] Generating CXX dyndep file CMakeFiles\vispick_spikes.dir\CXX.dd
+[25/55] Generating CXX dyndep file CMakeFiles\VisPickUnitTests.dir\CXX.dd
+[26/55] Generating CXX dyndep file CMakeFiles\vispick_core.dir\CXX.dd
+[27/55] Scanning D:\Workspace\VisPick\tests\e2e\DesktopTests.cpp for CXX dependencies
+[28/55] Generating CXX dyndep file CMakeFiles\VisPickTest.dir\CXX.dd
+[29/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\BitmapTests.cpp.obj
+[30/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\TestMain.cpp.obj
+[31/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\ReportTests.cpp.obj
+[32/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\CommandLineTests.cpp.obj
+[33/55] Building CXX object CMakeFiles\vispick_core.dir\src\gif\Lzw.cpp.obj
+[34/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\platform\Window.cpp.obj
+[35/55] Building CXX object CMakeFiles\vispick_core.dir\src\imaging\Bitmap.cpp.obj
+[36/55] Building CXX object CMakeFiles\vispick_core.dir\src\gif\Quantizer.cpp.obj
+[37/55] Building CXX object CMakeFiles\VisPickUnitTests.dir\tests\unit\GifTests.cpp.obj
+[38/55] Building CXX object CMakeFiles\vispick_core.dir\src\platform\Gdi.cpp.obj
+[39/55] Building CXX object CMakeFiles\vispick_core.dir\src\platform\Compat.cpp.obj
+[40/55] Building CXX object CMakeFiles\vispick_core.dir\src\capture\ScreenGrab.cpp.obj
+[41/55] Building CXX object CMakeFiles\vispick_core.dir\src\core\CommandLine.cpp.obj
+[42/55] Building CXX object CMakeFiles\VisPick.dir\src\main.cpp.obj
+[43/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\CaptureSpike.cpp.obj
+[44/55] Building CXX object CMakeFiles\VisPickTest.dir\tests\e2e\main.cpp.obj
+[45/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\PinSpike.cpp.obj
+[46/55] Building CXX object CMakeFiles\vispick_core.dir\src\core\Report.cpp.obj
+[47/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\OverlaySpike.cpp.obj
+[48/55] Building CXX object CMakeFiles\VisPickTest.dir\tests\e2e\DesktopTests.cpp.obj
+[49/55] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\GifSpike.cpp.obj
+[50/55] Building CXX object CMakeFiles\vispick_core.dir\src\gif\GifWriter.cpp.obj
+[51/55] Linking CXX static library vispick_core.lib
+[52/55] Linking CXX static library vispick_spikes.lib
+[53/55] Linking CXX executable VisPickUnitTests.exe
+[54/55] Linking CXX executable VisPickTest.exe
+[55/55] Linking CXX executable VisPick.exe
+Test project D:/Workspace/VisPick/out/build/x86-Debug
+    Start 1: unit
+1/1 Test #1: unit .............................   Passed    3.95 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   3.96 sec

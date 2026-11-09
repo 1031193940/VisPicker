@@ -1,0 +1,10 @@
+/out/
+/build/
+/dist/
+/.vs/
+/CMakeUserPresets.json
+*.user
+*.dmp
+/VisPick.ini
+/VisPick.log
+

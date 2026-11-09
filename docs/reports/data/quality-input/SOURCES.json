@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "retrieved_date": "2026-11-06",
+  "purpose": "Developer-only P-06 real-content GIF quantization quality inputs; not product assets or complete quality/performance acceptance.",
+  "checked_in_image_bytes": 1429882,
+  "photographs": [
+    {
+      "file": "nasa-iss068e023088-sunset.jpg",
+      "source_page": "https://www.nasa.gov/image-article/suns-last-rays-illuminate-earths-thin-atmosphere/",
+      "source_url": "https://images-assets.nasa.gov/image/iss068e023088/iss068e023088~medium.jpg",
+      "asset_listing": "https://images-api.nasa.gov/asset/iss068e023088",
+      "credit": "NASA",
+      "capture_date": "2022-11-18",
+      "changes": "None: downloaded the official medium JPEG representation without recompression or resizing."
+    },
+    {
+      "file": "nasa-iss23-atmosphere.jpg",
+      "source_page": "https://science.nasa.gov/image-article/apod-2010-june-23-sunset-from-the-international-space-station/",
+      "source_url": "https://assets.science.nasa.gov/content/dam/science/cds/apod/apod/2010/june/earthatmosphere_iss23.jpg",
+      "credit": "NASA / ISS Expedition 23 crew",
+      "source_publication_date": "2010-06-23",
+      "changes": "None: downloaded the official JPEG representation without recompression or resizing."
+    }
+  ],
+  "nasa_usage_guidance": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+  "video": {
+    "title": "Big Buck Bunny",
+    "source_page": "https://peach.blender.org/download/",
+    "directory_listing": "https://download.blender.org/peach/bigbuckbunny_movies/",
+    "archive_url": "https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4.zip",
+    "archive_bytes": 64657225,
+    "archive_sha256": "109e3ede8790bd633f374ca311d9cc61dce8d7f98f5b0797ca98199c9fbceedf",
+    "archive_member": "BigBuckBunny_320x180.mp4",
+    "source_video_bytes": 64657027,
+    "source_video_sha256": "f78f39603e6774907f2faafabf26a667f4a6fc31769ec304a8a8f7c62d280508",
+    "attribution": "(c) copyright 2008, Blender Foundation / www.bigbuckbunny.org",
+    "license": "CC BY 3.0",
+    "license_information": "https://peach.blender.org/about/",
+    "license_url": "https://creativecommons.org/licenses/by/3.0/",
+    "changes": "Extracted 12 consecutive decoded RGB frames to lossless PNG; no crop, resize, interpolation, frame skipping or synthetic motion. Source is already a compressed 320x180 H.264 rendition.",
+    "preparation_source": "ExtractVideoFrames.cpp",
+    "preparation_source_sha256": "236ccc0a6d94a36f784f3cf75d454fabb3ffa70e4e6c0c74342baa402fef4466",
+    "decoder": "Windows 11 build 26200 Media Foundation software source reader (DXVA disabled), RGB32; WIC 24bppBGR PNG encoder",
+    "width": 320,
+    "height": 180,
+    "fps_numerator": 24,
+    "fps_denominator": 1,
+    "first_timestamp_100ns": 300000000,
+    "last_timestamp_100ns": 304583333,
+    "frame_count": 12,
+    "timestamp_manifest": "video-bbb/frames.csv",
+    "timestamp_manifest_sha256": "2485257c2734a809c6abafc3c724ddc7e3fb662214d8b20cc6dc774b90edbcb8",
+    "output_directory": "video-bbb",
+    "benchmark_comparison_gif_fps": 10,
+    "comparison_timing_note": "The 10fps GIF deliberately slows visual comparison; source frame spacing is 1/24 second, rounded to 100ns ticks, and is not 10fps sampling."
+  },
+  "images": [
+    {
+      "file": "nasa-iss068e023088-sunset.jpg",
+      "bytes": 23910,
+      "width": 1280,
+      "height": 853,
+      "sha256": "86ede64e49a59c7b39e19d7fbf0680263a450d7230b7139dcccf7566ca52f02d"
+    },
+    {
+      "file": "nasa-iss23-atmosphere.jpg",
+      "bytes": 36446,
+      "width": 900,
+      "height": 450,
+      "sha256": "df0a68e394d6fb0a4921ffc309c0a3f66aa26a34365e0dff4992ccc74258ffe7"
+    },
+    {
+      "file": "video-bbb/frame-0000.png",
+      "bytes": 115879,
+      "width": 320,
+      "height": 180,
+      "sha256": "e788fb25fdbbbc13c3215996cff7249eb9c71d8bebf5e244658551a779ffff90"
+    },
+    {
+      "file": "video-bbb/frame-0001.png",
+      "bytes": 115608,
+      "width": 320,
+      "height": 180,
+      "sha256": "f2fb4aee7a758b1498487944e1b17bb4f847e1a528e900c356e546f77224e071"
+    },
+    {
+      "file": "video-bbb/frame-0002.png",
+      "bytes": 114403,
+      "width": 320,
+      "height": 180,
+      "sha256": "ecca4dc32f2ea59528e4c4bd956412877ef9e0832fd79323dac3bb9f4a7b9cb9"
+    },
+    {
+      "file": "video-bbb/frame-0003.png",
+      "bytes": 113472,
+      "width": 320,
+      "height": 180,
+      "sha256": "0ab198262baf7e4cd30b04fb4a1d03676d6cc8b66e6fb1ed196207cc1f0f30b2"
+    },
+    {
+      "file": "video-bbb/frame-0004.png",
+      "bytes": 113015,
+      "width": 320,
+      "height": 180,
+      "sha256": "75ac985c323301b2e5c06376b5b11a0e793e73893323ff52cc771ad643c1e136"
+    },
+    {
+      "file": "video-bbb/frame-0005.png",
+      "bytes": 112905,
+      "width": 320,
+      "height": 180,
+      "sha256": "4431ece9e915d547d74203791a4902192d564f79f3328c570781ec67b733128c"
+    },
+    {
+      "file": "video-bbb/frame-0006.png",
+      "bytes": 113180,
+      "width": 320,
+      "height": 180,
+      "sha256": "ac2ef72306c65df14a2d75808e3553493f48f16d9b1949731f15a7826461ead8"
+    },
+    {
+      "file": "video-bbb/frame-0007.png",
+      "bytes": 113340,
+      "width": 320,
+      "height": 180,
+      "sha256": "04b28b8060238cd58a2b95727f1cfd88bdeca071972100a7b893298c609b9551"
+    },
+    {
+      "file": "video-bbb/frame-0008.png",
+      "bytes": 113708,
+      "width": 320,
+      "height": 180,
+      "sha256": "86ffa0efdc52b7a47ea5b1baa99d2a1eadf29cbbfe69834ef9c56028511c5251"
+    },
+    {
+      "file": "video-bbb/frame-0009.png",
+      "bytes": 114329,
+      "width": 320,
+      "height": 180,
+      "sha256": "a4c1a3daa1148e3cff21ff76bc94746f9ee506782e7ee3679fc1838e028e6f43"
+    },
+    {
+      "file": "video-bbb/frame-0010.png",
+      "bytes": 114561,
+      "width": 320,
+      "height": 180,
+      "sha256": "b2bea15d9537166a62bf4b99b403f8d12f3b0261d21975d90ab338f23bf66781"
+    },
+    {
+      "file": "video-bbb/frame-0011.png",
+      "bytes": 115126,
+      "width": 320,
+      "height": 180,
+      "sha256": "5c49dcd99bf4b55be7914d182addf7c5cc69e4f4e302bd38469af5ab21ab5b6c"
+    }
+  ],
+  "limitations": [
+    "Two atmosphere photographs and one 0.5-second low-resolution rendered-film excerpt are a small regression corpus, not broad photo/video acceptance.",
+    "Metrics use WIC-decoded 8-bit RGB code values; no ICC transform, EXIF orientation, linear-light conversion or dithering.",
+    "Cross-version Media Foundation decoded RGB or PNG bytes may vary. Checked-in PNG SHA256 values pin the actual benchmark inputs; frames.csv pins actual extracted timestamps.",
+    "The downloaded 64MB video/archive live under ignored out/quality-source and are not checked in."
+  ]
+}

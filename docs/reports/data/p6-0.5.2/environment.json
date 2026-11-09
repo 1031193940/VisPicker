@@ -1,0 +1,54 @@
+{
+  "captured_utc": "2026-11-06T10:18:26.2271102Z",
+  "os": "Microsoft Windows 11 Enterprise",
+  "os_version": "10.0.26200",
+  "os_build": "26200",
+  "os_architecture": "64-bit",
+  "session_type": "RDP",
+  "session_id": 1,
+  "remote_display": [
+    {
+      "Name": "Microsoft Remote Display Adapter",
+      "DriverVersion": "10.0.26100.8972",
+      "CurrentHorizontalResolution": 2560,
+      "CurrentVerticalResolution": 1440,
+      "CurrentRefreshRate": 32
+    }
+  ],
+  "inactivity_lock_seconds": 900,
+  "rdp_idle_limit_ms": 3600000,
+  "ac_display_and_sleep_settings": [
+    "Power Scheme GUID: e9a42b02-d5df-448d-aa00-03f14749eb61  (Ultimate Performance)",
+    "  Subgroup GUID: 7516b95f-f776-4464-8c53-06167f40cc99  (Display)",
+    "    GUID Alias: SUB_VIDEO",
+    "    Power Setting GUID: 3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e  (Turn off display after)",
+    "      GUID Alias: VIDEOIDLE",
+    "      Minimum Possible Setting: 0x00000000",
+    "      Maximum Possible Setting: 0xffffffff",
+    "      Possible Settings increment: 0x00000001",
+    "      Possible Settings units: Seconds",
+    "    Current AC Power Setting Index: 0x00000258",
+    "    Current DC Power Setting Index: 0x000000b4",
+    "",
+    "Power Scheme GUID: e9a42b02-d5df-448d-aa00-03f14749eb61  (Ultimate Performance)",
+    "  Subgroup GUID: 238c9fa8-0aad-41ed-83f4-97be242c8f20  (Sleep)",
+    "    GUID Alias: SUB_SLEEP",
+    "    Power Setting GUID: 29f6c1db-86da-48c5-9fdb-f2b67b1f44da  (Sleep after)",
+    "      GUID Alias: STANDBYIDLE",
+    "      Minimum Possible Setting: 0x00000000",
+    "      Maximum Possible Setting: 0xffffffff",
+    "      Possible Settings increment: 0x00000001",
+    "      Possible Settings units: Seconds",
+    "    Current AC Power Setting Index: 0x00000000",
+    "    Current DC Power Setting Index: 0x000000b4",
+    ""
+  ],
+  "configured_target_vms_found": false,
+  "required_unavailable": [
+    "Windows 10 22H2 x64",
+    "Windows 10 x86",
+    "Windows 7 SP1 x64",
+    "Windows 7 SP1 x86",
+    "Win11 local physical mixed-DPI monitors"
+  ]
+}

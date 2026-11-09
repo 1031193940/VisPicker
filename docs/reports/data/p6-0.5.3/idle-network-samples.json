@@ -1,0 +1,54 @@
+{
+  "method": "netstat -ano samples while the owned VisPick x64 copy was resident and idle",
+  "pid": 82480,
+  "samples": [
+    {
+      "utc": "2026-11-06T12:13:09.0691846Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:14.1455834Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:19.1936671Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:24.2579832Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:29.3099032Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:34.3620394Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:39.4138073Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:44.4701621Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:49.5169474Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:54.5683102Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:13:59.6214733Z",
+      "tcp_or_udp_entries": 0
+    },
+    {
+      "utc": "2026-11-06T12:14:04.6827178Z",
+      "tcp_or_udp_entries": 0
+    }
+  ]
+}

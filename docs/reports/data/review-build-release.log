@@ -1,0 +1,72 @@
+MSVC 14.42.34433 / x64
+Preset CMake variables:
+
+  CMAKE_BUILD_TYPE="Release"
+  CMAKE_CXX_COMPILER="cl.exe"
+  VISPICK_BUILD_TESTS="ON"
+  VISPICK_EXPECTED_BITS="64"
+
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: D:/Workspace/VisPick/out/build/x64-Release
+[1/50] Generating CXX dyndep file CMakeFiles\VisPickSpikes.dir\CXX.dd
+[2/49] Generating CXX dyndep file CMakeFiles\VisPick.dir\CXX.dd
+[3/48] Generating CXX dyndep file CMakeFiles\VisPickConsoleTests.dir\CXX.dd
+[4/46] Generating CXX dyndep file CMakeFiles\VisPickUnitTests.dir\CXX.dd
+[5/37] Scanning D:\Workspace\VisPick\src\gif\Quantizer.cpp for CXX dependencies
+[6/37] Generating CXX dyndep file CMakeFiles\vispick_core.dir\CXX.dd
+[7/27] Scanning D:\Workspace\VisPick\src\spikes\QuantizerBenchmark.cpp for CXX dependencies
+[8/27] Generating CXX dyndep file CMakeFiles\vispick_spikes.dir\CXX.dd
+[9/19] Building CXX object CMakeFiles\vispick_core.dir\src\gif\Quantizer.cpp.obj
+[10/19] Linking CXX static library vispick_core.lib
+[11/19] Linking CXX executable VisPick.exe
+[12/19] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\QuantizerBenchmark.cpp.obj
+[13/19] Linking CXX static library vispick_spikes.lib
+[14/19] Linking CXX executable VisPickSpikes.exe
+[15/19] Generating CXX dyndep file CMakeFiles\VisPickTest.dir\CXX.dd
+[16/17] Linking CXX executable VisPickTest.exe
+[17/17] Linking CXX executable VisPickUnitTests.exe
+Test project D:/Workspace/VisPick/out/build/x64-Release
+    Start 1: unit
+1/1 Test #1: unit .............................   Passed    1.12 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   1.12 sec
+Import baseline passed: 75 symbols, 3 system DLLs. Win7 runtime testing remains required.
+MSVC 14.42.34433 / x86
+Preset CMake variables:
+
+  CMAKE_BUILD_TYPE="Release"
+  CMAKE_CXX_COMPILER="cl.exe"
+  VISPICK_BUILD_TESTS="ON"
+  VISPICK_EXPECTED_BITS="32"
+
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: D:/Workspace/VisPick/out/build/x86-Release
+[1/50] Generating CXX dyndep file CMakeFiles\VisPickSpikes.dir\CXX.dd
+[2/49] Generating CXX dyndep file CMakeFiles\VisPick.dir\CXX.dd
+[3/48] Generating CXX dyndep file CMakeFiles\VisPickUnitTests.dir\CXX.dd
+[4/39] Generating CXX dyndep file CMakeFiles\VisPickConsoleTests.dir\CXX.dd
+[5/37] Scanning D:\Workspace\VisPick\src\gif\Quantizer.cpp for CXX dependencies
+[6/37] Generating CXX dyndep file CMakeFiles\vispick_core.dir\CXX.dd
+[7/27] Scanning D:\Workspace\VisPick\src\spikes\QuantizerBenchmark.cpp for CXX dependencies
+[8/27] Generating CXX dyndep file CMakeFiles\vispick_spikes.dir\CXX.dd
+[9/19] Building CXX object CMakeFiles\vispick_core.dir\src\gif\Quantizer.cpp.obj
+[10/19] Linking CXX static library vispick_core.lib
+[11/19] Linking CXX executable VisPick.exe
+[12/19] Building CXX object CMakeFiles\vispick_spikes.dir\src\spikes\QuantizerBenchmark.cpp.obj
+[13/19] Linking CXX static library vispick_spikes.lib
+[14/19] Linking CXX executable VisPickSpikes.exe
+[15/19] Generating CXX dyndep file CMakeFiles\VisPickTest.dir\CXX.dd
+[16/17] Linking CXX executable VisPickTest.exe
+[17/17] Linking CXX executable VisPickUnitTests.exe
+Test project D:/Workspace/VisPick/out/build/x86-Release
+    Start 1: unit
+1/1 Test #1: unit .............................   Passed    1.50 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   1.50 sec
+Import baseline passed: 68 symbols, 3 system DLLs. Win7 runtime testing remains required.

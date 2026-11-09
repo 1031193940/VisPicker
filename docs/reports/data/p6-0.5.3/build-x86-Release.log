@@ -1,0 +1,23 @@
+[8/38] Generating CXX dyndep file CMakeFiles\VisPickAppIntegration.dir\CXX.dd
+[9/36] Generating CXX dyndep file CMakeFiles\VisPickOutputTests.dir\CXX.dd
+[10/34] Generating CXX dyndep file CMakeFiles\VisPickOverlayTests.dir\CXX.dd
+[11/32] Generating CXX dyndep file CMakeFiles\VisPickEditorTests.dir\CXX.dd
+[12/30] Generating CXX dyndep file CMakeFiles\VisPickPinTests.dir\CXX.dd
+[13/28] Generating CXX dyndep file CMakeFiles\VisPickRecordingIntegration.dir\CXX.dd
+[14/26] Generating CXX dyndep file CMakeFiles\VisPickSoak.dir\CXX.dd
+[15/24] Generating CXX dyndep file CMakeFiles\VisPickAppLifecycleIntegration.dir\CXX.dd
+[16/22] Generating CXX dyndep file CMakeFiles\VisPickGifQuality.dir\CXX.dd
+[17/20] Generating CXX dyndep file CMakeFiles\VisPickTest.dir\CXX.dd
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   291 |   291 passed | 0 failed | 2 skipped
+[doctest] assertions: 56981 | 56981 passed | 0 failed |
+[doctest] Status: SUCCESS!
+Import baseline passed: 324 symbols, 11 system DLLs. Win7 runtime testing remains required.
+
+Algorithm : SHA256
+Hash      : D7508EB67C97EEF1C2584B77D7DCF7D8F8A32500ABD41D6BA6ED7116058CD1CB
+Path      : D:\Workspace\VisPick\out\build\x86-Release\VisPick.exe
+
+636928

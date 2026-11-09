@@ -1,0 +1,11 @@
+{
+  "checks_passed": true,
+  "normal_install_created_files": false,
+  "fallback_verified": true,
+  "exception_code": "0xE0421001",
+  "processor_architecture": 9,
+  "process_exit": -532541439,
+  "dump": "D:\\Workspace\\VisPick\\out\\reports\\p6-crash-x64\\dumps\\VisPick-crash-20261106-151946-453-74364-66672-0.dmp",
+  "dump_bytes": 44754,
+  "sha256": "bb336d349b65ce5d5f4922c20c611dd58ead7dc1f742ddeb3606cf2b44c5e239"
+}

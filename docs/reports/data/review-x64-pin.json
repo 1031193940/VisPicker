@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "pointer_bits": 64,
+  "windows": "10.0.26200",
+  "desktop": [0,0,2560,1440],
+  "remote_session": true,
+  "remote_session_metric": true,
+  "session_detection_known": true,
+  "acceptance_eligible": false,
+  "invalid_environment_reasons": ["Remote session/display evidence: physical-display performance acceptance is invalid.","Monitor 1: refresh rate is unknown or below 50 Hz.","Monitor 1: a local physical output path was not verified."],
+  "monitors": [{"bounds":[0,0,2560,1440],"dpi":[120,120],"primary":true,"device_name":"\\\\.\\DISPLAY17","adapter_name":"Microsoft Remote Display Adapter","refresh_hz":32,"physical_display_verified":false}],
+  "results": [
+    {"name":"pin","passed":false,"checks_passed":true,"acceptance_status":"not_eligible","measurements":[{"name":"pin_width","value":320,"unit":"px"},{"name":"pin_height","value":240,"unit":"px"},{"name":"creation_cycles","value":100,"unit":"cycles"},{"name":"position_matches","value":1,"unit":"boolean"},{"name":"mismatched_pixels","value":0,"unit":"pixels"},{"name":"maximum_channel_error","value":1,"unit":"levels"},{"name":"present_average","value":0.552933,"unit":"ms"},{"name":"present_max","value":0.8552,"unit":"ms"},{"name":"gdi_object_delta","value":0,"unit":"objects"},{"name":"user_object_delta","value":0,"unit":"objects"}],"notes":["320x240 layered window with opaque center, premultiplied-alpha border and transparent margin. Capture compares opaque RGB exactly; blended RGB allows one channel level of compositor rounding.","100 create/present/destroy cycles. Pixel checks run at 100% and 80% global opacity on the first and last cycles. This prototype does not implement P4 pin interactions."]}
+  ]
+}

@@ -1,0 +1,130 @@
+[
+  {
+    "arch": "x64",
+    "mode": "crash",
+    "passed": true,
+    "exception": "0xE0421001",
+    "bytes": 42792,
+    "sha256": "32e1471104256d1d8c36ec56fe366e6f27f73384f4da10aa1f10ba53ddd02fc5"
+  },
+  {
+    "arch": "x64",
+    "mode": "terminate",
+    "passed": true,
+    "exception": "0xE0421002",
+    "bytes": 46896,
+    "sha256": "6abc6efcbb64ba16034d23b8e8aae5f5c752f40f5aac51770094bdd825c53bbd"
+  },
+  {
+    "arch": "x64",
+    "mode": "worker-exception",
+    "passed": true,
+    "exception": "0xE0421003",
+    "bytes": 53742,
+    "sha256": "5edca00bab8d9727a35c3dbeaf456bd0dac679e93acb82ed982c21f16fd37d19"
+  },
+  {
+    "arch": "x64",
+    "mode": "abort",
+    "passed": true,
+    "exception": "0xE0421003",
+    "bytes": 43368,
+    "sha256": "2aa909b77f7e95ffcd65bdbf2f18b21864b07bc5eeb6fc9f80433f1af7eff1bd"
+  },
+  {
+    "arch": "x64",
+    "mode": "invalid-parameter",
+    "passed": true,
+    "exception": "0xE0421004",
+    "bytes": 42590,
+    "sha256": "8d3c70341a154e66254db53fef8e7b9d84d66606c00281ac19bc8bae390def12"
+  },
+  {
+    "arch": "x64",
+    "mode": "purecall",
+    "passed": true,
+    "exception": "0xE0421005",
+    "bytes": 44764,
+    "sha256": "f7545caf1bbc5b5be86846a3f1f1c3e59bdc8ac91339570f3f1d324b3272a06b"
+  },
+  {
+    "arch": "x64",
+    "mode": "concurrent",
+    "passed": true,
+    "exception": "0xE0421001",
+    "bytes": 58409,
+    "sha256": "c0c345a99ffbd770328722366f50244be9d008786126d06138b49ba8fc178aad"
+  },
+  {
+    "arch": "x64",
+    "mode": "stack-overflow",
+    "passed": true,
+    "exception": "0xC00000FD",
+    "bytes": 1017562,
+    "sha256": "1f265d8335def0a35e0be84e5776880aa240669df4baef47d551e22b5c263835"
+  },
+  {
+    "arch": "x86",
+    "mode": "crash",
+    "passed": true,
+    "exception": "0xE0421001",
+    "bytes": 30407,
+    "sha256": "00659dc07d9af09848a9a2bcb087051639f8ee4ecacf769d27277c34f66b5093"
+  },
+  {
+    "arch": "x86",
+    "mode": "terminate",
+    "passed": true,
+    "exception": "0xE0421002",
+    "bytes": 30743,
+    "sha256": "543ba35f25ee0236a38dc9ea05abb57d40f065d619a0cc59c5d5dee8db3092a5"
+  },
+  {
+    "arch": "x86",
+    "mode": "worker-exception",
+    "passed": true,
+    "exception": "0xE0421003",
+    "bytes": 36895,
+    "sha256": "5b3975ba74a8dca3fff09ea7e10db814b3e0fc698c2f8f6939d65501193c1ac3"
+  },
+  {
+    "arch": "x86",
+    "mode": "abort",
+    "passed": true,
+    "exception": "0xE0421003",
+    "bytes": 31855,
+    "sha256": "21bddcabba5fb686cf874e9a9663ac94fb32fbb320a6f878a96f64a109e98d73"
+  },
+  {
+    "arch": "x86",
+    "mode": "invalid-parameter",
+    "passed": true,
+    "exception": "0xE0421004",
+    "bytes": 33415,
+    "sha256": "a62da98de24edb55ad55850288f77c8c222f7d7fe38913a441b212613bf04dec"
+  },
+  {
+    "arch": "x86",
+    "mode": "purecall",
+    "passed": true,
+    "exception": "0xE0421005",
+    "bytes": 31313,
+    "sha256": "d97da75c67d21b22408cb2e1fd4dfdde157c3e923b9108017156f0344c7f2f69"
+  },
+  {
+    "arch": "x86",
+    "mode": "concurrent",
+    "passed": true,
+    "exception": "0xE0421001",
+    "bytes": 37180,
+    "sha256": "480b5d7bdfd723b8e807a8bd7926be3674128c3393c3fa576e19cf9509dec31f"
+  },
+  {
+    "arch": "x86",
+    "mode": "stack-overflow",
+    "passed": true,
+    "exception": "0xC00000FD",
+    "bytes": 999193,
+    "sha256": "0fd804d389c1ea29190392080916ab3c082875a14c846667d3383fc1f4d7420a"
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "pointer_bits": 64,
+  "windows": "10.0.26200",
+  "desktop": [0,0,2560,1440],
+  "monitors": [{"bounds":[0,0,2560,1440],"dpi":[120,120],"primary":true}],
+  "results": [
+    {"name":"pin","passed":true,"measurements":[{"name":"pin_width","value":320,"unit":"px"},{"name":"pin_height","value":240,"unit":"px"},{"name":"creation_cycles","value":100,"unit":"cycles"},{"name":"position_matches","value":1,"unit":"boolean"},{"name":"mismatched_pixels","value":0,"unit":"pixels"},{"name":"maximum_channel_error","value":1,"unit":"levels"},{"name":"present_average","value":0.804639,"unit":"ms"},{"name":"present_max","value":1.5344,"unit":"ms"},{"name":"gdi_object_delta","value":0,"unit":"objects"},{"name":"user_object_delta","value":0,"unit":"objects"}],"notes":["320x240 layered window with opaque center, premultiplied-alpha border and transparent margin. Capture compares opaque RGB exactly; blended RGB allows one channel level of compositor rounding.","100 create/present/destroy cycles. Pixel checks run at 100% and 80% global opacity on the first and last cycles. This prototype does not implement P4 pin interactions."]}
+  ]
+}

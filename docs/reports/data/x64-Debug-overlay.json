@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "pointer_bits": 64,
+  "windows": "10.0.26200",
+  "desktop": [0,0,2560,1440],
+  "monitors": [{"bounds":[0,0,2560,1440],"dpi":[120,120],"primary":true}],
+  "results": [
+    {"name":"overlay","passed":true,"measurements":[{"name":"canvas_width","value":2560,"unit":"px"},{"name":"canvas_height","value":1440,"unit":"px"},{"name":"iterations","value":1000,"unit":"frames"},{"name":"initialization","value":198.1668,"unit":"ms"},{"name":"paint_and_gdi_flush_average","value":1.6075424,"unit":"ms"},{"name":"paint_and_gdi_flush_p95","value":2.5974,"unit":"ms"},{"name":"paint_and_gdi_flush_max","value":4.9546,"unit":"ms"},{"name":"gdi_flush_average","value":0.002541,"unit":"ms"}],"notes":["Actual virtual-desktop window; first half moves a 640x360 selection, second half moves a selection spanning 75% of each canvas dimension. Symmetric-difference strips, borders and labels are redrawn.","Timers include synchronous WM_PAINT and GdiFlush; exclude DWM presentation/vsync. Frozen desktop pixels are never written to disk.","This machine's canvas differs from AC0-5's 7680x2160 target; this run is not evidence for that exact configuration."]}
+  ]
+}

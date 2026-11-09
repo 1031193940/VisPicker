@@ -1,0 +1,19 @@
+{
+  "version": "0.5.3-candidate",
+  "created_utc": "2026-11-06T12:07:22.7034833Z",
+  "source_revision": "74721d7dadb412119b0ea8816499946c5acf8dce",
+  "source_sha256": "E0BAFD40B8D2F54AD8B8242EACA2B07111CF20E711DF3A4D6B9B7F9CFDCE192B",
+  "release_status": "candidate",
+  "files": [
+    {
+      "name": "VisPick.exe",
+      "bytes": 795136,
+      "sha256": "0F1D6D0BFE745CED8E47D4E2E9F16BCBCE06691E17752ED7513E2F44B8F353CF"
+    },
+    {
+      "name": "VisPick-x86.exe",
+      "bytes": 636928,
+      "sha256": "D7508EB67C97EEF1C2584B77D7DCF7D8F8A32500ABD41D6BA6ED7116058CD1CB"
+    }
+  ]
+}

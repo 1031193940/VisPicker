@@ -1,0 +1,529 @@
+# Win7 SP1 static-import review baseline. One DLL!export per line.
+# GDI+ v1 C++ wrappers used by the editor (XP+, no newer pixel-offset/smoothing enums):
+# https://learn.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-graphics-flat
+# https://learn.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-pen-flat
+# https://learn.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-brush-flat
+# https://learn.microsoft.com/en-us/windows/win32/api/gdiplusinit/nf-gdiplusinit-gdiplusstartup
+gdiplus.dll!GdipAlloc
+gdiplus.dll!GdipFree
+gdiplus.dll!GdiplusStartup
+gdiplus.dll!GdiplusShutdown
+gdiplus.dll!GdipSetSmoothingMode
+gdiplus.dll!GdipSetCompositingMode
+gdiplus.dll!GdipSetPixelOffsetMode
+gdiplus.dll!GdipCreateFromHDC
+gdiplus.dll!GdipDeleteGraphics
+gdiplus.dll!GdipCreatePen1
+gdiplus.dll!GdipDeletePen
+gdiplus.dll!GdipSetPenStartCap
+gdiplus.dll!GdipSetPenEndCap
+gdiplus.dll!GdipSetPenLineJoin
+gdiplus.dll!GdipDeleteBrush
+gdiplus.dll!GdipCloneBrush
+gdiplus.dll!GdipCreateSolidFill
+gdiplus.dll!GdipDrawEllipse
+gdiplus.dll!GdipFillEllipse
+gdiplus.dll!GdipDrawRectangle
+gdiplus.dll!GdipDrawLine
+gdiplus.dll!GdipDrawCurve2
+gdiplus.dll!GdipDrawBeziers
+gdiplus.dll!GdipFillPolygon
+# This is a reviewed symbol allowlist, NOT a Windows 7 runtime test.
+# New imports must be reviewed against Microsoft minimum-client documentation.
+# See docs/WIN7_IMPORTS.md for provenance and limitations.
+
+dwmapi.dll!DwmFlush
+gdi32.dll!BitBlt
+gdi32.dll!CreateCompatibleDC
+gdi32.dll!CreateDIBSection
+gdi32.dll!DeleteDC
+gdi32.dll!DeleteObject
+gdi32.dll!GdiFlush
+gdi32.dll!GetDeviceCaps
+gdi32.dll!GetStockObject
+gdi32.dll!IntersectClipRect
+gdi32.dll!RestoreDC
+gdi32.dll!SaveDC
+gdi32.dll!SelectObject
+gdi32.dll!SetBkMode
+gdi32.dll!SetDCBrushColor
+gdi32.dll!SetPixelV
+gdi32.dll!SetTextColor
+gdi32.dll!StretchDIBits
+kernel32.dll!AcquireSRWLockExclusive
+kernel32.dll!AreFileApisANSI
+kernel32.dll!AttachConsole
+kernel32.dll!CloseHandle
+kernel32.dll!CompareStringW
+kernel32.dll!CreateDirectoryW
+kernel32.dll!CreateFileW
+kernel32.dll!DecodePointer
+kernel32.dll!DeleteCriticalSection
+kernel32.dll!EncodePointer
+kernel32.dll!EnterCriticalSection
+kernel32.dll!EnumSystemLocalesW
+kernel32.dll!ExitProcess
+kernel32.dll!FindClose
+kernel32.dll!FindFirstFileExW
+kernel32.dll!FindFirstFileW
+kernel32.dll!FindNextFileW
+kernel32.dll!FlsAlloc
+kernel32.dll!FlsFree
+kernel32.dll!FlsGetValue
+kernel32.dll!FlsSetValue
+kernel32.dll!FlushFileBuffers
+kernel32.dll!FormatMessageA
+kernel32.dll!FreeEnvironmentStringsW
+kernel32.dll!FreeLibrary
+kernel32.dll!GetACP
+kernel32.dll!GetCommandLineA
+kernel32.dll!GetCommandLineW
+kernel32.dll!GetConsoleMode
+kernel32.dll!GetConsoleOutputCP
+kernel32.dll!GetConsoleScreenBufferInfo
+kernel32.dll!GetConsoleWindow
+kernel32.dll!GetCPInfo
+kernel32.dll!GetCurrentProcess
+kernel32.dll!GetCurrentProcessId
+kernel32.dll!GetCurrentThreadId
+kernel32.dll!GetDateFormatW
+kernel32.dll!GetEnvironmentStringsW
+kernel32.dll!GetFileAttributesExW
+kernel32.dll!GetFileAttributesW
+kernel32.dll!GetFileInformationByHandleEx
+kernel32.dll!GetFileSizeEx
+kernel32.dll!GetFileType
+kernel32.dll!GetLastError
+kernel32.dll!GetLocaleInfoEx
+kernel32.dll!GetLocaleInfoW
+kernel32.dll!GetModuleFileNameW
+kernel32.dll!GetModuleHandleExW
+kernel32.dll!GetModuleHandleW
+kernel32.dll!GetOEMCP
+kernel32.dll!GetProcAddress
+kernel32.dll!GetProcessHeap
+kernel32.dll!GetStartupInfoW
+kernel32.dll!GetStdHandle
+kernel32.dll!GetStringTypeW
+kernel32.dll!GetSystemDirectoryW
+kernel32.dll!GetSystemTime
+kernel32.dll!GetSystemTimeAsFileTime
+kernel32.dll!GetTempPathW
+kernel32.dll!GetTimeFormatW
+kernel32.dll!GetTimeZoneInformation
+kernel32.dll!GetUserDefaultLCID
+kernel32.dll!HeapAlloc
+kernel32.dll!HeapFree
+kernel32.dll!HeapReAlloc
+kernel32.dll!HeapSize
+kernel32.dll!InitializeCriticalSectionAndSpinCount
+kernel32.dll!InitializeCriticalSectionEx
+kernel32.dll!InitializeSListHead
+kernel32.dll!IsDebuggerPresent
+kernel32.dll!IsProcessorFeaturePresent
+kernel32.dll!IsValidCodePage
+kernel32.dll!IsValidLocale
+kernel32.dll!LCMapStringEx
+kernel32.dll!LCMapStringW
+kernel32.dll!LeaveCriticalSection
+kernel32.dll!LoadLibraryExW
+kernel32.dll!LoadLibraryW
+kernel32.dll!LocalFree
+kernel32.dll!MulDiv
+kernel32.dll!MultiByteToWideChar
+kernel32.dll!OutputDebugStringA
+kernel32.dll!QueryPerformanceCounter
+kernel32.dll!QueryPerformanceFrequency
+kernel32.dll!RaiseException
+kernel32.dll!ReadConsoleW
+kernel32.dll!ReadFile
+kernel32.dll!ReleaseSRWLockExclusive
+kernel32.dll!RtlCaptureContext
+kernel32.dll!RtlLookupFunctionEntry
+kernel32.dll!RtlPcToFileHeader
+kernel32.dll!RtlUnwind
+kernel32.dll!RtlUnwindEx
+kernel32.dll!RtlVirtualUnwind
+kernel32.dll!SetConsoleCtrlHandler
+kernel32.dll!SetConsoleTextAttribute
+kernel32.dll!SetEndOfFile
+kernel32.dll!SetEnvironmentVariableW
+kernel32.dll!SetErrorMode
+kernel32.dll!SetFileInformationByHandle
+kernel32.dll!SetFilePointerEx
+kernel32.dll!SetLastError
+kernel32.dll!SetStdHandle
+kernel32.dll!SetThreadStackGuarantee
+kernel32.dll!SetUnhandledExceptionFilter
+kernel32.dll!Sleep
+kernel32.dll!SleepConditionVariableSRW
+kernel32.dll!TerminateProcess
+kernel32.dll!TlsAlloc
+kernel32.dll!TlsFree
+kernel32.dll!TlsGetValue
+kernel32.dll!TlsSetValue
+kernel32.dll!TryAcquireSRWLockExclusive
+kernel32.dll!UnhandledExceptionFilter
+kernel32.dll!WakeAllConditionVariable
+kernel32.dll!WideCharToMultiByte
+kernel32.dll!WriteConsoleW
+kernel32.dll!WriteFile
+ole32.dll!CoCreateInstance
+ole32.dll!CoInitializeEx
+ole32.dll!CoUninitialize
+ole32.dll!PropVariantClear
+shell32.dll!CommandLineToArgvW
+user32.dll!BeginPaint
+user32.dll!CreateWindowExW
+user32.dll!DefWindowProcW
+user32.dll!DestroyWindow
+user32.dll!DispatchMessageW
+user32.dll!DrawTextW
+user32.dll!EndPaint
+user32.dll!EnumDisplayMonitors
+user32.dll!EqualRect
+user32.dll!FillRect
+user32.dll!FrameRect
+user32.dll!GetDC
+user32.dll!GetGuiResources
+user32.dll!GetMonitorInfoW
+user32.dll!GetSystemMetrics
+user32.dll!GetWindowLongPtrW
+user32.dll!GetWindowLongW
+user32.dll!WindowFromPoint
+user32.dll!GetAncestor
+user32.dll!IsWindowVisible
+user32.dll!SetWindowPos
+user32.dll!GetClassNameW
+user32.dll!GetWindowRect
+user32.dll!InflateRect
+user32.dll!IntersectRect
+user32.dll!InvalidateRect
+user32.dll!IsRectEmpty
+user32.dll!LoadCursorW
+user32.dll!MessageBoxW
+user32.dll!MessageBoxA
+user32.dll!MonitorFromWindow
+user32.dll!PeekMessageW
+user32.dll!PostQuitMessage
+user32.dll!RegisterClassExW
+user32.dll!ReleaseDC
+user32.dll!SetProcessDPIAware
+user32.dll!SetWindowLongPtrW
+user32.dll!SetWindowLongW
+user32.dll!ShowWindow
+user32.dll!TranslateMessage
+user32.dll!UpdateLayeredWindow
+user32.dll!UpdateWindow
+winmm.dll!timeBeginPeriod
+winmm.dll!timeEndPeriod
+
+# P0 review follow-up: individually reviewed new core/development-tool imports.
+# These are permitted Win7 APIs, not a list of DLLs currently shipped/imported.
+# Evidence and newer-flag restrictions: docs/WIN7_IMPORTS.md.
+advapi32.dll!RegGetValueW
+dwmapi.dll!DwmSetWindowAttribute
+kernel32.dll!CreateEventW
+kernel32.dll!CreateFileMappingW
+kernel32.dll!CreatePipe
+kernel32.dll!CreateProcessW
+kernel32.dll!CreateThread
+kernel32.dll!CreateWaitableTimerW
+kernel32.dll!DeleteProcThreadAttributeList
+kernel32.dll!ExitThread
+kernel32.dll!FillConsoleOutputCharacterW
+kernel32.dll!FreeLibraryAndExitThread
+kernel32.dll!GetExitCodeProcess
+kernel32.dll!GetExitCodeThread
+kernel32.dll!GetFullPathNameW
+kernel32.dll!GetTickCount64
+kernel32.dll!InitializeProcThreadAttributeList
+kernel32.dll!MapViewOfFile
+kernel32.dll!OpenProcess
+kernel32.dll!OutputDebugStringW
+kernel32.dll!ProcessIdToSessionId
+kernel32.dll!ReadConsoleOutputCharacterW
+kernel32.dll!SetConsoleCursorPosition
+kernel32.dll!SetEvent
+kernel32.dll!SetHandleInformation
+kernel32.dll!SetWaitableTimer
+kernel32.dll!UnmapViewOfFile
+kernel32.dll!UpdateProcThreadAttribute
+kernel32.dll!WaitForMultipleObjects
+kernel32.dll!WaitForSingleObject
+kernel32.dll!WaitForSingleObjectEx
+kernel32.dll!WakeConditionVariable
+psapi.dll!GetProcessMemoryInfo
+user32.dll!DisplayConfigGetDeviceInfo
+user32.dll!EnumChildWindows
+user32.dll!EnumDisplayDevicesW
+user32.dll!EnumDisplaySettingsW
+user32.dll!EnumWindows
+user32.dll!GetClassInfoExW
+user32.dll!GetDisplayConfigBufferSizes
+user32.dll!GetWindowThreadProcessId
+user32.dll!MsgWaitForMultipleObjectsEx
+user32.dll!PostMessageW
+user32.dll!QueryDisplayConfig
+user32.dll!SendMessageTimeoutW
+user32.dll!WaitForInputIdle
+wtsapi32.dll!WTSFreeMemory
+wtsapi32.dll!WTSQuerySessionInformationW
+
+# P1 resident framework additions reviewed against Microsoft Learn on 2026-11-06.
+# API-set introduction dates do not supersede the DLL export minimum-client row.
+# KillTimer: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-killtimer
+user32.dll!KillTimer
+# SetTimer: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-settimer
+user32.dll!SetTimer
+# DestroyIcon: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-destroyicon
+user32.dll!DestroyIcon
+# CreatePopupMenu: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createpopupmenu
+user32.dll!CreatePopupMenu
+# TrackPopupMenu: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackpopupmenu
+user32.dll!TrackPopupMenu
+# DestroyMenu: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-destroymenu
+user32.dll!DestroyMenu
+# AppendMenuW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-appendmenuw
+user32.dll!AppendMenuW
+# RegisterWindowMessageW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerwindowmessagew
+user32.dll!RegisterWindowMessageW
+# SetForegroundWindow: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow
+user32.dll!SetForegroundWindow
+# GetCursorPos: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getcursorpos
+user32.dll!GetCursorPos
+# UnregisterHotKey: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-unregisterhotkey
+user32.dll!UnregisterHotKey
+# RegisterHotKey: Windows Vista; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey
+user32.dll!RegisterHotKey
+# FindWindowW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-findwindoww
+user32.dll!FindWindowW
+# GetMessageW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessagew
+user32.dll!GetMessageW
+# LoadImageW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadimagew
+user32.dll!LoadImageW
+# SHGetFolderPathW: Windows 2000 Professional, Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetfolderpathw
+shell32.dll!SHGetFolderPathW
+# Shell_NotifyIconW: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shell_notifyiconw
+shell32.dll!Shell_NotifyIconW
+# ShellExecuteW: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew
+shell32.dll!ShellExecuteW
+# RegCloseKey: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regclosekey
+advapi32.dll!RegCloseKey
+# RegCreateKeyExW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexw
+advapi32.dll!RegCreateKeyExW
+# RegSetValueExW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regsetvalueexw
+advapi32.dll!RegSetValueExW
+# RegOpenKeyExW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw
+advapi32.dll!RegOpenKeyExW
+# RegDeleteValueW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regdeletevaluew
+advapi32.dll!RegDeleteValueW
+# RegQueryValueExW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
+advapi32.dll!RegQueryValueExW
+# OpenProcessToken: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocesstoken
+advapi32.dll!OpenProcessToken
+# ConvertSidToStringSidW: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/sddl/nf-sddl-convertsidtostringsidw
+advapi32.dll!ConvertSidToStringSidW
+# GetTokenInformation: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation
+advapi32.dll!GetTokenInformation
+# GetUserDefaultUILanguage: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-getuserdefaultuilanguage
+kernel32.dll!GetUserDefaultUILanguage
+# DeleteFileW: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-deletefilew
+kernel32.dll!DeleteFileW
+# GetLocalTime: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getlocaltime
+kernel32.dll!GetLocalTime
+# CompareStringOrdinal: Windows Vista; https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-comparestringordinal
+kernel32.dll!CompareStringOrdinal
+# CreateMutexW: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createmutexw
+kernel32.dll!CreateMutexW
+# SizeofResource: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-sizeofresource
+kernel32.dll!SizeofResource
+# GetEnvironmentVariableW: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-getenvironmentvariablew
+kernel32.dll!GetEnvironmentVariableW
+# LockResource: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-lockresource
+kernel32.dll!LockResource
+# LoadResource: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadresource
+kernel32.dll!LoadResource
+# FindResourceW: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-findresourcew
+kernel32.dll!FindResourceW
+# CancelIoEx: Windows Vista; https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex
+kernel32.dll!CancelIoEx
+# ResetEvent: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-resetevent
+kernel32.dll!ResetEvent
+# GetOverlappedResult: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-getoverlappedresult
+kernel32.dll!GetOverlappedResult
+# ReadDirectoryChangesW: Windows XP; https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-readdirectorychangesw
+kernel32.dll!ReadDirectoryChangesW
+
+# P2/P3 Win32 imports reviewed 2026-11-06; MicrosoftDocs Requirements recorded per entry.
+# Windows Vista [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/dwmapi/nf-dwmapi-dwmgetwindowattribute.md
+dwmapi.dll!DwmGetWindowAttribute
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-createfontindirectw.md
+gdi32.dll!CreateFontIndirectW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-createfontw.md
+gdi32.dll!CreateFontW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-createpatternbrush.md
+gdi32.dll!CreatePatternBrush
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-ellipse.md
+gdi32.dll!Ellipse
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-gettextfacew.md
+gdi32.dll!GetTextFaceW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-gettextmetricsw.md
+gdi32.dll!GetTextMetricsW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-lineto.md
+gdi32.dll!LineTo
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-movetoex.md
+gdi32.dll!MoveToEx
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-rectangle.md
+gdi32.dll!Rectangle
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-setbrushorgex.md
+gdi32.dll!SetBrushOrgEx
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-setdcpencolor.md
+gdi32.dll!SetDCPenColor
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-setstretchbltmode.md
+gdi32.dll!SetStretchBltMode
+# Windows XP [desktop apps only],East Asian language support installed.; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/imm/nf-imm-immgetcontext.md
+imm32.dll!ImmGetContext
+# Windows XP [desktop apps only],East Asian language support installed.; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/imm/nf-imm-immnotifyime.md
+imm32.dll!ImmNotifyIME
+# Windows XP [desktop apps only],East Asian language support installed.; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/imm/nf-imm-immreleasecontext.md
+imm32.dll!ImmReleaseContext
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globalalloc.md
+kernel32.dll!GlobalAlloc
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globalfree.md
+kernel32.dll!GlobalFree
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globallock.md
+kernel32.dll!GlobalLock
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globalunlock.md
+kernel32.dll!GlobalUnlock
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-movefileexw.md
+kernel32.dll!MoveFileExW
+# Windows 2000 Professional [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/combaseapi/nf-combaseapi-cotaskmemfree.md
+ole32.dll!CoTaskMemFree
+# Windows 2000 Professional [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/combaseapi/nf-combaseapi-createstreamonhglobal.md
+ole32.dll!CreateStreamOnHGlobal
+# Windows Vista [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/shobjidl_core/nf-shobjidl_core-shcreateitemfromparsingname.md
+shell32.dll!SHCreateItemFromParsingName
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-callwindowprocw.md
+user32.dll!CallWindowProcW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-closeclipboard.md
+user32.dll!CloseClipboard
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-drawiconex.md
+user32.dll!DrawIconEx
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-emptyclipboard.md
+user32.dll!EmptyClipboard
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getcapture.md
+user32.dll!GetCapture
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getclientrect.md
+user32.dll!GetClientRect
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getcursorinfo.md
+user32.dll!GetCursorInfo
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getforegroundwindow.md
+user32.dll!GetForegroundWindow
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-geticoninfo.md
+user32.dll!GetIconInfo
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getkeystate.md
+user32.dll!GetKeyState
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getshellwindow.md
+user32.dll!GetShellWindow
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-isiconic.md
+user32.dll!IsIconic
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-iswindow.md
+user32.dll!IsWindow
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-monitorfrompoint.md
+user32.dll!MonitorFromPoint
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-monitorfromrect.md
+user32.dll!MonitorFromRect
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-offsetrect.md
+user32.dll!OffsetRect
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-openclipboard.md
+user32.dll!OpenClipboard
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-ptinrect.md
+user32.dll!PtInRect
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-registerclipboardformatw.md
+user32.dll!RegisterClipboardFormatW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-releasecapture.md
+user32.dll!ReleaseCapture
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-screentoclient.md
+user32.dll!ScreenToClient
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-sendmessagew.md
+user32.dll!SendMessageW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setcapture.md
+user32.dll!SetCapture
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setclipboarddata.md
+user32.dll!SetClipboardData
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setcursor.md
+user32.dll!SetCursor
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setfocus.md
+user32.dll!SetFocus
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-tabbedtextoutw.md
+user32.dll!TabbedTextOutW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-unionrect.md
+user32.dll!UnionRect
+
+# P4/P5 Win32 imports reviewed 2026-11-06.
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-createpen.md
+gdi32.dll!CreatePen
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-settextalign.md
+gdi32.dll!SetTextAlign
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-stretchblt.md
+gdi32.dll!StretchBlt
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wingdi/nf-wingdi-textoutw.md
+gdi32.dll!TextOutW
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/synchapi/nf-synchapi-cancelwaitabletimer.md
+kernel32.dll!CancelWaitableTimer
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-copyfilew.md
+kernel32.dll!CopyFileW
+# Windows XP [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/fileapi/nf-fileapi-getfileinformationbyhandle.md
+kernel32.dll!GetFileInformationByHandle
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/sysinfoapi/nf-sysinfoapi-getnativesysteminfo.md
+kernel32.dll!GetNativeSystemInfo
+# Windows XP [desktop apps \| UWP apps]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winbase/nf-winbase-globalsize.md
+kernel32.dll!GlobalSize
+# Windows XP [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/shellapi/nf-shellapi-dragqueryfilew.md
+shell32.dll!DragQueryFileW
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-adjustwindowrectex.md
+user32.dll!AdjustWindowRectEx
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getasynckeystate.md
+user32.dll!GetAsyncKeyState
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-getclipboarddata.md
+user32.dll!GetClipboardData
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-isclipboardformatavailable.md
+user32.dll!IsClipboardFormatAvailable
+# Windows 2000 Professional [desktop apps only]; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/winuser/nf-winuser-setlayeredwindowattributes.md
+user32.dll!SetLayeredWindowAttributes
+# Windows Vista; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wtsapi32/nf-wtsapi32-wtsregistersessionnotification.md
+wtsapi32.dll!WTSRegisterSessionNotification
+# Windows Vista; https://raw.githubusercontent.com/MicrosoftDocs/sdk-api/docs/sdk-api-src/content/wtsapi32/nf-wtsapi32-wtsunregistersessionnotification.md
+wtsapi32.dll!WTSUnRegisterSessionNotification
+
+# P1-P6 review imports, verified against Microsoft minimum-client requirements.
+# Windows 2000 Professional: https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getfocus
+user32.dll!GetFocus
+# Windows 2000+. https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-allowsetforegroundwindow
+user32.dll!AllowSetForegroundWindow
+# Windows XP: https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getlayeredwindowattributes
+user32.dll!GetLayeredWindowAttributes
+# Windows 2000 Professional: https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getclipboardsequencenumber
+user32.dll!GetClipboardSequenceNumber
+# Windows 2000 Professional: https://learn.microsoft.com/windows/win32/api/combaseapi/nf-combaseapi-cocreateguid
+ole32.dll!CoCreateGuid
+# Windows 2000 Professional: https://learn.microsoft.com/windows/win32/api/combaseapi/nf-combaseapi-gethglobalfromstream
+ole32.dll!GetHGlobalFromStream
+# Windows 2000 Professional: https://learn.microsoft.com/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsysteminfo
+kernel32.dll!GetSystemInfo
+# Windows XP: https://learn.microsoft.com/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect
+kernel32.dll!VirtualProtect
+# Windows XP: https://learn.microsoft.com/windows/win32/api/memoryapi/nf-memoryapi-virtualquery
+kernel32.dll!VirtualQuery
+# Windows XP: https://learn.microsoft.com/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexa
+kernel32.dll!LoadLibraryExA
+# Windows XP: https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-setfileattributesw
+kernel32.dll!SetFileAttributesW
+# Windows XP: https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-replacefilew
+kernel32.dll!ReplaceFileW
+
+# Existing GDI+ symbols now appear in the delay-load table. Their flat API
+# mappings are linked at the top of this file, and these wrappers support XP:
+# https://learn.microsoft.com/windows/win32/api/gdiplusbrush/nf-gdiplusbrush-brush-clone
+# https://learn.microsoft.com/windows/win32/api/gdiplusgraphics/nf-gdiplusgraphics-graphics-setcompositingmode

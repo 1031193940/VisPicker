@@ -1,0 +1,7 @@
+Pin exact pixels: initial native pin
+Pin exact pixels: after keyboard nudge
+Pin exact pixels: after compact restore
+20x1920x1080 retained: logical-source=165888000 actual-source=124416000 render-content=165888000 decoration=3860480 private-delta=294989824 bytes
+idle observation=1015 ms CPU-time=0 us (environment-dependent; no pass claim for physical idle CPU)
+20 pin close lifecycle: GDI delta=0 USER delta=0
+Pin integration passed

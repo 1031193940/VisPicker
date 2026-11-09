@@ -1,0 +1,120 @@
+Preset CMake variables:
+
+  CMAKE_BUILD_TYPE="Release"
+  CMAKE_CXX_COMPILER="cl.exe"
+  VISPICK_BUILD_TESTS="ON"
+  VISPICK_EXPECTED_BITS="64"
+
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: D:/Workspace/VisPick/out/build/x64-Release
+[1/126] Generating CXX dyndep file CMakeFiles\vispick_spikes.dir\CXX.dd
+[2/116] Generating CXX dyndep file CMakeFiles\VisPickSpikes.dir\CXX.dd
+[3/115] Generating CXX dyndep file CMakeFiles\VisPickUnitTests.dir\CXX.dd
+[4/92] Generating CXX dyndep file CMakeFiles\VisPickConsoleTests.dir\CXX.dd
+[5/90] Generating CXX dyndep file CMakeFiles\VisPickCrashProbe.dir\CXX.dd
+[6/89] Generating CXX dyndep file CMakeFiles\VisPickAppIntegration.dir\CXX.dd
+[7/88] Generating CXX dyndep file CMakeFiles\VisPickOutputTests.dir\CXX.dd
+[8/87] Generating CXX dyndep file CMakeFiles\VisPickOverlayTests.dir\CXX.dd
+[9/86] Generating CXX dyndep file CMakeFiles\VisPickEditorTests.dir\CXX.dd
+[10/85] Generating CXX dyndep file CMakeFiles\VisPickPinTests.dir\CXX.dd
+[11/84] Generating CXX dyndep file CMakeFiles\VisPickAppLifecycleIntegration.dir\CXX.dd
+[12/83] Generating CXX dyndep file CMakeFiles\VisPickGifQuality.dir\CXX.dd
+[13/82] Scanning D:\Workspace\VisPick\src\recording\GifPreview.cpp for CXX dependencies
+[14/82] Scanning D:\Workspace\VisPick\src\App.cpp for CXX dependencies
+[15/82] Scanning D:\Workspace\VisPick\src\recording\Recorder.cpp for CXX dependencies
+[16/82] Scanning D:\Workspace\VisPick\tests\e2e\RecordingIntegration.cpp for CXX dependencies
+[17/82] Scanning D:\Workspace\VisPick\tests\e2e\Soak.cpp for CXX dependencies
+[18/82] Generating CXX dyndep file CMakeFiles\VisPick.dir\CXX.dd
+[19/81] Generating CXX dyndep file CMakeFiles\VisPickRecordingIntegration.dir\CXX.dd
+[20/81] Generating CXX dyndep file CMakeFiles\vispick_core.dir\CXX.dd
+[21/44] Generating CXX dyndep file CMakeFiles\VisPickSoak.dir\CXX.dd
+[22/44] Building CXX object CMakeFiles\vispick_core.dir\src\recording\GifPreview.cpp.obj
+[23/44] Building CXX object CMakeFiles\VisPick.dir\src\App.cpp.obj
+[24/44] Building CXX object CMakeFiles\VisPickSoak.dir\tests\e2e\Soak.cpp.obj
+[25/44] Building CXX object CMakeFiles\vispick_core.dir\src\recording\Recorder.cpp.obj
+[26/44] Building CXX object CMakeFiles\VisPickRecordingIntegration.dir\tests\e2e\RecordingIntegration.cpp.obj
+[27/44] Linking CXX static library vispick_core.lib
+[28/44] Linking CXX executable VisPickCrashProbe.exe
+[29/44] Linking CXX executable VisPickOutputTests.exe
+[30/44] Linking CXX executable VisPickPinTests.exe
+[31/44] Linking CXX executable VisPickAppIntegration.exe
+[32/44] Linking CXX executable VisPickAppLifecycleIntegration.exe
+[33/44] Linking CXX executable VisPickOverlayTests.exe
+[34/44] Linking CXX executable VisPickEditorTests.exe
+[35/44] Linking CXX executable VisPickSpikes.exe
+[36/44] Generating CXX dyndep file CMakeFiles\VisPickTest.dir\CXX.dd
+[37/42] Linking CXX executable VisPickGifQuality.exe
+[38/42] Linking CXX executable VisPickSoak.exe
+[39/42] Linking CXX executable VisPickRecordingIntegration.exe
+[40/42] Linking CXX executable VisPickTest.exe
+[41/42] Linking CXX executable VisPick.exe
+[42/42] Linking CXX executable VisPickUnitTests.exe
+Test project D:/Workspace/VisPick/out/build/x64-Release
+    Start 1: unit
+1/1 Test #1: unit .............................   Passed    1.63 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   1.63 sec
+Preset CMake variables:
+
+  CMAKE_BUILD_TYPE="Release"
+  CMAKE_CXX_COMPILER="cl.exe"
+  VISPICK_BUILD_TESTS="ON"
+  VISPICK_EXPECTED_BITS="32"
+
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: D:/Workspace/VisPick/out/build/x86-Release
+[1/127] Generating CXX dyndep file CMakeFiles\vispick_spikes.dir\CXX.dd
+[2/117] Generating CXX dyndep file CMakeFiles\VisPickSpikes.dir\CXX.dd
+[3/116] Generating CXX dyndep file CMakeFiles\VisPickUnitTests.dir\CXX.dd
+[4/93] Generating CXX dyndep file CMakeFiles\VisPickConsoleTests.dir\CXX.dd
+[5/91] Generating CXX dyndep file CMakeFiles\VisPickCrashProbe.dir\CXX.dd
+[6/90] Generating CXX dyndep file CMakeFiles\VisPickOutputTests.dir\CXX.dd
+[7/89] Generating CXX dyndep file CMakeFiles\VisPickOverlayTests.dir\CXX.dd
+[8/88] Generating CXX dyndep file CMakeFiles\VisPickEditorTests.dir\CXX.dd
+[9/87] Generating CXX dyndep file CMakeFiles\VisPickPinTests.dir\CXX.dd
+[10/86] Generating CXX dyndep file CMakeFiles\VisPickAppLifecycleIntegration.dir\CXX.dd
+[11/85] Generating CXX dyndep file CMakeFiles\VisPickGifQuality.dir\CXX.dd
+[12/84] Scanning D:\Workspace\VisPick\src\recording\GifPreview.cpp for CXX dependencies
+[13/84] Scanning D:\Workspace\VisPick\tests\e2e\AppIntegration.cpp for CXX dependencies
+[14/84] Scanning D:\Workspace\VisPick\src\App.cpp for CXX dependencies
+[15/84] Scanning D:\Workspace\VisPick\src\recording\Recorder.cpp for CXX dependencies
+[16/84] Scanning D:\Workspace\VisPick\tests\e2e\Soak.cpp for CXX dependencies
+[17/84] Scanning D:\Workspace\VisPick\tests\e2e\RecordingIntegration.cpp for CXX dependencies
+[18/84] Generating CXX dyndep file CMakeFiles\VisPickAppIntegration.dir\CXX.dd
+[19/84] Generating CXX dyndep file CMakeFiles\VisPick.dir\CXX.dd
+[20/83] Generating CXX dyndep file CMakeFiles\vispick_core.dir\CXX.dd
+[21/46] Generating CXX dyndep file CMakeFiles\VisPickSoak.dir\CXX.dd
+[22/46] Generating CXX dyndep file CMakeFiles\VisPickRecordingIntegration.dir\CXX.dd
+[23/46] Building CXX object CMakeFiles\vispick_core.dir\src\recording\GifPreview.cpp.obj
+[24/46] Building CXX object CMakeFiles\VisPick.dir\src\App.cpp.obj
+[25/46] Building CXX object CMakeFiles\VisPickAppIntegration.dir\tests\e2e\AppIntegration.cpp.obj
+[26/46] Building CXX object CMakeFiles\VisPickSoak.dir\tests\e2e\Soak.cpp.obj
+[27/46] Building CXX object CMakeFiles\vispick_core.dir\src\recording\Recorder.cpp.obj
+[28/46] Building CXX object CMakeFiles\VisPickRecordingIntegration.dir\tests\e2e\RecordingIntegration.cpp.obj
+[29/46] Linking CXX static library vispick_core.lib
+[30/46] Linking CXX executable VisPickCrashProbe.exe
+[31/46] Linking CXX executable VisPickOutputTests.exe
+[32/46] Linking CXX executable VisPickAppLifecycleIntegration.exe
+[33/46] Linking CXX executable VisPickOverlayTests.exe
+[34/46] Linking CXX executable VisPickPinTests.exe
+[35/46] Linking CXX executable VisPickEditorTests.exe
+[36/46] Linking CXX executable VisPickGifQuality.exe
+[37/46] Linking CXX executable VisPickAppIntegration.exe
+[38/46] Linking CXX executable VisPickSoak.exe
+[39/46] Linking CXX executable VisPickRecordingIntegration.exe
+[40/46] Linking CXX executable VisPickSpikes.exe
+[41/46] Generating CXX dyndep file CMakeFiles\VisPickTest.dir\CXX.dd
+[42/44] Linking CXX executable VisPick.exe
+[43/44] Linking CXX executable VisPickUnitTests.exe
+[44/44] Linking CXX executable VisPickTest.exe
+Test project D:/Workspace/VisPick/out/build/x86-Release
+    Start 1: unit
+1/1 Test #1: unit .............................   Passed    2.04 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   2.04 sec

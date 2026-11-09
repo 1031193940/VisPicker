@@ -1,0 +1,450 @@
+﻿{
+    "started_utc":  "2026-11-06T12:07:35.1971346Z",
+    "photos_version":  "2026.11090.22001.0",
+    "gif_sha256":  "C54AE82C076155178E54C6F5B6583B092F3E44490C39FDBDE27AC9D75B85867E",
+    "source_duration_ms":  1970,
+    "status":  "passed",
+    "samples":  [
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1,
+                        "marker":  -1
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  82,
+                        "marker":  1
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  160,
+                        "marker":  1
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  223,
+                        "marker":  2
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  318,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  379,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  443,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  505,
+                        "marker":  5
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  568,
+                        "marker":  6
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  631,
+                        "marker":  6
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  693,
+                        "marker":  7
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  756,
+                        "marker":  0
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  819,
+                        "marker":  0
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  944,
+                        "marker":  2
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1005,
+                        "marker":  2
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1068,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1131,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1193,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1255,
+                        "marker":  5
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1317,
+                        "marker":  6
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1379,
+                        "marker":  6
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1443,
+                        "marker":  7
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1505,
+                        "marker":  7
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1568,
+                        "marker":  0
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1630,
+                        "marker":  1
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1691,
+                        "marker":  2
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1754,
+                        "marker":  2
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1816,
+                        "marker":  3
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1878,
+                        "marker":  4
+                    },
+                    {
+                        "period":  1,
+                        "elapsed_ms":  1940,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2003,
+                        "marker":  0
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2066,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2128,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2191,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2253,
+                        "marker":  3
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2314,
+                        "marker":  3
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2377,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2440,
+                        "marker":  5
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2503,
+                        "marker":  5
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2565,
+                        "marker":  6
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2628,
+                        "marker":  7
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2690,
+                        "marker":  7
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2752,
+                        "marker":  0
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2815,
+                        "marker":  0
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2877,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  2940,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3003,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3064,
+                        "marker":  3
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3125,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3188,
+                        "marker":  5
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3249,
+                        "marker":  5
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3313,
+                        "marker":  6
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3375,
+                        "marker":  7
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3437,
+                        "marker":  7
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3499,
+                        "marker":  0
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3562,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3625,
+                        "marker":  1
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3687,
+                        "marker":  2
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3749,
+                        "marker":  3
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3825,
+                        "marker":  4
+                    },
+                    {
+                        "period":  2,
+                        "elapsed_ms":  3917,
+                        "marker":  4
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  3980,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4042,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4106,
+                        "marker":  1
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4168,
+                        "marker":  2
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4262,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4356,
+                        "marker":  4
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4450,
+                        "marker":  5
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4544,
+                        "marker":  6
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4639,
+                        "marker":  7
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4717,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4781,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4845,
+                        "marker":  1
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4908,
+                        "marker":  2
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  4969,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5031,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5094,
+                        "marker":  4
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5173,
+                        "marker":  5
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5267,
+                        "marker":  6
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5361,
+                        "marker":  7
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5440,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5504,
+                        "marker":  0
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5566,
+                        "marker":  1
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5628,
+                        "marker":  2
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5692,
+                        "marker":  2
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5752,
+                        "marker":  3
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5816,
+                        "marker":  4
+                    },
+                    {
+                        "period":  3,
+                        "elapsed_ms":  5878,
+                        "marker":  4
+                    }
+                ],
+    "finished_utc":  "2026-11-06T12:07:42.5500714Z"
+}

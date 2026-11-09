@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "pointer_bits": 32,
+  "windows": "10.0.26200",
+  "desktop": [0,0,2560,1440],
+  "remote_session": true,
+  "remote_session_metric": true,
+  "session_detection_known": true,
+  "acceptance_eligible": false,
+  "invalid_environment_reasons": ["Remote session/display evidence: physical-display performance acceptance is invalid.","Monitor 1: refresh rate is unknown or below 50 Hz.","Monitor 1: a local physical output path was not verified."],
+  "monitors": [{"bounds":[0,0,2560,1440],"dpi":[120,120],"primary":true,"device_name":"\\\\.\\DISPLAY17","adapter_name":"Microsoft Remote Display Adapter","refresh_hz":32,"physical_display_verified":false}],
+  "results": [
+    {"name":"desktop-pixels","passed":false,"checks_passed":true,"acceptance_status":"not_eligible","measurements":[{"name":"desktop_left","value":0,"unit":"px"},{"name":"desktop_top","value":0,"unit":"px"},{"name":"desktop_width","value":2560,"unit":"px"},{"name":"desktop_height","value":1440,"unit":"px"},{"name":"monitor_count","value":1,"unit":"monitors"},{"name":"full_desktop_allocate_and_capture","value":62.7918,"unit":"ms"},{"name":"compared_pixels","value":11366400,"unit":"pixels"},{"name":"mismatched_pixels","value":0,"unit":"pixels"},{"name":"window_bounds_match","value":1,"unit":"boolean"},{"name":"capture_window_cycles","value":100,"unit":"cycles"},{"name":"gdi_object_delta","value":0,"unit":"objects"},{"name":"user_object_delta","value":0,"unit":"objects"},{"name":"pixel_correctness","value":1,"unit":"boolean"},{"name":"physical_acceptance_eligible","value":0,"unit":"boolean"}],"notes":["Monitor 1: (0,0) 2560x1440, DPI 120x120","One opaque coordinate-encoded pattern per monitor; compares every monitor pixel after full virtual-desktop capture. Unoccupied gaps between monitors are excluded. No mouse/keyboard injection, and no desktop-content screenshots are saved.","100 repeated 320x240-or-smaller window/capture/destruction cycles check RGB and GDI/USER resource counts. Other DPI/layout combinations require rerunning after changing display settings.","Full desktop timing includes allocation and capture of the final shared FrozenScreen; no intermediate whole-frame copy is performed. Pixel correctness is reported separately even when the environment is not acceptance eligible.","Remote session/display evidence: physical-display performance acceptance is invalid.","Monitor 1: refresh rate is unknown or below 50 Hz.","Monitor 1: a local physical output path was not verified."]}
+  ]
+}

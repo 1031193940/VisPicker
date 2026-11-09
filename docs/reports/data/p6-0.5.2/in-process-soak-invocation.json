@@ -1,0 +1,12 @@
+{
+  "executable": "D:\\Workspace\\VisPick\\out\\build\\x64-Release\\VisPickSoak.exe",
+  "executable_sha256": "49E1C4FB2FC338263411F08A951E0E18512D697FA0D4ABCB42ECE04CD878B806",
+  "requested_seconds": 420,
+  "interval_seconds": 30,
+  "memory_diagnostics_enabled": true,
+  "scheduling_tolerance_seconds": 0.25,
+  "started_utc": "2026-11-06T10:06:15.2260537Z",
+  "coverage": "Owned passive 256x144 pattern; production capture, annotation, PNG, pin create/close, one-second GIF/WIC. No clipboard or full interactive Overlay workflow.",
+  "eight_hour_requirement": "Only an actual completed elapsed run of at least 28800 seconds can satisfy the eight-hour fields.",
+  "timing_method": "Fixed interval start schedule, no catch-up cycles; starts more than 250ms late fail. GIF duration is compared with actual capture timestamps within one 10ms GIF tick."
+}

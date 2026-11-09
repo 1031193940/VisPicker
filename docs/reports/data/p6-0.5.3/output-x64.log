@@ -1,0 +1,9 @@
+PASS 200 real clipboard PNG+DIB copies preserve pixels and alpha
+PASS GDI objects return within five of baseline
+PASS open isolated clipboard for fallback fixture
+PASS empty isolated clipboard
+PASS DIB-only clipboard fallback is correct
+PASS open isolated clipboard for malformed PNG fixture
+PASS Malformed clipboard PNG falls back to valid DIB pixels
+PASS open isolated clipboard for cleanup
+PASS empty clipboard returns no image

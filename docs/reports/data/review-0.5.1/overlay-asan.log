@@ -1,0 +1,3 @@
+monitor origin=(0,0) dpi=120 output=64x48 exact; appearance=113.534 ms
+100 capture/cancel cycles: GDI delta=0 USER delta=0
+Overlay integration passed

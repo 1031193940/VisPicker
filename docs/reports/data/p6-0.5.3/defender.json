@@ -1,0 +1,31 @@
+{
+  "platform": "4.18.26100.4",
+  "mode": "Passive Mode",
+  "signatures": "1.463.99.0",
+  "scans": [
+    {
+      "architecture": "x64",
+      "bytes": 795136,
+      "sha256": "0F1D6D0BFE745CED8E47D4E2E9F16BCBCE06691E17752ED7513E2F44B8F353CF",
+      "started_utc": "2026-11-06T10:51:42.0438269Z",
+      "exit_code": 0,
+      "output": [
+        "Scan starting...",
+        "Scan finished.",
+        "Scanning D:\\Workspace\\VisPick\\out\\build\\x64-Release\\VisPick.exe found no threats."
+      ]
+    },
+    {
+      "architecture": "x86",
+      "bytes": 636928,
+      "sha256": "D7508EB67C97EEF1C2584B77D7DCF7D8F8A32500ABD41D6BA6ED7116058CD1CB",
+      "started_utc": "2026-11-06T10:51:42.1536274Z",
+      "exit_code": 0,
+      "output": [
+        "Scan starting...",
+        "Scan finished.",
+        "Scanning D:\\Workspace\\VisPick\\out\\build\\x86-Release\\VisPick.exe found no threats."
+      ]
+    }
+  ]
+}

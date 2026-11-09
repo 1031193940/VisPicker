@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "pointer_bits": 64,
+  "windows": "10.0.26200",
+  "desktop": [0,0,2560,1440],
+  "monitors": [{"bounds":[0,0,2560,1440],"dpi":[120,120],"primary":true}],
+  "results": [
+    {"name":"desktop-pixels","passed":true,"measurements":[{"name":"desktop_left","value":0,"unit":"px"},{"name":"desktop_top","value":0,"unit":"px"},{"name":"desktop_width","value":2560,"unit":"px"},{"name":"desktop_height","value":1440,"unit":"px"},{"name":"monitor_count","value":1,"unit":"monitors"},{"name":"full_desktop_capture","value":82.0484,"unit":"ms"},{"name":"compared_pixels","value":11366400,"unit":"pixels"},{"name":"mismatched_pixels","value":0,"unit":"pixels"},{"name":"window_bounds_match","value":1,"unit":"boolean"},{"name":"capture_window_cycles","value":100,"unit":"cycles"},{"name":"gdi_object_delta","value":0,"unit":"objects"},{"name":"user_object_delta","value":0,"unit":"objects"}],"notes":["Monitor 1: (0,0) 2560x1440, DPI 120x120","One opaque coordinate-encoded pattern per monitor; compares every monitor pixel after full virtual-desktop capture. Unoccupied gaps between monitors are excluded. No mouse/keyboard injection, and no desktop-content screenshots are saved.","100 repeated 320x240-or-smaller window/capture/destruction cycles check RGB and GDI/USER resource counts. Other DPI/layout combinations require rerunning after changing display settings."]}
+  ]
+}

@@ -1,0 +1,36 @@
+#include <windows.h>
+#include "VisPickVersion.h"
+#pragma code_page(65001)
+
+101 ICON "VisPick.ico"
+201 RCDATA "default.ini"
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION VISPICK_VERSION_NUMBERS
+ PRODUCTVERSION VISPICK_VERSION_NUMBERS
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "040904B0"
+  BEGIN
+   VALUE "FileDescription", "VisPick portable capture utility\0"
+   VALUE "FileVersion", VISPICK_FILE_VERSION "\0"
+   VALUE "InternalName", "VisPick\0"
+   VALUE "OriginalFilename", "VisPick.exe\0"
+   VALUE "ProductName", "VisPick\0"
+   VALUE "ProductVersion", VISPICK_PRODUCT_VERSION "\0"
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x0409, 1200
+ END
+END
+

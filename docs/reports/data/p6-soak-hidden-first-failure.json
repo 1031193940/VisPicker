@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "started_utc": "2026-11-06T07:26:46Z",
+  "architecture_bits": 64,
+  "requested_seconds": 28800,
+  "interval_seconds": 30,
+  "elapsed_seconds": 0.097,
+  "finished": true,
+  "stopped": false,
+  "passed": false,
+  "eight_hour_elapsed": false,
+  "eight_hour_passed": false,
+  "physical_environment_eligible": false,
+  "remote_session": true,
+  "warmup_cycles": 3,
+  "baseline_cycle": 0,
+  "resource_idle_sample_ms": 2000,
+  "resource_growth_below_five_percent": false,
+  "maximum_cycle_gap_seconds": 0.000,
+  "maximum_cycle_lateness_seconds": 0.000,
+  "scheduling_tolerance_seconds": 0.250,
+  "cadence_within_limit": true,
+  "error": "Owned pattern capture differs; display may be locked or occluded",
+  "coverage": ["production CaptureScreen on an owned 256x144 screen pattern","screen-anchored rectangle and PNG exact roundtrip","production PinManager create/close with DustBox=0","production 30fps one-second Recorder and WIC GIF frame/duration decode"],
+  "excluded": ["full interactive end-to-end workflow","fullscreen Overlay and repeated focus changes","user clipboard","real IME typing","cross-application paste and save dialogs"],
+  "notes": ["Three warmup cycles establish the baseline; measured starts follow a fixed interval schedule.","A measured start over 250ms late fails without catch-up cycles.","WIC duration is checked against actual first capture completion through stop within one 10ms GIF tick.","Identical post-close idle intervals precede all gated GDI, USER, handle and private commit samples. Immediate samples and working sets are recorded; working sets are never trimmed.","The passive production recording bar and border are exercised with the global Escape shortcut disabled.","Only each cycle's returned rec_vispick_<this PID> temporary GIF is deleted; reports are retained.","Eight-hour fields require measured elapsed time, completed cadence and resource checks."],
+  "samples": [
+
+  ]
+}

@@ -1,0 +1,23 @@
+[1/122] Generating CXX dyndep file CMakeFiles\vispick_core.dir\CXX.dd
+[2/82] Generating CXX dyndep file CMakeFiles\vispick_spikes.dir\CXX.dd
+[3/72] Generating CXX dyndep file CMakeFiles\VisPickSpikes.dir\CXX.dd
+[4/70] Generating CXX dyndep file CMakeFiles\VisPick.dir\CXX.dd
+[5/66] Generating CXX dyndep file CMakeFiles\VisPickUnitTests.dir\CXX.dd
+[6/42] Generating CXX dyndep file CMakeFiles\VisPickConsoleTests.dir\CXX.dd
+[7/40] Generating CXX dyndep file CMakeFiles\VisPickCrashProbe.dir\CXX.dd
+[8/38] Generating CXX dyndep file CMakeFiles\VisPickAppIntegration.dir\CXX.dd
+[9/36] Generating CXX dyndep file CMakeFiles\VisPickOutputTests.dir\CXX.dd
+[10/34] Generating CXX dyndep file CMakeFiles\VisPickOverlayTests.dir\CXX.dd
+[11/32] Generating CXX dyndep file CMakeFiles\VisPickEditorTests.dir\CXX.dd
+[12/30] Generating CXX dyndep file CMakeFiles\VisPickPinTests.dir\CXX.dd
+[13/28] Generating CXX dyndep file CMakeFiles\VisPickRecordingIntegration.dir\CXX.dd
+[14/26] Generating CXX dyndep file CMakeFiles\VisPickSoak.dir\CXX.dd
+[15/24] Generating CXX dyndep file CMakeFiles\VisPickAppLifecycleIntegration.dir\CXX.dd
+[16/22] Generating CXX dyndep file CMakeFiles\VisPickGifQuality.dir\CXX.dd
+[17/20] Generating CXX dyndep file CMakeFiles\VisPickTest.dir\CXX.dd
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   291 |   291 passed | 0 failed | 2 skipped
+[doctest] assertions: 56981 | 56981 passed | 0 failed |
+[doctest] Status: SUCCESS!
