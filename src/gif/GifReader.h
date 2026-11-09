@@ -48,6 +48,7 @@ public:
     GifReader(const GifReader&) = delete;
     GifReader& operator=(const GifReader&) = delete;
     [[nodiscard]] const GifDocumentMetadata& Metadata() const noexcept;
+    [[nodiscard]] GifFrameMetadata ReadFrameMetadata(unsigned int frameIndex) const;
     [[nodiscard]] DecodedGifFrame ReadFrame(unsigned int frameIndex) const;
 
 private:

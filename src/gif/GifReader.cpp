@@ -75,6 +75,27 @@ void ValidateRegion(const GifDocumentMetadata& document, const GifFrameMetadata&
     }
 }
 
+GifFrameMetadata ReadMetadata(IWICBitmapFrameDecode* frame, const GifDocumentMetadata& document) {
+    Microsoft::WRL::ComPtr<IWICMetadataQueryReader> reader;
+    Check(frame->GetMetadataQueryReader(reader.GetAddressOf()), "Read GIF frame metadata failed");
+    GifFrameMetadata metadata;
+    metadata.left = ReadUnsigned(reader.Get(), L"/imgdesc/Left", 0, true);
+    metadata.top = ReadUnsigned(reader.Get(), L"/imgdesc/Top", 0, true);
+    metadata.width = ReadUnsigned(reader.Get(), L"/imgdesc/Width", 0, true);
+    metadata.height = ReadUnsigned(reader.Get(), L"/imgdesc/Height", 0, true);
+    metadata.delayCentiseconds = static_cast<std::uint16_t>(ReadUnsigned(reader.Get(), L"/grctlext/Delay"));
+    const auto disposal = ReadUnsigned(reader.Get(), L"/grctlext/Disposal");
+    if (disposal > 3) {
+        throw std::runtime_error("Unsupported reserved GIF disposal value");
+    }
+    metadata.disposal = static_cast<DisposalMethod>(disposal);
+    if (ReadUnsigned(reader.Get(), L"/grctlext/TransparencyFlag") != 0) {
+        metadata.transparentColorIndex = static_cast<int>(ReadUnsigned(reader.Get(), L"/grctlext/TransparentColorIndex"));
+    }
+    ValidateRegion(document, metadata);
+    return metadata;
+}
+
 } // namespace
 
 struct GifReader::Implementation {
@@ -82,6 +103,15 @@ struct GifReader::Implementation {
     Microsoft::WRL::ComPtr<IWICImagingFactory> factory;
     Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
     GifDocumentMetadata metadata;
+
+    [[nodiscard]] Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> Frame(unsigned int frameIndex) const {
+        if (frameIndex >= metadata.frameCount) {
+            throw std::out_of_range("GIF frame index is outside the animation");
+        }
+        Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+        Check(decoder->GetFrame(frameIndex, frame.GetAddressOf()), "Read GIF frame failed");
+        return frame;
+    }
 
     explicit Implementation(const std::filesystem::path& path) {
         Check(CoCreateInstance(CLSID_WICImagingFactory1, nullptr, CLSCTX_INPROC_SERVER,
@@ -128,30 +158,14 @@ const GifDocumentMetadata& GifReader::Metadata() const noexcept {
     return implementation_->metadata;
 }
 
+GifFrameMetadata GifReader::ReadFrameMetadata(unsigned int frameIndex) const {
+    return ReadMetadata(implementation_->Frame(frameIndex).Get(), Metadata());
+}
+
 DecodedGifFrame GifReader::ReadFrame(unsigned int frameIndex) const {
-    if (frameIndex >= Metadata().frameCount) {
-        throw std::out_of_range("GIF frame index is outside the animation");
-    }
-    Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
-    Check(implementation_->decoder->GetFrame(frameIndex, frame.GetAddressOf()), "Read GIF frame failed");
-    Microsoft::WRL::ComPtr<IWICMetadataQueryReader> reader;
-    Check(frame->GetMetadataQueryReader(reader.GetAddressOf()), "Read GIF frame metadata failed");
-    DecodedGifFrame decoded;
-    auto& metadata = decoded.metadata;
-    metadata.left = ReadUnsigned(reader.Get(), L"/imgdesc/Left", 0, true);
-    metadata.top = ReadUnsigned(reader.Get(), L"/imgdesc/Top", 0, true);
-    metadata.width = ReadUnsigned(reader.Get(), L"/imgdesc/Width", 0, true);
-    metadata.height = ReadUnsigned(reader.Get(), L"/imgdesc/Height", 0, true);
-    metadata.delayCentiseconds = static_cast<std::uint16_t>(ReadUnsigned(reader.Get(), L"/grctlext/Delay"));
-    const auto disposal = ReadUnsigned(reader.Get(), L"/grctlext/Disposal");
-    if (disposal > 3) {
-        throw std::runtime_error("Unsupported reserved GIF disposal value");
-    }
-    metadata.disposal = static_cast<DisposalMethod>(disposal);
-    if (ReadUnsigned(reader.Get(), L"/grctlext/TransparencyFlag") != 0) {
-        metadata.transparentColorIndex = static_cast<int>(ReadUnsigned(reader.Get(), L"/grctlext/TransparentColorIndex"));
-    }
-    ValidateRegion(Metadata(), metadata);
+    const auto frame = implementation_->Frame(frameIndex);
+    DecodedGifFrame decoded{ReadMetadata(frame.Get(), Metadata()), {}};
+    const auto& metadata = decoded.metadata;
     UINT decodedWidth = 0;
     UINT decodedHeight = 0;
     Check(frame->GetSize(&decodedWidth, &decodedHeight), "Read raw GIF frame size failed");

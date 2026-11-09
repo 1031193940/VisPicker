@@ -1,4 +1,5 @@
 #include "recording/FrameChange.h"
+#include "core/Config.h"
 
 #include <algorithm>
 #include <limits>
@@ -7,8 +8,8 @@
 namespace vispick::recording {
 
 std::uint16_t RecordedFrameDelay(std::uint64_t centiseconds) noexcept {
-    static_assert(MaximumRecordingSeconds * 100 <= std::numeric_limits<std::uint16_t>::max());
-    // All active timestamps are bounded by MaximumRecordingSeconds. The
+    static_assert(Config::Gif::MaximumSeconds * 100 <= std::numeric_limits<std::uint16_t>::max());
+    // All active timestamps are bounded by the recording limit. The
     // upper clamp also prevents a narrowing wrap if the caller violates it.
     return static_cast<std::uint16_t>(std::clamp<std::uint64_t>(centiseconds,
         MinimumFrameDelayCentiseconds, std::numeric_limits<std::uint16_t>::max()));

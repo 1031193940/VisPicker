@@ -213,6 +213,11 @@ TEST_CASE("Pause removes only paused wall time from actual capture timestamps") 
     CHECK_THROWS_AS(static_cast<void>(timeline.Elapsed(1400000000)), std::invalid_argument);
 }
 
+TEST_CASE("A static five-minute recording fits in one GIF frame delay") {
+    vispick::gif::TimestampDelayAccumulator delays(0);
+    CHECK(vispick::recording::RecordedFrameDelay(delays.AdvanceTo(300000000000LL)) == 30000);
+}
+
 TEST_CASE("GIF save commits replacement and preserves the source when destination fails") {
     RecordingTestDirectory directory;
     const auto source = directory.path/L"recording.gif";

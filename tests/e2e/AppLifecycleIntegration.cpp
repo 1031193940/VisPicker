@@ -329,7 +329,7 @@ void Run(const std::filesystem::path& product, const std::filesystem::path& outp
         settings << "[Hotkeys]\r\nScreenshot=\r\nGif=\r\nPin=\r\nPinClipboard=\r\nTogglePins=\r\n"
             "[General]\r\nLanguage=en\r\nLog=true\r\n[Pin]\r\nInstant=false\r\n"
             "[Capture]\r\nIncludeCursor=false\r\nMagnifier=false\r\n"
-            "[Gif]\r\nFps=30\r\nMaxSeconds=5\r\nScale=100\r\nShowCursor=false\r\nHighlightClicks=false\r\nDither=false\r\n";
+            "[Gif]\r\nFps=30\r\nScale=100\r\nShowCursor=false\r\nHighlightClicks=false\r\nDither=false\r\n";
         if (!settings) { throw std::runtime_error("Cannot write lifecycle configuration"); }
     }
     Pattern pattern;

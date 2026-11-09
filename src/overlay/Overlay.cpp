@@ -101,7 +101,7 @@ BOOL CALLBACK SnapshotWindow(const HWND window, const LPARAM parameter) noexcept
     } catch (...) { snapshot.error = std::current_exception(); return FALSE; }
 }
 
-enum class ButtonKind { Tool, Undo, Redo, Save, Copy, Pin, Cancel, Confirm, Color, Width, Font };
+enum class ButtonKind { Tool, Save, Copy, Pin, Cancel, Confirm, Color, Width, Font, GifFrameRatePicker, GifFrameRate };
 struct Button {
     RECT bounds{};
     ButtonKind kind;
@@ -122,6 +122,8 @@ struct Overlay::State {
     bool saving = false;
     bool drawing = false;
     bool english = false;
+    bool choosingGifFrameRate = false;
+    int gifFramesPerSecond = 30;
     UINT dpi = 96;
     RECT desktop{};
     RECT hover{};
@@ -233,7 +235,7 @@ struct Overlay::State {
 
     [[nodiscard]] RECT TooltipBounds() const noexcept {
         const Button* button = HoverButton();
-        if (!button || !*button->hint) { return {}; }
+        if (!button || !*button->hint || (choosingGifFrameRate && button->kind == ButtonKind::GifFrameRatePicker)) { return {}; }
         return PlaceToolbar(button->bounds, {Scale(210), Scale(25)}, MonitorAt(pointer), Scale(5));
     }
 
@@ -280,6 +282,39 @@ struct Overlay::State {
              old.magnifier, next.magnifier, old.tooltip, next.tooltip}) { AddDamage(rectangle); }
     }
 
+    void LayoutGifToolbar(const RECT controls, const RECT monitor, const LONG margin) {
+        const LONG top = controls.top + margin;
+        const LONG bottom = controls.top + Scale(32);
+        const LONG left = controls.left + margin;
+        const LONG right = controls.right - margin;
+        const LONG width = right - left;
+        const LONG recordRight = left + width * 2 / 5;
+        const LONG cancelRight = left + width * 3 / 5;
+        buttons.push_back({{left, top, recordRight, bottom}, ButtonKind::Confirm, 0,
+            width < Scale(210) ? L"●" : Text(L"● 开始录制", L"● Record"), Text(L"开始录制 (Enter)", L"Start recording (Enter)")});
+        buttons.push_back({{recordRight, top, cancelRight, bottom}, ButtonKind::Cancel, 0,
+            width < Scale(210) ? L"×" : Text(L"取消", L"Cancel"), Text(L"取消 (Esc)", L"Cancel (Esc)")});
+        buttons.push_back({{cancelRight, top, right, bottom}, ButtonKind::GifFrameRatePicker, 0, L"",
+            Text(L"选择录制帧率", L"Choose recording frame rate")});
+        if (!choosingGifFrameRate) { return; }
+
+        const LONG rowHeight = Scale(32);
+        const LONG spaceBelow = monitor.bottom - controls.bottom;
+        const LONG spaceAbove = controls.top - monitor.top;
+        const bool below = spaceBelow >= rowHeight || spaceBelow >= spaceAbove;
+        if (below) { toolbar.bottom += std::min(rowHeight, spaceBelow); }
+        else { toolbar.top -= std::min(rowHeight, spaceAbove); }
+        const LONG rowTop = below ? controls.bottom : toolbar.top + margin;
+        const LONG rowBottom = below ? toolbar.bottom - margin : controls.top;
+        std::array frameRates{5, 10, 15, 20, 24, 25, 30, 40, 50, config.gif.fps};
+        std::sort(frameRates.begin(), frameRates.end());
+        const auto count = static_cast<LONG>(std::unique(frameRates.begin(), frameRates.end()) - frameRates.begin());
+        for (LONG index = 0; index < count; ++index) {
+            buttons.push_back({{left + width * index / count, rowTop, left + width * (index + 1) / count, rowBottom},
+                ButtonKind::GifFrameRate, frameRates[index]});
+        }
+    }
+
     void LayoutToolbar() {
         buttons.clear();
         toolbar = {};
@@ -287,22 +322,14 @@ struct Overlay::State {
         const RECT selected = selection.Bounds();
         const RECT monitor = MonitorAt({selected.right - 1, selected.bottom - 1});
         const bool properties = mode != CaptureMode::Gif && annotations && annotations->Tool() != AnnotationTool::None;
-        const LONG width = std::min<LONG>(Scale(mode == CaptureMode::Gif ? 280 : 470), monitor.right - monitor.left);
+        const LONG width = std::min<LONG>(Scale(mode == CaptureMode::Gif ? 320 : 400), monitor.right - monitor.left);
         toolbar = PlaceToolbar(selected, {width, Scale(properties ? 70 : 36)}, monitor, Scale(6));
         const LONG margin = Scale(4);
+        if (mode == CaptureMode::Gif) { LayoutGifToolbar(toolbar, monitor, margin); return; }
         const LONG top = toolbar.top + margin;
         const LONG bottom = toolbar.top + Scale(32);
         LONG left = toolbar.left + margin;
-        if (mode == CaptureMode::Gif) {
-            const LONG confirmWidth = std::min<LONG>(Scale(100), width / 2);
-            buttons.push_back({{left, top, left + confirmWidth, bottom}, ButtonKind::Confirm, 0,
-                Text(L"● 开始录制", L"● Record"), Text(L"Enter：开始录制", L"Enter: start recording")});
-            left += confirmWidth;
-            buttons.push_back({{left, top, left + Scale(45), bottom}, ButtonKind::Cancel, 0,
-                Text(L"取消", L"Cancel"), L"Esc"});
-            return;
-        }
-        const LONG slot = (width - margin * 2) / 13;
+        const LONG slot = (width - margin * 2) / 11;
         static constexpr std::array<const wchar_t*, 6> ChineseHints{L"矩形 (R)", L"椭圆 (E)", L"箭头 (A)", L"画笔 (P)", L"文字 (T)", L"马赛克 (M)"};
         static constexpr std::array<const wchar_t*, 6> EnglishHints{L"Rectangle (R)", L"Ellipse (E)", L"Arrow (A)", L"Pen (P)", L"Text (T)", L"Mosaic (M)"};
         for (int index = 0; index < 6; ++index) {
@@ -313,8 +340,6 @@ struct Overlay::State {
             buttons.push_back({{left, top, left + slot * slots, bottom}, kind, 0, label, hint});
             left += slot * slots;
         };
-        add(ButtonKind::Undo, L"↶", Text(L"撤销 (Ctrl+Z)", L"Undo (Ctrl+Z)"));
-        add(ButtonKind::Redo, L"↷", Text(L"重做 (Ctrl+Y)", L"Redo (Ctrl+Y)"));
         const bool compactActionLabel = slot < Scale(28);
         add(ButtonKind::Save, compactActionLabel ? Text(L"存", L"S") : Text(L"保存", L"Save"),
             Text(L"保存到文件 (Ctrl+S)", L"Save to file (Ctrl+S)"));
@@ -379,7 +404,8 @@ struct Overlay::State {
                     (button.kind == ButtonKind::Width && style.strokeWidth == StrokeWidths[button.value]) ||
                     (button.kind == ButtonKind::Font && style.fontSize == FontSizes[button.value]);
             }
-            if (selected || button.kind == ButtonKind::Confirm) { Fill(context, local, Accent()); }
+            if (selected || button.kind == ButtonKind::Confirm ||
+                (button.kind == ButtonKind::GifFrameRate && button.value == gifFramesPerSecond)) { Fill(context, local, Accent()); }
             else if (PtInRect(&button.bounds, pointer)) { Fill(context, local, RGB(75, 78, 85)); }
             if (button.kind == ButtonKind::Tool) { DrawToolIcon(context, local, static_cast<AnnotationTool>(button.value)); }
             else if (button.kind == ButtonKind::Color) {
@@ -387,15 +413,14 @@ struct Overlay::State {
                 Fill(context, swatch, Rgb(PresetColors[button.value]));
             } else {
                 RECT text = local;
+                wchar_t rateLabel[16]{};
+                if (button.kind == ButtonKind::GifFrameRatePicker) {
+                    swprintf_s(rateLabel, local.right - local.left < Scale(65) ? L"%d ▾" : L"%d fps ▾", gifFramesPerSecond);
+                } else if (button.kind == ButtonKind::GifFrameRate) { swprintf_s(rateLabel, L"%d", button.value); }
                 SetTextColor(context, RGB(245, 245, 245));
-                DrawTextW(context, button.label, -1, &text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+                DrawTextW(context, *rateLabel ? rateLabel : button.label, -1, &text,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
             }
-        }
-        if (mode == CaptureMode::Gif && buttons.size() == 2) {
-            RECT text{buttons.back().bounds.right + Scale(5), toolbar.top, toolbar.right - Scale(4), toolbar.bottom};
-            text = Local(text);
-            const auto limits = std::to_wstring(config.gif.fps) + L" fps · " + std::to_wstring(config.gif.maxSeconds) + L" s";
-            DrawTextW(context, limits.c_str(), -1, &text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
     }
 
@@ -539,6 +564,7 @@ struct Overlay::State {
         active = false;
         saving = false;
         drawing = false;
+        choosingGifFrameRate = false;
         if (GetCapture() == window.Handle()) { ReleaseCapture(); }
         textInput.reset(); renderer.reset(); annotations.reset();
         backBuffer.reset(); frozen.reset(); font.Reset();
@@ -556,6 +582,7 @@ struct Overlay::State {
         OverlayResult result;
         result.mode = mode; result.action = action; result.selection = selection.Bounds();
         result.appearanceMilliseconds = appearanceMilliseconds;
+        if (action == OverlayAction::Record) { result.gifFramesPerSecond = gifFramesPerSecond; }
         if (action != OverlayAction::Cancel && action != OverlayAction::Record && !imageAlreadySaved) {
             if (!CommitText()) { return; }
             result.image = renderer->Flatten(result.selection);
@@ -602,17 +629,23 @@ struct Overlay::State {
         Changed(old);
     }
 
+    void ToggleGifFrameRatePicker() {
+        const auto old = Snapshot();
+        choosingGifFrameRate = !choosingGifFrameRate;
+        Changed(old);
+    }
+
     void Activate(const Button button) {
         if (!CommitText()) { return; }
         switch (button.kind) {
         case ButtonKind::Tool: SetTool(static_cast<AnnotationTool>(button.value)); break;
-        case ButtonKind::Undo: AddDamage(annotations->Undo()); AddDamage(toolbar); break;
-        case ButtonKind::Redo: AddDamage(annotations->Redo()); AddDamage(toolbar); break;
         case ButtonKind::Save: Save(); break;
         case ButtonKind::Copy: Finish(OverlayAction::Copy); break;
         case ButtonKind::Pin: Finish(OverlayAction::Pin); break;
         case ButtonKind::Cancel: Finish(OverlayAction::Cancel); break;
         case ButtonKind::Confirm: Finish(DefaultAction()); break;
+        case ButtonKind::GifFrameRate: gifFramesPerSecond = button.value; [[fallthrough]];
+        case ButtonKind::GifFrameRatePicker: ToggleGifFrameRatePicker(); break;
         default: {
             auto style = annotations->Style();
             if (button.kind == ButtonKind::Color) { style.color = PresetColors[button.value]; }
@@ -636,6 +669,7 @@ struct Overlay::State {
     void PointerDown(const POINT point) {
         pointer = point;
         if (const Button* button = HoverButton()) { Activate(*button); return; }
+        if (choosingGifFrameRate) { ToggleGifFrameRatePicker(); return; }
         const auto old = Snapshot();
         if (!CommitText()) { return; }
         const auto hit = HitSelection(selection.Bounds(), point, Scale(5));
@@ -681,6 +715,7 @@ struct Overlay::State {
 
     void RightClick() {
         if (!HasFocus()) { Finish(OverlayAction::Cancel); return; }
+        if (choosingGifFrameRate) { ToggleGifFrameRatePicker(); return; }
         if (textInput && textInput->Active()) { CommitText(); return; }
         if (mode != CaptureMode::Gif && annotations && annotations->Tool() != AnnotationTool::None) { SetTool(annotations->Tool()); return; }
         if (!selection.HasSelection()) { Finish(OverlayAction::Cancel); return; }
@@ -690,7 +725,8 @@ struct Overlay::State {
 
     void Key(const WPARAM key) {
         if (key == VK_ESCAPE) {
-            if (textInput && textInput->Active()) { CommitText(); }
+            if (choosingGifFrameRate) { ToggleGifFrameRatePicker(); }
+            else if (textInput && textInput->Active()) { CommitText(); }
             else { Finish(OverlayAction::Cancel); }
             return;
         }
@@ -760,6 +796,7 @@ void Overlay::SwitchMode(const CaptureMode mode) {
     state.CancelGesture();
     if (GetCapture() == Handle()) { ReleaseCapture(); }
     if (mode != CaptureMode::Gif) { state.CreateEditor(); }
+    state.choosingGifFrameRate = false;
     state.mode = mode;
     state.Changed(old);
     state.AddDamage(state.selection.Bounds()); // GIF hides the editor without losing its history.
@@ -771,6 +808,7 @@ void Overlay::Begin(const CaptureMode mode, const Config& config, std::function<
     const auto started = std::chrono::steady_clock::now();
     auto& state = *state_;
     state.config = config; state.mode = mode;
+    state.gifFramesPerSecond = config.gif.fps;
     state.english = config.general.language == Language::English ||
         (config.general.language == Language::Auto && PRIMARYLANGID(GetUserDefaultUILanguage()) != LANG_CHINESE);
     state.previousForeground = GetForegroundWindow();

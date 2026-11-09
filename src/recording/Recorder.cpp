@@ -151,9 +151,9 @@ protected:
 class RecordBar final : public Window {
 public:
     RecordBar(std::function<void(bool)> stop, std::function<void(bool)> session,
-              std::function<std::int64_t()> elapsed, std::function<void()> retryCompletion, int maximum, bool english)
+              std::function<std::int64_t()> elapsed, std::function<void()> retryCompletion, bool english)
         : stop_(std::move(stop)), session_(std::move(session)), elapsed_(std::move(elapsed)),
-          retryCompletion_(std::move(retryCompletion)), maximum_(maximum), english_(english) {}
+          retryCompletion_(std::move(retryCompletion)), english_(english) {}
     ~RecordBar() override {
         if (Handle()) {
             if (sessionRegistered_) { WTSUnRegisterSessionNotification(Handle()); }
@@ -242,8 +242,7 @@ private:
         const SelectObjectGuard font(context, font_.Get());
         const auto seconds = elapsed_() / Second;
         const auto twoDigits = [](std::int64_t value) { return (value < 10 ? L"0" : L"") + std::to_wstring(value); };
-        const auto text = twoDigits(seconds/60) + L":" + twoDigits(seconds%60) + L" / " +
-            twoDigits(maximum_/60) + L":" + twoDigits(maximum_%60);
+        const auto text = twoDigits(seconds/60) + L":" + twoDigits(seconds%60);
         auto rectangles = Layout();
         DrawTextW(context,text.c_str(),static_cast<int>(text.size()),&rectangles[0],DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         SetDCBrushColor(context,RGB(65,69,79));
@@ -274,7 +273,6 @@ private:
     std::function<void(bool)> session_;
     std::function<std::int64_t()> elapsed_;
     std::function<void()> retryCompletion_;
-    int maximum_;
     bool english_;
     int dpi_ = 96;
     UniqueGdiObject<HFONT> font_;
@@ -359,7 +357,7 @@ struct Recorder::Implementation {
         const auto sourceWidth = static_cast<std::int64_t>(bounds.right)-bounds.left;
         const auto sourceHeight = static_cast<std::int64_t>(bounds.bottom)-bounds.top;
         if (sourceWidth < 1 || sourceHeight < 1 || sourceWidth > 65535 || sourceHeight > 65535 ||
-            options.fps < 1 || options.fps > 50 || options.maxSeconds < 1 || options.maxSeconds > recording::MaximumRecordingSeconds ||
+            options.fps < 1 || options.fps > 50 || options.maxSeconds < 1 || options.maxSeconds > Config::Gif::MaximumSeconds ||
             options.scale < 0 || options.scale > 100 || owner == nullptr || notification < WM_APP || notification > 0xBFFF) {
             throw std::invalid_argument("Invalid recording options or completion window");
         }
@@ -438,7 +436,7 @@ struct Recorder::Implementation {
         border->Open(bounds,owner);
         bar = std::make_unique<RecordBar>([this](bool cancel) { Stop(cancel); },
             [this](bool paused) { Pause(paused,true); },[this] { return Elapsed(); },
-            [this] { NotifyCompletion(); },options.maxSeconds,english);
+            [this] { NotifyCompletion(); },english);
         bar->Open(bounds,owner);
         {
             std::lock_guard lock(mutex);
@@ -562,7 +560,7 @@ struct Recorder::Implementation {
                     stopRequested = true;
                     break;
                 }
-                waitNanoseconds = nextTick-now;
+                waitNanoseconds = std::min(nextTick,maximumTimestamp)-now;
             }
             if (paused) { WaitForSingleObject(wake.Get(),INFINITE); continue; }
             if (waitNanoseconds > 0) { timer.Wait(waitNanoseconds,wake.Get()); continue; }

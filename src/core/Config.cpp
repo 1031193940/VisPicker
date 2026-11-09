@@ -173,14 +173,13 @@ ConfigLoadResult ParseConfig(std::span<const std::uint8_t> bytes, const Config* 
             else { recognized = false; }
         } else if (entry.section == L"gif") {
             if (key == L"fps") { integer(config.gif.fps, retained.gif.fps, 1, 50); }
-            else if (key == L"maxseconds") { integer(config.gif.maxSeconds, retained.gif.maxSeconds, 1, 60); }
             else if (key == L"showcursor") { boolean(config.gif.showCursor, retained.gif.showCursor); }
             else if (key == L"highlightclicks") { boolean(config.gif.highlightClicks, retained.gif.highlightClicks); }
             else if (key == L"dither") { boolean(config.gif.dither, retained.gif.dither); }
             else if (key == L"scale") {
                 if (normalized == L"auto") { config.gif.scale = 0; }
                 else { integer(config.gif.scale, retained.gif.scale, 1, 100); }
-            } else { recognized = false; }
+            } else { recognized = key == L"maxseconds"; } // Ignore the retired limit in older files.
         } else if (entry.section == L"advanced") {
             if (key == L"capture_layered_gif") { boolean(config.gif.captureLayeredWindows, retained.gif.captureLayeredWindows); }
             else { recognized = false; }

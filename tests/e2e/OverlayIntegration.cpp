@@ -91,21 +91,38 @@ void Drag(vispick::Overlay& overlay, const RECT selection, const RECT desktop) {
     GdiFlush();
 }
 
-enum class ScreenshotToolbarSlot : LONG { Save = 8, Pin = 9, Copy = 11 };
+void Click(vispick::Overlay& overlay, const POINT point, const RECT desktop) {
+    const auto client = Position(point, desktop);
+    SendMessageW(overlay.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, client);
+    SendMessageW(overlay.Handle(), WM_LBUTTONUP, 0, client);
+}
+
+enum class ScreenshotToolbarSlot : LONG { Save = 6, Pin = 7, Copy = 9 };
 
 void ClickScreenshotButton(vispick::Overlay& overlay, const RECT selection, const RECT desktop,
     const vispick::MonitorInfo& monitor, const ScreenshotToolbarSlot button) {
     const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
-    const LONG width = std::min<LONG>(scale(470), monitor.bounds.right - monitor.bounds.left);
+    const LONG width = std::min<LONG>(scale(400), monitor.bounds.right - monitor.bounds.left);
     const RECT toolbar = vispick::PlaceToolbar(selection, {width, scale(36)}, monitor.bounds, scale(6));
     const LONG margin = scale(4);
-    const LONG slotWidth = (width - margin * 2) / 13;
+    const LONG slotWidth = (width - margin * 2) / 11;
     const LONG offset = button == ScreenshotToolbarSlot::Copy ? slotWidth : slotWidth / 2;
     const POINT center{toolbar.left + margin + static_cast<LONG>(button) * slotWidth + offset,
         toolbar.top + (margin + scale(32)) / 2};
-    const auto client = Position(center, desktop);
-    SendMessageW(overlay.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, client);
-    SendMessageW(overlay.Handle(), WM_LBUTTONUP, 0, client);
+    Click(overlay, center, desktop);
+}
+
+void ChooseGifFrameRate(vispick::Overlay& overlay, const RECT selection, const RECT desktop,
+    const vispick::MonitorInfo& monitor, const LONG choice, const bool above) {
+    const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
+    const LONG width = std::min<LONG>(scale(320), monitor.bounds.right - monitor.bounds.left);
+    const RECT toolbar = vispick::PlaceToolbar(selection, {width, scale(36)}, monitor.bounds, scale(6));
+    Click(overlay, {toolbar.right - width / 5, toolbar.top + scale(18)}, desktop);
+    Require(overlay.Active(), "Opening the GIF frame-rate picker ended the overlay");
+    const LONG margin = scale(4);
+    const LONG optionCount = 10; // Nine presets and the fixture's custom 17 fps.
+    const LONG choiceX = toolbar.left + margin + (width - margin * 2) * (choice * 2 + 1) / (optionCount * 2);
+    Click(overlay, {choiceX, above ? toolbar.top - scale(16) : toolbar.bottom + scale(16)}, desktop);
 }
 
 void CheckPixels(const vispick::BitmapView image, const RECT rectangle) {
@@ -237,11 +254,22 @@ void Run(const std::filesystem::path& visualOutput) {
         "Cancelled save session resurrected its overlay after the nested dialog returned");
     result.reset();
 
-    begin(vispick::CaptureMode::Screenshot);
+    std::optional<vispick::Bitmap> undoSnapshot;
+    begin(vispick::CaptureMode::Screenshot, [&](vispick::Bitmap image, RECT) {
+        undoSnapshot = std::move(image);
+        return false;
+    });
     Drag(overlay, rectangle, desktop);
     SendMessageW(overlay.Handle(), WM_KEYDOWN, 'R', 0);
     Drag(overlay, {rectangle.left + 12, rectangle.top + 12, rectangle.right - 12, rectangle.bottom - 12}, desktop);
     SendMessageW(overlay.Handle(), WM_KEYDOWN, 'R', 0);
+    Require(SetKeyboardState(keys) != FALSE, "Set thread keyboard state failed");
+    SendMessageW(overlay.Handle(), WM_KEYDOWN, 'Z', 0);
+    SendMessageW(overlay.Handle(), WM_KEYDOWN, 'S', 0);
+    SendMessageW(overlay.Handle(), WM_KEYDOWN, 'Y', 0);
+    Require(SetKeyboardState(originalKeys) != FALSE, "Restore thread keyboard state failed");
+    Require(undoSnapshot && overlay.Active(), "Ctrl+Z did not allow the unannotated selection to be inspected");
+    CheckPixels(undoSnapshot->View(), rectangle);
     const POINT outside{rectangle.right + 12, rectangle.top + 12};
     SendMessageW(overlay.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, Position(outside, desktop));
     SendMessageW(overlay.Handle(), WM_LBUTTONUP, 0, Position(outside, desktop));
@@ -256,7 +284,31 @@ void Run(const std::filesystem::path& visualOutput) {
             changed = changed || result->image.Row(row)[column] != Pattern(rectangle.left + column, rectangle.top + row);
         }
     }
-    Require(changed, "Screenshot annotation disappeared after switching to GIF and back");
+    Require(changed, "Ctrl+Y did not restore the annotation through the GIF mode switch");
+    result.reset();
+
+    config.gif.fps = 17;
+    const auto gifDpi = static_cast<int>(monitors.front().dpiX);
+    const LONG gifBottom = monitor.bottom - MulDiv(36, gifDpi, 96) - MulDiv(6, gifDpi, 96) - 1;
+    const RECT gifSelection{rectangle.left, gifBottom - 48, rectangle.right, gifBottom};
+    begin(vispick::CaptureMode::Gif);
+    Drag(overlay, gifSelection, desktop);
+    ChooseGifFrameRate(overlay, gifSelection, desktop, monitors.front(), 5, true); // 24 fps.
+    overlay.SwitchMode(vispick::CaptureMode::Screenshot);
+    overlay.SwitchMode(vispick::CaptureMode::Gif);
+    SendMessageW(overlay.Handle(), WM_KEYDOWN, VK_RETURN, 0);
+    Require(result && result->action == vispick::OverlayAction::Record && result->gifFramesPerSecond == 24 &&
+        EqualRect(&result->selection, &gifSelection), "GIF picker did not return the selected frame rate after switching modes");
+    result.reset();
+
+    begin(vispick::CaptureMode::Gif);
+    Drag(overlay, rectangle, desktop);
+    ChooseGifFrameRate(overlay, rectangle, desktop, monitors.front(), 6, false); // 25 fps.
+    ChooseGifFrameRate(overlay, rectangle, desktop, monitors.front(), 3, false); // Configured 17 fps.
+    SendMessageW(overlay.Handle(), WM_KEYDOWN, VK_RETURN, 0);
+    Require(result && result->action == vispick::OverlayAction::Record && result->gifFramesPerSecond == 17 &&
+        EqualRect(&result->selection, &rectangle), "GIF picker did not offer the configured custom frame rate");
+    std::puts("GIF frame-rate picker: presets, configured custom rate and mode switches passed");
     result.reset();
 
     begin(vispick::CaptureMode::Gif);

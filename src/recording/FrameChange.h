@@ -10,7 +10,6 @@
 
 namespace vispick::recording {
 
-inline constexpr int MaximumRecordingSeconds = 60;
 inline constexpr std::uint16_t MinimumFrameDelayCentiseconds = 2;
 inline constexpr std::int64_t MinimumFrameDelayNanoseconds = MinimumFrameDelayCentiseconds * 10000000LL;
 

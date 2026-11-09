@@ -18,6 +18,7 @@ struct OverlayResult {
     RECT selection{}; // Physical screen coordinates, right/bottom exclusive.
     Bitmap image; // Opaque crop; empty for Record/Cancel or an accepted saveRequested.
     double appearanceMilliseconds = 0;
+    int gifFramesPerSecond = 30; // Selected rate for Record.
 };
 
 class Overlay final : public Window {

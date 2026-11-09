@@ -24,7 +24,7 @@ TEST_CASE("Config embedded default template is complete and valid") {
     CHECK(result.config.pin.wheel == vispick::PinWheel::Zoom); CHECK(result.config.pin.zoomStep == 10); CHECK(result.config.pin.smooth);
     CHECK(result.config.pin.snapDistance == 10); CHECK(result.config.pin.dustBox == 5); CHECK(result.config.pin.compactMode == vispick::CompactMode::Crop);
     CHECK(result.config.pin.compactSize == 50); CHECK(result.config.pin.compactOpacity == 80); CHECK(result.config.pin.compactLineColor == 0x0000FF);
-    CHECK(result.config.gif.fps == 30); CHECK(result.config.gif.maxSeconds == 60); CHECK(result.config.gif.showCursor);
+    CHECK(result.config.gif.fps == 30); CHECK(result.config.gif.maxSeconds == 300); CHECK(result.config.gif.showCursor);
     CHECK_FALSE(result.config.gif.highlightClicks); CHECK_FALSE(result.config.gif.dither); CHECK(result.config.gif.scale == 100);
     CHECK(result.config.general.trayClick == vispick::TrayClick::Screenshot); CHECK(result.config.general.language == vispick::Language::Auto); CHECK_FALSE(result.config.general.log);
 }
@@ -152,13 +152,21 @@ TEST_CASE("Config ignores the retired Pin hotkey in an existing INI") {
     }
 }
 TEST_CASE("Config GIF accepts minimum maximum and auto scale") {
-    CHECK(ParseSettings("[Gif]\nFps=1\nMaxSeconds=1\nScale=1").diagnostics.empty());
-    const auto result = ParseSettings("[Gif]\nFps=50\nMaxSeconds=60\nScale=Auto");
-    CHECK(result.diagnostics.empty()); CHECK(result.config.gif.scale == 0);
+    CHECK(ParseSettings("[Gif]\nFps=1\nScale=1").diagnostics.empty());
+    const auto result = ParseSettings("[Gif]\nFps=50\nScale=Auto");
+    CHECK(result.diagnostics.empty()); CHECK(result.config.gif.fps == 50); CHECK(result.config.gif.scale == 0);
 }
-TEST_CASE("Config GIF cannot exceed the sixty second product limit") {
-    const auto result = ParseSettings("[Gif]\nFps=51\nMaxSeconds=61\nScale=0");
-    CHECK(result.diagnostics.size() == 3); CHECK(result.config.gif.fps == 30); CHECK(result.config.gif.maxSeconds == 60); CHECK(result.config.gif.scale == 100);
+TEST_CASE("Config GIF rejects out-of-range FPS and numeric scale") {
+    const auto result = ParseSettings("[Gif]\nFps=51\nScale=0");
+    CHECK(result.diagnostics.size() == 2); CHECK(result.config.gif.fps == 30); CHECK(result.config.gif.scale == 100);
+}
+TEST_CASE("Config ignores the legacy GIF duration limit when upgrading an INI") {
+    for (const auto* value : {"60", "600"}) {
+        const auto result = ParseSettings(std::string("[Gif]\nMaxSeconds=") + value + "\nFps=24");
+        CHECK(result.diagnostics.empty());
+        CHECK(result.config.gif.maxSeconds == 300);
+        CHECK(result.config.gif.fps == 24);
+    }
 }
 TEST_CASE("Config numeric resource limits enforce their upper bounds") {
     const auto result = ParseSettings("[Editor]\nMosaicSize=257\n[Pin]\nZoomStep=101\nSnapDistance=257\nDustBox=101\nCompactSize=2049\n[Save]\nJpgQuality=101");

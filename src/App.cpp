@@ -315,7 +315,9 @@ void App::ProcessSelection() {
                     Notify(Text(L"请先结束当前录制或预览。", L"Please finish the current recording or preview first."), true);
                     break;
                 }
-                auto recording = std::make_unique<Recorder>(result.selection, config_.gif, Handle(), RecordingDone, English());
+                auto settings = config_.gif;
+                settings.fps = result.gifFramesPerSecond;
+                auto recording = std::make_unique<Recorder>(result.selection, settings, Handle(), RecordingDone, English());
                 recording->Start();
                 recorder_ = std::move(recording);
             }

@@ -317,17 +317,26 @@ BOOL CALLBACK FindBar(HWND window, LPARAM parameter) {
     }
     return TRUE;
 }
-void SaveOwnedClient(HWND window, const std::filesystem::path& path) {
+RECT OwnedClient(HWND window) {
     DWORD process = 0;
     GetWindowThreadProcessId(window,&process);
     if (process != GetCurrentProcessId()) { throw std::runtime_error("Cannot render a foreign window into the visual report"); }
     RECT client{};
     if (!GetClientRect(window,&client) || client.right <= 0 || client.bottom <= 0) { throw std::runtime_error("Invalid visual report client size"); }
-    vispick::DibSection image(client.right,client.bottom);
+    return client;
+}
+
+void PrintOwnedClient(HWND window, vispick::DibSection& image) {
     std::fill(image.Pixels().begin(),image.Pixels().end(),0xFF000000U);
     SendMessageW(window,WM_PRINTCLIENT,reinterpret_cast<WPARAM>(image.DeviceContext()),PRF_CLIENT);
     if (!GdiFlush()) { throw std::runtime_error("Cannot complete owned-window rendering"); }
     for (auto& pixel : image.Pixels()) { pixel |= 0xFF000000U; }
+}
+
+void SaveOwnedClient(HWND window, const std::filesystem::path& path) {
+    const auto client = OwnedClient(window);
+    vispick::DibSection image(client.right,client.bottom);
+    PrintOwnedClient(window,image);
     vispick::SaveImage(path,vispick::BitmapView(image.Width(),image.Height(),image.Pixels()),vispick::SaveFormat::Png);
 }
 
@@ -354,6 +363,107 @@ void CheckPreviewDpi(Report& report, HWND window, const std::filesystem::path& o
         throw;
     }
     SendMessageW(window,WM_DPICHANGED,MAKELONG(originalDpi,originalDpi),reinterpret_cast<LPARAM>(&original));
+}
+
+struct PreviewFixture {
+    HWND window;
+    RECT client;
+    int dpi;
+    vispick::DibSection image;
+    int left;
+    int right;
+    int trackY;
+
+    explicit PreviewFixture(HWND handle) : window(handle), client(OwnedClient(window)),
+        dpi(static_cast<int>(vispick::DpiForWindow(window))), image(client.right,client.bottom),
+        left(Scale(12)+Scale(4)), right(client.right-Scale(12)-Scale(112)-1),
+        trackY(client.bottom-Scale(100)+(Scale(4)+Scale(30))/2) {}
+
+    int Scale(int value) const { return MulDiv(value,dpi,96); }
+    LPARAM AtPercent(int percent) const { return MAKELPARAM(left+(right-left)*percent/100,trackY); }
+    void Click(LPARAM at) const {
+        SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,at);
+        SendMessageW(window,WM_LBUTTONUP,0,at);
+    }
+    std::array<std::uint32_t,2> FrameColors() {
+        PrintOwnedClient(window,image);
+        const auto row = vispick::BitmapView(image.Width(),image.Height(),image.Pixels()).Row((client.bottom-Scale(100))/2);
+        return {row[client.right/2-Scale(16)],row[client.right/2+Scale(16)]};
+    }
+    std::uint32_t ProgressColor(int percent) {
+        PrintOwnedClient(window,image);
+        return vispick::BitmapView(image.Width(),image.Height(),image.Pixels()).Row(trackY)[left+(right-left)*percent/100];
+    }
+};
+
+void CheckPreviewTimeline(Report& report, Owner& owner, const std::filesystem::path& output) {
+    constexpr std::uint32_t green = 0xFF63A375;
+    constexpr std::uint32_t blue = 0xFF193C5B;
+    constexpr std::uint32_t red = 0xFFED2939;
+    constexpr std::uint32_t filledRail = 0xFF63A4FF;
+    constexpr std::uint32_t emptyRail = 0xFF484C56;
+    constexpr auto fixtureTimeout = std::chrono::seconds(5);
+    const auto suffix = std::to_wstring(GetCurrentProcessId())+L".gif";
+    const auto variableFile = output/(L"preview-variable-"+suffix);
+    const auto singleFile = output/(L"preview-single-"+suffix);
+    const vispick::gif::IndexedImage base{{green},{0,0,0,0,0,0,0,0}};
+    const auto fullFrame = vispick::gif::EncodeIndexedFrame(base);
+    const auto noSave = [](HWND,int,int) -> std::optional<std::filesystem::path> { return std::nullopt; };
+    {
+        vispick::gif::GifWriter writer(variableFile,4,2);
+        writer.WriteFrame(fullFrame,60);
+        const vispick::gif::IndexedImage transparent{{green,blue},{1,1,0,0,1,1,0,0}};
+        writer.WriteFrame(vispick::gif::EncodeIndexedFrame(transparent),{0,0,4,2,280,vispick::gif::DisposalMethod::Keep,0});
+        const vispick::gif::IndexedImage partial{{red},{0,0,0,0}};
+        writer.WriteFrame(vispick::gif::EncodeIndexedFrame(partial),{2,0,2,2,60});
+        writer.Finish();
+    }
+    {
+        vispick::GifPreview preview({variableFile,4,2,3,400},{},owner.Handle(),PreviewClosed,noSave,true);
+        preview.Show();
+        const auto window = preview.Handle();
+        SendMessageW(window,WM_KEYDOWN,VK_SPACE,0);
+        PreviewFixture fixture(window);
+        constexpr std::array initial{green,green};
+        constexpr std::array middle{blue,green};
+        constexpr std::array last{blue,red};
+        WaitUntil([&] { return fixture.FrameColors() == initial; },fixtureTimeout);
+        // 20% by duration is the second frame, unlike equal frame divisions.
+        fixture.Click(fixture.AtPercent(20));
+        WaitUntil([&] { return fixture.FrameColors() == middle; },fixtureTimeout);
+        report.Require(fixture.ProgressColor(10) == filledRail,"preview_click_uses_variable_delays_and_transparency");
+        SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,fixture.AtPercent(20));
+        SendMessageW(window,WM_MOUSEMOVE,MK_LBUTTON,fixture.AtPercent(100));
+        report.Require(GetCapture() == window && fixture.FrameColors() == middle && fixture.ProgressColor(80) == filledRail,
+            "preview_drag_updates_progress_before_seek");
+        SendMessageW(window,WM_LBUTTONUP,0,fixture.AtPercent(100));
+        WaitUntil([&] { return fixture.FrameColors() == last; },fixtureTimeout);
+        report.Require(GetCapture() != window,"preview_drag_releases_capture_and_composes_target");
+        SaveOwnedClient(window,output/L"preview-timeline-end.png");
+        fixture.Click(fixture.AtPercent(0));
+        WaitUntil([&] { return fixture.FrameColors() == initial; },fixtureTimeout);
+        PumpFor(std::chrono::milliseconds(650));
+        report.Require(fixture.FrameColors() == initial && fixture.ProgressColor(10) == emptyRail,"preview_rewind_preserves_paused_state");
+        CheckPreviewDpi(report,window,output);
+    }
+    {
+        vispick::gif::GifWriter writer(singleFile,4,2);
+        writer.WriteFrame(fullFrame,static_cast<std::uint16_t>(vispick::Config::Gif::MaximumSeconds*100));
+        writer.Finish();
+    }
+    {
+        vispick::GifPreview preview({singleFile,4,2,1,vispick::Config::Gif::MaximumSeconds*100},{},owner.Handle(),PreviewClosed,noSave,true);
+        preview.Show();
+        const auto window = preview.Handle();
+        SendMessageW(window,WM_KEYDOWN,VK_SPACE,0);
+        PreviewFixture fixture(window);
+        WaitUntil([&] { return fixture.FrameColors() == std::array{green,green}; },fixtureTimeout);
+        fixture.Click(MAKELPARAM(fixture.right-1,fixture.trackY));
+        WaitUntil([&] { return fixture.ProgressColor(90) == filledRail; },fixtureTimeout);
+        SendMessageW(window,WM_KEYDOWN,VK_SPACE,0);
+        WaitUntil([&] { return fixture.ProgressColor(90) == emptyRail; },fixtureTimeout);
+        report.Require(fixture.FrameColors() == std::array{green,green},"preview_five_minute_single_frame_seeks_and_loops");
+    }
 }
 
 void ClickRecordingButton(Report& report, HWND owner, bool cancel, const std::filesystem::path& visualPath = {}) {
@@ -532,22 +642,28 @@ int wmain() {
     Report report;
     auto output = std::filesystem::current_path()/L"out/reports/recording-integration";
     try {
+        bool previewOnly = false;
         const auto arguments = vispick::ProcessArguments();
         for (std::size_t argument = 0; argument < arguments.size(); ++argument) {
             const auto name = arguments[argument];
+            if (name == L"--preview-only") { previewOnly = true; continue; }
             if (++argument >= arguments.size()) { throw std::invalid_argument("Missing recording fixture option value"); }
             if (name == L"--output") { output = arguments[argument]; continue; }
             std::size_t consumed = 0;
             const auto value = std::stoul(arguments[argument],&consumed);
             if (consumed != arguments[argument].size()) { throw std::invalid_argument("Invalid recording fixture number"); }
-            if (name == L"--seconds" && value >= 1 && value <= 60) { recordingSeconds = static_cast<unsigned>(value); }
+            if (name == L"--seconds" && value >= 1 && value <= vispick::Config::Gif::MaximumSeconds) { recordingSeconds = static_cast<unsigned>(value); }
             else if (name == L"--width" && value >= 320 && value <= 7680) { patternWidth = static_cast<int>(value); }
             else if (name == L"--height" && value >= 120 && value <= 4320) { patternHeight = static_cast<int>(value); }
-            else { throw std::invalid_argument("Usage: VisPickRecordingIntegration [--output DIR] [--seconds 1..60] [--width N] [--height N]"); }
+            else { throw std::invalid_argument("Usage: VisPickRecordingIntegration [--output DIR] [--preview-only] [--seconds 1..300] [--width N] [--height N]"); }
         }
         output = std::filesystem::absolute(output);
         std::filesystem::create_directories(output);
-        Run(report,output);
+        if (previewOnly) {
+            vispick::InitializeDpiAwareness();
+            Owner owner;
+            CheckPreviewTimeline(report,owner,output);
+        } else { Run(report,output); }
     } catch (const std::exception& error) { report.failure = error.what(); std::cerr << "FAIL " << report.failure << std::endl; }
     std::ofstream json(output/L"recording-integration.json",std::ios::binary);
     json << std::setprecision(17);

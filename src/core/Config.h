@@ -58,8 +58,9 @@ struct Config {
         std::uint32_t compactLineColor = 0x0000FF;
     } pin;
     struct Gif {
+        static constexpr int MaximumSeconds = 5 * 60;
         int fps = 30;
-        int maxSeconds = 60;
+        int maxSeconds = MaximumSeconds; // Internal duration limit; tests can use a shorter interval.
         bool showCursor = true;
         bool highlightClicks = false;
         bool dither = false;
