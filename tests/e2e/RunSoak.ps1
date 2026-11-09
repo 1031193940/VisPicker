@@ -31,7 +31,7 @@ $metadata = [ordered]@{
     scheduling_tolerance_seconds = 0.250
     started_utc = [DateTime]::UtcNow.ToString('o')
     coverage = 'Owned passive 256x144 pattern; production capture, annotation, PNG, pin create/close, one-second GIF/WIC. No clipboard or full interactive Overlay workflow.'
-    eight_hour_requirement = 'Actual elapsed time at least 28800 seconds, 30-second cadence, and no diagnostic instrumentation.'
+    eight_hour_requirement = 'Optional benchmark: actual elapsed time at least 28800 seconds, 30-second cadence, and no diagnostic instrumentation.'
     timing_method = 'Fixed interval start schedule, no catch-up cycles; starts more than 250ms late fail. GIF duration is compared with actual capture timestamps within one 10ms GIF tick.'
 }
 $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $resolvedOutput 'invocation.json') -Encoding UTF8

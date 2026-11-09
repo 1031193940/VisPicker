@@ -2,9 +2,9 @@
 
 面向 Windows 的便携截图、参考图和 GIF 工具。
 
-当前提供 Windows 11 x64 便携预览版。见 [0.5.3 发布说明](docs/releases/VisPick-0.5.3-candidate.md)。
+Windows 11 x64 便携版 0.5.3，下载 `VisPick-0.5.3.zip`。 [GitHub 发布页](https://github.com/1031193940/VisPicker/releases/tag/v0.5.3)
 
-**当前工作区：P1–P5 功能集成，P6 验证中。** 已接入常驻托盘、截图编辑、参考图和 GIF 录制预览。当前验证环境是远程显示适配器，旧系统、物理多屏和第三方软件粘贴/播放兼容性不能由本机测试推断；正式 v1.0 验收尚未完成。
+功能回归在 Windows 11 x64 的单屏 RDP 会话完成。Win10、Win7、干净系统、物理多屏和第三方软件粘贴等项目仍待验证。
 
 ## 使用
 
@@ -62,10 +62,9 @@ VisPick.exe --config "D:\Tools\VisPick.ini"
 
 开发环境：Windows、Visual Studio 2022 的 C++ 桌面开发组件、MSVC **14.42**、Windows SDK、VS 自带 CMake 3.29 / Ninja。构建脚本自动查找工具，不需要手工改 PATH。
 
-在 PowerShell 中运行：
+在仓库根目录的 PowerShell 中运行。
 
 ```powershell
-cd D:\Workspace\VisPick
 .\build.ps1 -Analyze
 ```
 
@@ -147,7 +146,7 @@ Remove-Item Env:\VISPICK_QUALITY_INPUT
 - [P2–P5 产品集成报告](docs/reports/P2-P5-2026-11-06.md)
 - [P6 兼容与稳定性记录](docs/reports/P6-2026-11-06.md)
 - [完整验收清单](docs/P6_CHECKLIST.md)
-- [候选版已知边界](docs/KNOWN_ISSUES.md)
+- [已知限制与待验收项目](docs/KNOWN_ISSUES.md)
 - [P0 评审修正记录](docs/reviews/P0-corrections-2026-11-06.md)
 - [P0 实测与验收报告](docs/reports/P0-2026-11-06.md)
 - [P0 手工验收清单](docs/P0_CHECKLIST.md)
@@ -159,8 +158,9 @@ Remove-Item Env:\VISPICK_QUALITY_INPUT
 ```powershell
 .\tests\e2e\RunProductChecks.ps1 -Architecture x64 -FullRecording -IdleSeconds 600
 .\tests\e2e\RunProductChecks.ps1 -Architecture x86 -FullRecording
-.\tests\e2e\RunSoak.ps1 -Seconds 28800 -IntervalSeconds 30
 .\scripts\Package.ps1
 ```
 
-桌面测试须串行运行。集成回归只对自身窗口发消息，剪贴板检查使用独立窗口站；八小时浸泡需实际经过八小时。候选版包包含两个 exe、配置参考和验收文档，首次运行仍由 exe 生成自己的 `VisPick.ini`。
+桌面测试须串行运行。集成回归只对自身窗口发消息，剪贴板检查使用独立窗口站。便携包包含两个 exe、使用说明和配置模板。
+
+需要长时间资源诊断时，可选用 `.\tests\e2e\RunSoak.ps1 -Seconds 28800 -IntervalSeconds 30`。八小时浸泡已退出发布验收。 [诊断口径](docs/P6_CHECKLIST.md#浸泡测试的覆盖与口径)

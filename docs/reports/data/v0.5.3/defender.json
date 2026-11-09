@@ -1,0 +1,26 @@
+{
+  "scanned_utc": "2026-11-09T09:21:25.5390715Z",
+  "platform": "4.18.26100.4",
+  "mode": "Passive Mode",
+  "signatures": "1.463.99.0",
+  "scans": [
+    {
+      "file": "VisPick.exe",
+      "version": "0.5.3",
+      "cli_version": "VisPick 0.5.3",
+      "bytes": 795136,
+      "sha256": "5489723184C0BCC54A22A3AD20C4D35816ED9492800992BF3DAD7BE7552C9BCE",
+      "exit_code": 0,
+      "result": "no_threats"
+    },
+    {
+      "file": "VisPick-x86.exe",
+      "version": "0.5.3",
+      "cli_version": "VisPick 0.5.3",
+      "bytes": 636928,
+      "sha256": "A58E63B1744E5270DAF2EA456826AF14215FCBD1ADABEE27F666AFF1EDE37328",
+      "exit_code": 0,
+      "result": "no_threats"
+    }
+  ]
+}

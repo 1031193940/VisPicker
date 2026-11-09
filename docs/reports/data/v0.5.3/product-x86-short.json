@@ -1,0 +1,19 @@
+{
+  "architecture": "x86",
+  "configuration": "Release",
+  "recorded_utc": "2026-11-09T09:28:14.0253092Z",
+  "product_sha256": "A58E63B1744E5270DAF2EA456826AF14215FCBD1ADABEE27F666AFF1EDE37328",
+  "physical_display_acceptance": "not_assessed_by_this_runner",
+  "checks": [
+    {
+      "name": "output",
+      "exit_code": 0,
+      "seconds": 14.2304984
+    },
+    {
+      "name": "overlay",
+      "exit_code": 1,
+      "seconds": 2.3185688
+    }
+  ]
+}

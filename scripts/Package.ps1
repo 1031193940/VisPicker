@@ -44,7 +44,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 [ordered]@{
     version = $Version; created_utc = [DateTime]::UtcNow.ToString('o')
     source_revision = $revision; source_sha256 = $buildSource
-    release_status = 'candidate'
+    release_status = if ($Version.Contains('-')) { 'candidate' } else { 'stable' }
     files = @($checksums)
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $packageRoot 'manifest.json') -Encoding utf8
 Compress-Archive -LiteralPath $packageRoot -DestinationPath $archive -CompressionLevel Optimal

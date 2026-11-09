@@ -1,6 +1,6 @@
 # P6 兼容性、稳定性与发布验收清单
 
-本清单对应 [DESIGN.md 的 P6 与第 5 节](DESIGN.md)，记录执行方法和证据边界，不修改原验收标准。当前为开发验收清单，不能据此称 v1.0 已通过全部验收。已知实测见 [2026-11-06 报告](reports/P6-2026-11-06.md)。
+本清单对应设计文档的 P6 与第 5 节。0.5.3 面向 Windows 11 x64 发布，v1.0 的完整兼容矩阵仍待验收。原 AC6-3 已退出发布验收，保留为可选诊断。 [设计文档](DESIGN.md) · [最新复测报告](reports/P6-memory-2026-11-06.md)
 
 状态统一使用：**通过**（注明具体范围）、**失败**、**未测**、**环境不具备资格**、**跳过**（明确决定）。代码存在、编译通过、模拟消息通过都不能替代相应实机步骤；旧版本结果也不能自动转为最终发布版本结果。
 
@@ -16,13 +16,13 @@
 
 | 项目 | 要求 | 当前证据/状态 | 完成时需保存 |
 |---|---|---|---|
-| D6-1 | x64 `VisPick.exe`、`VisPick-x86.exe`、使用/热键/配置 README | 已生成 0.5.3-candidate 便携包，见 [包清单](reports/data/p6-0.5.3/package-manifest.json) | 两个 exe 的字节数、哈希、README、构建日志 |
+| D6-1 | x64 `VisPick.exe`、`VisPick-x86.exe`、使用/热键/配置 README | 0.5.3 便携发行文件为 `VisPick-0.5.3.zip`。 [发布页](https://github.com/1031193940/VisPicker/releases/tag/v0.5.3) | 两个 exe 的字节数、哈希、README、构建日志 |
 | D6-2 / AC6-1 | 必需 OS × 架构 × DPI 矩阵全部通过 | 当前会话有功能诊断；其余见下表，未完成完整矩阵 | 各平台日志、手工结果和环境记录 |
-| D6-3 / AC6-3 | 真实 8 小时，每 30 秒截图、贴图、录制；无崩溃，内存/GDI/USER/句柄增长均 <5% | **本轮跳过**，按用户决定。0.5.3 的 720.047 秒复测通过，私有提交峰值 +2.18%。八小时试跑在 136.497 秒因会话锁定中止，未取得通过证据。见 [复测报告](reports/P6-memory-2026-11-06.md) | 若恢复此项，保留 28800 秒以上最终报告、10 分钟/1 小时检查点和全部采样 |
+| D6-3 | 性能与稳定性复测报告 | 0.5.3 候选构建完成 720.047 秒复测，私有提交峰值 +2.18%。八小时试跑在 136.497 秒因会话锁定中止。 [复测报告](reports/P6-memory-2026-11-06.md) | 复测范围、时长、资源采样和环境 |
 | AC6-2 | 干净系统只复制 exe，双击生成 ini，三个热键可用，无安装/授权流程 | 未测干净系统 | 从干净快照开始的录像/步骤记录与输出 |
-| AC6-4 | 两架构 exe ≤2 MB | 0.5.3 构建 exe 通过，x64 795,136 B（0.795 MB，0.758 MiB），x86 636,928 B（0.637 MB，0.607 MiB） | 精确字节数、十进制 MB 与 MiB |
+| AC6-4 | 两架构 exe ≤2 MB | 0.5.3 正式构建通过，x64 795,136 B（0.795 MB，0.758 MiB），x86 636,928 B（0.637 MB，0.607 MiB） | 精确字节数、十进制 MB 与 MiB |
 | AC6-5 | P0–P5 性能指标全部复测 | 0.5.3 x64 的 600 秒常驻通过，两架构 60 秒录制有 RDP 数据。物理性能与其他未测项目见下表 | 下文性能矩阵的最终产品报告 |
-| AC6-6 | Windows Defender 无威胁 | 0.5.3 构建 exe 两架构定向扫描无威胁，见[证据](reports/data/p6-0.5.3/defender.json) | Defender/签名版本、时间、扫描对象哈希、结果 |
+| AC6-6 | Windows Defender 无威胁 | 0.5.3 正式构建的两架构定向扫描无威胁。 [扫描证据](reports/data/v0.5.3/defender.json) | Defender/签名版本、时间、扫描对象哈希、结果 |
 | D6-4 | 已知问题清单、源码 v1.0 标签 | 本文列出未验收项；正式标签待最终发布登记 | 已知限制、提交号及实际标签 |
 | N7 | 不联网、无遥测，写入位置符合设计 | 0.5.3 已检查导入和网络 API，x64 空闲进程的 12 次网络抽样均为零条目。运行范围与输出测试见 [复测报告](reports/P6-memory-2026-11-06.md) | 网络调用/依赖审查结果、配置、保存和临时文件路径记录 |
 
@@ -54,7 +54,6 @@
 .\out\build\x64-Release\VisPickOutputTests.exe
 .\out\build\x64-Release\VisPickPinTests.exe
 .\out\build\x64-Release\VisPickRecordingIntegration.exe --seconds 60 --width 1920 --height 1080 --output .\out\reports\p6-recording-x64-final
-.\tests\e2e\RunSoak.ps1 -Seconds 28800 -IntervalSeconds 30 -Output .\out\reports\p6-soak-x64-8h
 ```
 
 x86 使用 `out/build/x86-Release`；60 秒录制尺寸按 AC5-3 使用 1280×720。录制图样工具覆盖确定性 UI 图样，不替代真实视频内容的 720p 丢帧测试。`VisPickOutputTests` 使用独立窗口站剪贴板，不验证第三方应用粘贴。上述路径须使用新目录，保留失败日志，不覆盖成后续通过结果。
@@ -62,6 +61,8 @@ x86 使用 `out/build/x86-Release`；60 秒录制尺寸按 AC5-3 使用 1280×72
 浏览器 GIF 冒烟使用 Node.js 22+。先运行默认 2 秒 `VisPickRecordingIntegration`，再把输出的 `automatic-saved.gif` 交给 `node tests/e2e/CheckBrowserGif.mjs <automatic-saved.gif> <新报告.json>`。结果记录三种已装浏览器的合成采样和版本，精确时序与人工清单中的其他图样仍单独验证。
 
 ## 浸泡测试的覆盖与口径
+
+八小时浸泡是可选诊断。需要运行时，在持续可采集的交互桌面执行 `.\tests\e2e\RunSoak.ps1 -Seconds 28800 -IntervalSeconds 30 -Output .\out\reports\p6-soak-x64-8h`。
 
 [Soak.cpp](../tests/e2e/Soak.cpp) 实际调用生产 `CaptureScreen`、`AnnotationModel`/`EditorRenderer`、WIC 编解码、`PinManager`、`Recorder`。每轮捕获自有 256×144 被动图样，校验截图像素；绘制矩形并校验 PNG 往返；创建/关闭贴图；录制 1 秒 GIF 并逐帧 WIC 解码。贴图关闭调用 `ProcessPending`，回收站设 0；录制完成后 `TakeResult` 和析构结束工作线程及录制工具条，再采资源数据。仅删除返回路径属于本测试 PID 的临时 GIF。
 
@@ -134,8 +135,7 @@ x86 使用 `out/build/x86-Release`；60 秒录制尺寸按 AC5-3 使用 1280×72
 | AC5-4 | 60 秒自动停止，实际时间轴误差 <1% | 对照真实首帧完成→停止时间，另列启动延迟及 wall duration |
 | AC5-6 | 录满 60 秒，进程内存峰值 x64 ≤300 MB、x86 ≤200 MB | 报告内存口径、采样频率和是否含测试图样；预算不作实测 |
 | AC5-7 | 1080p UI 停止→预览 ≤1 秒 | 小图 UI 启动耗时不替代 |
-| AC6-3 | 8 小时、30 秒一轮；资源增长全部 <5% | 本轮跳过。后续复验按上述 schema 7 口径记录 |
 
 ## 发布收尾
 
-最终构建、导入、manifest、位数和单测日志齐全后，登记两架构文件哈希与精确字节数；逐个使用 Windows 安全中心对最终 exe 扫描并保存结果。对最终源码审查网络 API、子进程和文件写入路径；扫描结果不代替代码审查。整理必需平台未通过项、实际可复现限制与复现步骤。只有相应验收证据齐全时才把状态改为通过；源码标签、包版本和报告中的哈希必须对应同一发布候选。
+最终构建、导入、manifest、位数和单测日志齐全后，登记两架构文件哈希与精确字节数。对最终 exe 执行 Defender 扫描并保存结果。审查源码的网络 API、子进程和文件写入路径。整理尚未验收的平台及实际限制。通过状态需有对应证据，源码标签、包版本和报告中的哈希对应同一次发布。

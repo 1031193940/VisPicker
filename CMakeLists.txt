@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.29)
 project(VisPick VERSION 0.5.3 LANGUAGES CXX RC)
-set(VISPICK_PRODUCT_VERSION "${PROJECT_VERSION}-candidate")
+set(VISPICK_PRODUCT_VERSION "${PROJECT_VERSION}")
 
 if(NOT WIN32 OR NOT MSVC)
     message(FATAL_ERROR "VisPick requires Windows and the MSVC v143 toolset.")
