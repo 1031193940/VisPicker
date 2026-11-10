@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/AppCommand.h"
+#include "core/Config.h"
 #include <windows.h>
 #include <string_view>
 
@@ -17,6 +18,8 @@ public:
     void Remove() noexcept;
     void SetLeftClickCommand(AppCommand command) noexcept;
     void SetLanguage(bool english) noexcept;
+    void SetHotkeys(const Config::Hotkeys& hotkeys) noexcept;
+    [[nodiscard]] static std::wstring ShortcutLabel(std::wstring_view label, Hotkey hotkey);
     [[nodiscard]] AppCommand HandleCallback(WPARAM parameter, LPARAM data, bool autostartEnabled,
                                           bool pinsAcrossDesktops = false);
     [[nodiscard]] bool Notify(std::wstring_view title, std::wstring_view text, bool warning = false) noexcept;
@@ -30,6 +33,7 @@ private:
     bool added_ = false;
     bool version4_ = false;
     bool english_ = false;
+    Config::Hotkeys hotkeys_;
 };
 
 } // namespace vispick

@@ -31,6 +31,20 @@ P0 评审时，下节审查了开发工具新增 API，并将确认兼容 Win7 �
 - **GIF 预览悬停**：用 `TrackMouseEvent` 接收 `WM_MOUSELEAVE`。微软文档列出的最低桌面客户端为 Windows 2000。 [TrackMouseEvent](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackmouseevent)
 - **动态路径**：`Compat` 动态探测 DPI/窗口捕获接口；可选 `shcore.dll` 与崩溃时的 `dbghelp.dll` 使用系统目录绝对路径。新 API 或新标志在旧系统不可用时需保留回退。动态 API 不因为已有运行成功记录就自动加入 Win7 静态白名单；具体路径与未测边界见 [P6 审计](reports/P6-code-audit.md)。
 
+## 0.6.0 评审迭代新增导入（2026-11-10）
+
+本次只核准下面五个实际新增导入，保留普通导入与延迟导入的原有检查。最低客户端按微软 Requirements 核对；API-set 的较晚引入日期不代表原始 DLL 导出的最低系统版本。
+
+| 实际导入 | 用途 | 官方最低客户端及依据 |
+|---|---|---|
+| `user32.dll!IsChild` | 判断异常窗口是否属于截图编辑窗口 | Windows 2000 Professional；[IsChild](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-ischild) |
+| `user32.dll!GetClipboardOwner` | PNG 后台编码完成时确认剪贴板仍归本次截图所有 | Windows 2000 Professional；[GetClipboardOwner](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipboardowner) |
+| `gdi32.dll!GetObjectW` | 获取工具栏画笔属性，用于抗锯齿图标绘制 | Windows 2000 Professional；[GetObjectW](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-getobjectw) |
+| `gdiplus.dll!GdipDrawLines` | 经 `Graphics::DrawLines(PointF*)` 绘制图标折线 | Windows XP / Windows 2000 Professional、GDI+ 1.0；[微软归档的浮点重载说明](https://learn.microsoft.com/en-us/previous-versions//ms536019%28v%3Dvs.85%29) |
+| `gdiplus.dll!GdipFillRectangle` | 经 `Graphics::FillRectangle(REAL...)` 填充图标矩形 | Windows XP / Windows 2000 Professional；[FillRectangle](https://learn.microsoft.com/en-us/windows/win32/api/gdiplusgraphics/nf-gdiplusgraphics-graphics-fillrectangle%28constbrush_real_real_real_real%29) |
+
+[微软 Graphics flat API 对照表](https://learn.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-graphics-flat) 明确列出上述两个 GDI+ 导出与对应 C++ wrapper 的映射；产品仍通过 wrapper 调用，并保留系统目录 GDI+ 延迟加载与绘制失败时的 GDI 回退。`DrawLines(PointF*)` 当前新版页面缺少最低系统元数据，因此引用同一浮点重载的微软归档 Requirements。此次核准说明这五个导出不提高 Win7 目标门槛，不代表完成 Win7 实机验收。
+
 ## P0 评审新增 API 审查（历史基线）
 
 以下最低客户端来自微软 API 文档的 Requirements，以及其 [MicrosoftDocs/sdk-api 官方源文件](https://github.com/MicrosoftDocs/sdk-api) 中的 `req.target-min-winverclnt` 元数据。表中 XP/2000 表示当前文档列出的最低客户端；不推断更早版本是否实际上也有该 API。

@@ -32,6 +32,7 @@ constexpr UINT SelectionFinished = WM_APP + 5;
 constexpr UINT ImageSaved = WM_APP + 6;
 constexpr UINT RecordingDone = WM_APP + 7;
 constexpr UINT PreviewClosed = WM_APP + 8;
+constexpr UINT ClipboardReady = WM_APP + 9;
 constexpr UINT_PTR ConfigurationDebounce = 1;
 constexpr UINT_PTR ConfigurationRetry = 2;
 constexpr UINT_PTR HotkeyRetry = 3;
@@ -81,6 +82,7 @@ App::~App() {
     overlay_.reset();
     pins_.reset();
     imageSaver_.reset();
+    imageClipboard_.reset();
     hotkeys_.reset();
     tray_.reset();
     Window::SetExceptionCallback(nullptr);
@@ -100,19 +102,47 @@ std::wstring App::Text(const wchar_t* chinese, const wchar_t* english) const {
 
 void App::Report(std::wstring_view message, bool warning) {
     log_.Write(warning ? LogLevel::Warning : LogLevel::Info, message);
+    if (warning && startupNotificationPending_ && startupProblem_.empty()) {
+        startupProblem_ = message.substr(0, 160);
+    }
+    if (tray_ && !startupNotificationPending_ &&
+        (config_.general.notify == NotificationMode::All ||
+            (warning && config_.general.notify == NotificationMode::Errors))) {
+        (void)tray_->Notify(L"VisPick", message, warning);
+    }
 }
 
-void App::NotifyStartup() {
-    if (!startupNotificationPending_) { return; }
-    startupNotificationPending_ = false;
-    const auto message = Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已启动。右键系统托盘图标打开菜单。",
-        L"VisPick " VISPICK_PRODUCT_VERSION_W L" started. Right-click its system tray icon for commands.");
-    Report(message);
-    if (tray_) { (void)tray_->Notify(L"VisPick", message); }
+void App::NotifyStartup(const bool repeatedLaunch) {
+    if (!startupNotificationPending_ && !repeatedLaunch) { return; }
+    auto message = repeatedLaunch
+        ? Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已在运行。右键系统托盘图标打开菜单。",
+            L"VisPick " VISPICK_PRODUCT_VERSION_W L" is already running. Right-click its tray icon for commands.")
+        : Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已启动。右键系统托盘图标打开菜单。",
+            L"VisPick " VISPICK_PRODUCT_VERSION_W L" started. Right-click its system tray icon for commands.");
+    const bool warning = config_.general.notify != NotificationMode::None &&
+        (!configurationProblems_.empty() || !hotkeyProblems_.empty() || !startupProblem_.empty());
+    if (warning) {
+        if (!hotkeyProblems_.empty()) {
+            message += L"\n" + hotkeyProblems_.substr(0, hotkeyProblems_.find(L'\n'));
+        } else if (!startupProblem_.empty()) {
+            message += L"\n" + startupProblem_;
+        }
+        if (!configurationProblems_.empty() || !hotkeyProblems_.empty()) {
+            message += Text(L"\n配置或快捷键存在问题，请在「关于」中查看。",
+                L"\nConfiguration or shortcut problems: see About for details.");
+        }
+    }
+    log_.Write(warning ? LogLevel::Warning : LogLevel::Info, message);
+    if (tray_ && tray_->Notify(L"VisPick", message, warning)) {
+        startupNotificationPending_ = false;
+        startupProblem_.clear();
+    }
 }
 
 void App::WindowFailed(const WindowException& error) noexcept {
-    if (exceptionOwner && error.message != WindowFailure) { PostMessageW(exceptionOwner, WindowFailure, error.message, 0); }
+    if (exceptionOwner && error.message != WindowFailure) {
+        PostMessageW(exceptionOwner, WindowFailure, error.message, reinterpret_cast<LPARAM>(error.window));
+    }
 }
 
 int App::Run(const LaunchOptions& options, const std::wstring& instanceWindowTitle) {
@@ -137,6 +167,7 @@ int App::Run(const LaunchOptions& options, const std::wstring& instanceWindowTit
     hotkeys_ = std::make_unique<HotkeyRegistration>(Handle());
     overlay_ = std::make_unique<Overlay>(Handle());
     imageSaver_ = std::make_unique<ImageSaver>();
+    imageClipboard_ = std::make_unique<ImageClipboard>(Handle(), ClipboardReady);
     pins_ = std::make_unique<PinManager>(Handle(), [this](Bitmap image) { (void)SaveBitmap(std::move(image)); },
         [this](std::wstring message, bool warning) { Report(message, warning); });
     watcher_ = std::make_unique<ConfigWatcher>(configPath_, Handle(), ConfigurationChanged);
@@ -198,6 +229,7 @@ void App::ApplyConfiguration(bool retryHotkeys) {
     }
     tray_->SetLanguage(English());
     tray_->SetLeftClickCommand(TrayCommand(config_.general.trayClick));
+    tray_->SetHotkeys(config_.hotkeys);
     if (pins_) {
         try { pins_->Configure(config_.pin, English()); }
         catch (const std::exception& error) { Report(ExceptionMessage(error), true); }
@@ -265,10 +297,10 @@ void App::ProcessCommands() {
 
 void App::BeginSelection(CaptureMode mode) {
     if (!selections_.empty()) { return; } // A completed selection still owns the next action.
-    if (recorder_) { Report(Text(L"请先停止当前 GIF 录制。", L"Please stop the current GIF recording first.")); return; }
+    if (recorder_) { Report(Text(L"请先停止当前 GIF 录制。", L"Please stop the current GIF recording first."), true); return; }
     if (mode == CaptureMode::Gif && preview_ && !preview_->Closed()) {
         SetForegroundWindow(preview_->Handle());
-        Report(Text(L"请先保存或放弃当前 GIF 预览。", L"Please save or discard the current GIF preview first."));
+        Report(Text(L"请先保存或放弃当前 GIF 预览。", L"Please save or discard the current GIF preview first."), true);
         return;
     }
     if (overlay_->Active()) { overlay_->SwitchMode(mode); return; }
@@ -305,8 +337,12 @@ void App::ProcessSelection() {
     try {
         switch (result.action) {
         case OverlayAction::Copy:
-            CopyImage(Handle(), result.image.View());
-            log_.Write(LogLevel::Info, L"image_copied width=" + std::to_wstring(result.image.Width()) + L" height=" + std::to_wstring(result.image.Height()));
+            {
+                const auto width = result.image.Width();
+                const auto height = result.image.Height();
+                imageClipboard_->Copy(std::move(result.image));
+                log_.Write(LogLevel::Info, L"image_copied width=" + std::to_wstring(width) + L" height=" + std::to_wstring(height));
+            }
             break;
         case OverlayAction::Save: // saveRequested already accepted ownership.
         case OverlayAction::Cancel: break;
@@ -422,8 +458,7 @@ void App::Dispatch(AppCommand command, const std::filesystem::path& file) {
     log_.Write(LogLevel::Info, std::wstring(L"command=") + CommandName(command));
     switch (command) {
     case AppCommand::None:
-        Report(Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已在运行。右键系统托盘图标打开菜单。",
-            L"VisPick " VISPICK_PRODUCT_VERSION_W L" is already running. Right-click its system tray icon for commands."));
+        NotifyStartup(true);
         break;
     case AppCommand::Screenshot:
         BeginSelection(CaptureMode::Screenshot);
@@ -574,6 +609,12 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
     case RecordingDone:
         RecordingFinished();
         return 0;
+    case ClipboardReady:
+        try { imageClipboard_->PublishReady(); }
+        catch (const std::exception& error) {
+            Report(Text(L"图片已复制，PNG 格式补充失败：", L"Image copied; adding the PNG format failed: ") + ExceptionMessage(error), true);
+        }
+        return 0;
     case PreviewClosed:
         if (preview_ && preview_->Closed() && !preview_->Busy() && !modalDepth_) { preview_.reset(); }
         PostMessageW(Handle(), ProcessQueue, 0, 0);
@@ -587,6 +628,11 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
         if (pins_) { pins_->DisplayChanged(); }
         return 0;
     case WindowFailure:
+        if (overlay_ && overlay_->Active() &&
+            (reinterpret_cast<HWND>(data) == overlay_->Handle() || IsChild(overlay_->Handle(), reinterpret_cast<HWND>(data)))) {
+            // Release the frozen full-screen window before reporting the error.
+            overlay_->Cancel();
+        }
         Report(Text(L"窗口操作失败，已保留错误计数。", L"A window operation failed; the error was recorded."), true);
         return 0;
     case WM_CLOSE:

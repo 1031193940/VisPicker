@@ -2,6 +2,7 @@
 #include "overlay/Selection.h"
 
 #include <array>
+#include <limits>
 
 namespace {
 constexpr RECT Desktop{-1920, -1080, 2560, 1440};
@@ -151,4 +152,82 @@ TEST_CASE("Selection losing capture restores the original rectangle and discards
     selection.CancelDrag();
     CHECK_FALSE(selection.Dragging());
     CHECK(Same(selection.Bounds(), original));
+}
+
+TEST_CASE("Keyboard resize keeps the origin and clamps right and bottom without overflow") {
+    vispick::Selection selection;
+    selection.Reset(Desktop);
+    selection.Set({-100, -100, 100, 100});
+    selection.ResizeBy(-1, 10);
+    CHECK(Same(selection.Bounds(), {-100, -100, 99, 110}));
+    selection.ResizeBy((std::numeric_limits<LONG>::max)(), (std::numeric_limits<LONG>::max)());
+    CHECK(Same(selection.Bounds(), {-100, -100, Desktop.right, Desktop.bottom}));
+    selection.ResizeBy((std::numeric_limits<LONG>::min)(), (std::numeric_limits<LONG>::min)());
+    CHECK(Same(selection.Bounds(), {-100, -100, -99, -99}));
+
+    selection.Set({-100, -100, 100, 100});
+    selection.Begin({0, 0}, 4);
+    selection.ResizeBy(10, 10);
+    CHECK(Same(selection.Bounds(), {-100, -100, 100, 100}));
+    selection.Clear();
+    selection.ResizeBy(10, 10);
+    CHECK_FALSE(selection.HasSelection());
+}
+
+TEST_CASE("Window keyboard cycle skips empty and duplicate regions and wraps in either direction") {
+    constexpr RECT front{-100, -100, 100, 100};
+    constexpr RECT back{-500, -200, -200, 100};
+    constexpr std::array<RECT, 5> candidates{{{}, front, front, {0, 1, 2, 1}, back}};
+    const auto first = vispick::CycleWindowSelection(candidates, {}, false);
+    const auto last = vispick::CycleWindowSelection(candidates, {}, true);
+    REQUIRE(first);
+    REQUIRE(last);
+    CHECK(Same(*first, front));
+    CHECK(Same(*last, back));
+    const auto next = vispick::CycleWindowSelection(candidates, front, false);
+    const auto previous = vispick::CycleWindowSelection(candidates, front, true);
+    const auto wrapped = vispick::CycleWindowSelection(candidates, back, false);
+    REQUIRE(next);
+    REQUIRE(previous);
+    REQUIRE(wrapped);
+    CHECK(Same(*next, back));
+    CHECK(Same(*previous, back));
+    CHECK(Same(*wrapped, front));
+    constexpr std::array<RECT, 2> duplicateOnly{front, front};
+    const auto unchanged = vispick::CycleWindowSelection(duplicateOnly, front, false);
+    REQUIRE(unchanged);
+    CHECK(Same(*unchanged, front));
+    CHECK_FALSE(vispick::CycleWindowSelection({}, {}, false));
+    constexpr std::array<RECT, 2> emptyOnly{{{}, {1, 1, 1, 2}}};
+    CHECK_FALSE(vispick::CycleWindowSelection(emptyOnly, {}, true));
+}
+
+TEST_CASE("Magnifier scales every sample cell with DPI and stays inside negative-origin monitors") {
+    constexpr RECT monitor{-1920, -1080, 0, 0};
+    constexpr std::array<POINT, 5> pointers{{{-1920, -1080}, {-1, -1080}, {-1920, -1}, {-1, -1}, {-960, -540}}};
+    for (const UINT dpi : {96U, 120U, 144U, 168U, 192U}) {
+        const LONG cell = MulDiv(8, static_cast<int>(dpi), 96);
+        for (const POINT pointer : pointers) {
+            const auto layout = vispick::LayoutMagnifier(pointer, monitor, dpi);
+            CHECK(layout.image.right - layout.image.left == cell * 15);
+            CHECK(layout.image.bottom - layout.image.top == cell * 15);
+            CHECK(layout.center.right - layout.center.left == cell);
+            CHECK(layout.center.bottom - layout.center.top == cell);
+            CHECK(layout.center.left == layout.image.left + cell * 7);
+            CHECK(layout.center.top == layout.image.top + cell * 7);
+            CHECK(layout.label.top >= layout.image.bottom);
+            CHECK(layout.label.bottom > layout.label.top);
+            CHECK(layout.bounds.left >= monitor.left);
+            CHECK(layout.bounds.top >= monitor.top);
+            CHECK(layout.bounds.right <= monitor.right);
+            CHECK(layout.bounds.bottom <= monitor.bottom);
+        }
+    }
+}
+
+TEST_CASE("Sampled color formats preserve RGB channels and ignore alpha") {
+    CHECK(vispick::FormatSampledColor(0xAB12CD00U, false) == L"#12CD00");
+    CHECK(vispick::FormatSampledColor(0xAB12CD00U, true) == L"RGB(18, 205, 0)");
+    CHECK(vispick::FormatSampledColor(0, false) == L"#000000");
+    CHECK(vispick::FormatSampledColor(0xFFFFFFFFU, true) == L"RGB(255, 255, 255)");
 }

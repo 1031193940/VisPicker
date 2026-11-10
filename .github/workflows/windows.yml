@@ -1,0 +1,134 @@
+name: Windows build and release
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  format:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install pinned formatter
+        run: |
+          python -m pip install --disable-pip-version-check clang-format==18.1.8
+          if ($LASTEXITCODE -ne 0) { throw 'Formatter installation failed.' }
+      - name: Check project source formatting
+        run: ./scripts/Format.ps1 -Check
+
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, x86]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build, analyze, test and check imports and size
+        env:
+          TARGET_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          & ./build.ps1 -Architecture $env:TARGET_ARCHITECTURE -Configuration Release -Analyze *>&1 |
+            Tee-Object -FilePath "out/ci-$env:TARGET_ARCHITECTURE.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build checks failed.' }
+      - name: Keep binaries and build manifests
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: binaries-${{ matrix.architecture }}
+          path: |
+            dist/*.exe
+            dist/*.exe.build.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Keep diagnostics and symbols
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ matrix.architecture }}
+          path: |
+            out/ci-*.log
+            out/build/${{ matrix.architecture }}-Release/Testing/Temporary/
+            out/symbols/
+          if-no-files-found: warn
+          retention-days: 14
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [build, format]
+    runs-on: windows-2022
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Preserve existing releases
+        id: existing
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw 'Use a numeric vMAJOR.MINOR.PATCH tag matching CMake ProductVersion.' }
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
+          $url = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
+          try {
+            $null = Invoke-RestMethod -Uri $url -Headers $headers
+            'exists=true' >> $env:GITHUB_OUTPUT
+            Write-Host 'This tag already has a release. Its notes and assets are preserved.'
+          } catch {
+            if ([int]$_.Exception.Response.StatusCode -ne 404) { throw }
+            'exists=false' >> $env:GITHUB_OUTPUT
+          }
+      - name: Download both verified architectures
+        if: steps.existing.outputs.exists == 'false'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: binaries-*
+          merge-multiple: true
+          path: dist
+      - name: Package and calculate checksums
+        if: steps.existing.outputs.exists == 'false'
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          & ./scripts/Package.ps1 -Version $version
+          $files = @("dist/VisPick-$version.zip", 'dist/VisPick.exe', 'dist/VisPick-x86.exe')
+          $checksums = foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $([IO.Path]::GetFileName($file))"
+          }
+          $checksums | Set-Content -LiteralPath dist/SHA256SUMS.txt -Encoding utf8NoBOM
+      - name: Publish a new tagged release
+        if: steps.existing.outputs.exists == 'false'
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.Substring(1)
+          $notes = "docs/releases/VisPick-$version.md"
+          $arguments = @('release', 'create', $tag, "dist/VisPick-$version.zip",
+            'dist/VisPick.exe', 'dist/VisPick-x86.exe', 'dist/SHA256SUMS.txt',
+            '--repo', $env:GITHUB_REPOSITORY, '--verify-tag', '--title', "VisPick $version Windows portable")
+          if (Test-Path -LiteralPath $notes) { $arguments += @('--notes-file', $notes) }
+          else { $arguments += '--generate-notes' }
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release creation failed. Existing releases were not overwritten.' }

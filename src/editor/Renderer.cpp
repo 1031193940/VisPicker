@@ -1,13 +1,6 @@
 #include "editor/Renderer.h"
 #include "platform/Gdi.h"
-
-#include <objidl.h>
-// SDK 10.0.22621's FontCollection wrappers contain bounds/SAL annotation defects.
-// Limit the suppression to the external GDI+ headers, not our renderer.
-#pragma warning(push)
-#pragma warning(disable: 6385 28252 28253)
-#include <gdiplus.h>
-#pragma warning(pop)
+#include "platform/GdiPlus.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -19,20 +12,6 @@ namespace {
 
 void CheckGdiPlus(Gdiplus::Status status) {
     if (status != Gdiplus::Ok) { throw std::runtime_error("GDI+ annotation operation failed: " + std::to_string(status)); }
-}
-
-void EnsureGdiPlus() {
-    class GdiPlusLifetime {
-    public:
-        GdiPlusLifetime() {
-            Gdiplus::GdiplusStartupInput input;
-            CheckGdiPlus(Gdiplus::GdiplusStartup(&token_, &input, nullptr));
-        }
-        ~GdiPlusLifetime() { Gdiplus::GdiplusShutdown(token_); }
-    private:
-        ULONG_PTR token_ = 0;
-    };
-    static const GdiPlusLifetime lifetime;
 }
 
 class SavedDc {
@@ -114,7 +93,7 @@ void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annota
         return;
     }
     if (annotation.points.empty()) { return; }
-    EnsureGdiPlus();
+    if (!EnsureGdiPlus()) { throw std::runtime_error("GDI+ initialization failed"); }
     Gdiplus::Graphics graphics(destination);
     CheckGdiPlus(graphics.GetLastStatus());
     CheckGdiPlus(graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias));

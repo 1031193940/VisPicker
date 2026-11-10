@@ -48,9 +48,10 @@ private:
 };
 
 void AddCommand(const HMENU menu, const AppCommand command, const wchar_t* chinese,
-                const wchar_t* english, const bool useEnglish, const bool checked = false) {
+                const wchar_t* english, const bool useEnglish, const bool checked = false, const Hotkey hotkey = {}) {
+    const auto label = Tray::ShortcutLabel(useEnglish ? english : chinese, hotkey);
     if (!AppendMenuW(menu, MF_STRING | (checked ? MF_CHECKED : MF_UNCHECKED),
-        FirstMenuId + static_cast<UINT>(command), useEnglish ? english : chinese)) {
+        FirstMenuId + static_cast<UINT>(command), label.c_str())) {
         throw std::runtime_error("AppendMenuW failed");
     }
 }
@@ -60,14 +61,14 @@ void Separator(const HMENU menu) {
 }
 
 AppCommand ShowMenu(const HWND owner, POINT position, const bool autostart, const bool english,
-                    const bool pinsAcrossDesktops) {
+                    const bool pinsAcrossDesktops, const Config::Hotkeys hotkeys) {
     MenuOwner menu;
-    AddCommand(menu.Get(), AppCommand::Screenshot, L"截图", L"Screenshot", english);
-    AddCommand(menu.Get(), AppCommand::Gif, L"录制 GIF", L"Record GIF", english);
+    AddCommand(menu.Get(), AppCommand::Screenshot, L"截图", L"Screenshot", english, false, hotkeys.screenshot);
+    AddCommand(menu.Get(), AppCommand::Gif, L"录制 GIF", L"Record GIF", english, false, hotkeys.gif);
     AddCommand(menu.Get(), AppCommand::Pin, L"截取参考图", L"Capture reference", english);
-    AddCommand(menu.Get(), AppCommand::PinClipboard, L"从剪贴板贴图", L"Pin clipboard image", english);
+    AddCommand(menu.Get(), AppCommand::PinClipboard, L"从剪贴板贴图", L"Pin clipboard image", english, false, hotkeys.pinClipboard);
     MenuOwner pins;
-    AddCommand(pins.Get(), AppCommand::TogglePins, L"显示 / 隐藏全部", L"Show / hide all", english);
+    AddCommand(pins.Get(), AppCommand::TogglePins, L"显示 / 隐藏全部", L"Show / hide all", english, false, hotkeys.togglePins);
     AddCommand(pins.Get(), AppCommand::ShowPins, L"显示全部", L"Show all", english);
     AddCommand(pins.Get(), AppCommand::HidePins, L"隐藏全部", L"Hide all", english);
     AddCommand(pins.Get(), AppCommand::ClosePins, L"关闭全部", L"Close all", english);
@@ -135,6 +136,12 @@ void Tray::Remove() noexcept {
 
 void Tray::SetLeftClickCommand(const AppCommand command) noexcept { leftClickCommand_ = command; }
 
+void Tray::SetHotkeys(const Config::Hotkeys& hotkeys) noexcept { hotkeys_ = hotkeys; }
+
+std::wstring Tray::ShortcutLabel(const std::wstring_view label, const Hotkey hotkey) {
+    return hotkey.Enabled() ? std::wstring(label) + L"\t" + FormatHotkey(hotkey) : std::wstring(label);
+}
+
 void Tray::SetLanguage(const bool english) noexcept {
     english_ = english;
     if (added_) {
@@ -156,7 +163,7 @@ AppCommand Tray::HandleCallback(const WPARAM parameter, const LPARAM data, const
     if (event == WM_CONTEXTMENU || (!version4_ && event == WM_RBUTTONUP)) {
         POINT position{-1, -1};
         if (version4_) { position = {GET_X_LPARAM(parameter), GET_Y_LPARAM(parameter)}; }
-        return ShowMenu(owner_, position, autostartEnabled, english_, pinsAcrossDesktops);
+        return ShowMenu(owner_, position, autostartEnabled, english_, pinsAcrossDesktops, hotkeys_);
     }
     return AppCommand::None;
 }

@@ -130,8 +130,9 @@ protected:
 class RecordBar final : public Window {
 public:
     RecordBar(std::function<void(bool)> stop, std::function<void(bool)> session,
+              std::function<void()> togglePause, std::function<bool()> paused,
               std::function<std::int64_t()> elapsed, std::function<void()> retryCompletion, bool english)
-        : stop_(std::move(stop)), session_(std::move(session)), elapsed_(std::move(elapsed)),
+        : stop_(std::move(stop)), session_(std::move(session)), togglePause_(std::move(togglePause)), paused_(std::move(paused)), elapsed_(std::move(elapsed)),
           retryCompletion_(std::move(retryCompletion)), english_(english) {}
     ~RecordBar() override {
         if (Handle()) {
@@ -146,7 +147,7 @@ public:
         for (const auto& display : EnumerateMonitors()) {
             if (EqualRect(&display.bounds,&monitor.rcMonitor)) { dpi_ = static_cast<int>(display.dpiX); break; }
         }
-        const int width = MulDiv(350,dpi_,96);
+        const int width = MulDiv(390,dpi_,96);
         const int height = MulDiv(40,dpi_,96);
         RECT bar{std::clamp(capture.left, monitor.rcWork.left, std::max(monitor.rcWork.left,monitor.rcWork.right-width)),
             capture.bottom+6,0,0};
@@ -182,8 +183,9 @@ protected:
         if (message == WM_LBUTTONUP) {
             const POINT position{GET_X_LPARAM(data),GET_Y_LPARAM(data)};
             const auto rectangles = Layout();
-            if (PtInRect(&rectangles[1],position)) { stop_(false); }
-            else if (PtInRect(&rectangles[2],position)) { Cancel(); }
+            if (PtInRect(&rectangles[1],position)) { togglePause_(); InvalidateRect(Handle(),nullptr,FALSE); }
+            else if (PtInRect(&rectangles[2],position)) { stop_(false); }
+            else if (PtInRect(&rectangles[3],position)) { Cancel(); }
             return 0;
         }
         if (message == WM_DPICHANGED) {
@@ -226,32 +228,39 @@ private:
         DrawTextW(context,text.c_str(),static_cast<int>(text.size()),&rectangles[0],DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         POINT pointer{};
         const bool hovering = GetCursorPos(&pointer) && WindowFromPoint(pointer) == Handle() && ScreenToClient(Handle(),&pointer);
-        const bool stopHovered = hovering && PtInRect(&rectangles[1],pointer);
-        const bool cancelHovered = hovering && PtInRect(&rectangles[2],pointer);
+        const bool pauseHovered = hovering && PtInRect(&rectangles[1],pointer);
+        const bool stopHovered = hovering && PtInRect(&rectangles[2],pointer);
+        const bool cancelHovered = hovering && PtInRect(&rectangles[3],pointer);
+        const bool paused = paused_();
         const auto brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
-        SetDCBrushColor(context,stopHovered ? RGB(87,92,105) : RGB(65,69,79));
+        SetDCBrushColor(context,pauseHovered || paused ? RGB(43,109,199) : RGB(65,69,79));
         FillRect(context,&rectangles[1],brush);
-        SetDCBrushColor(context,cancelHovered ? RGB(87,92,105) : RGB(65,69,79));
+        SetDCBrushColor(context,stopHovered ? RGB(87,92,105) : RGB(65,69,79));
         FillRect(context,&rectangles[2],brush);
-        DrawToolbarIcon(context,rectangles[1],ToolbarIcon::Stop,dpi_,iconPen_.Get());
-        DrawToolbarIcon(context,rectangles[2],ToolbarIcon::Cancel,dpi_,iconPen_.Get());
-        if (stopHovered || cancelHovered) {
+        SetDCBrushColor(context,cancelHovered ? RGB(87,92,105) : RGB(65,69,79));
+        FillRect(context,&rectangles[3],brush);
+        DrawToolbarIcon(context,rectangles[1],paused ? ToolbarIcon::Play : ToolbarIcon::Pause,dpi_,iconPen_.Get());
+        DrawToolbarIcon(context,rectangles[2],ToolbarIcon::Stop,dpi_,iconPen_.Get());
+        DrawToolbarIcon(context,rectangles[3],ToolbarIcon::Cancel,dpi_,iconPen_.Get());
+        if (pauseHovered || stopHovered || cancelHovered) {
             RECT hint = rectangles[0];
             hint.left += MulDiv(50,dpi_,96);
             SetTextColor(context,RGB(207,211,220));
-            const auto label = stopHovered ? (english_ ? L"Stop recording" : L"停止录制") :
+            const auto label = pauseHovered ? (paused ? (english_ ? L"Resume recording" : L"继续录制") : (english_ ? L"Pause recording" : L"暂停录制")) :
+                stopHovered ? (english_ ? L"Stop recording" : L"停止录制") :
                 (english_ ? L"Cancel recording" : L"取消录制");
             DrawTextW(context,label,-1,&hint,DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         }
     }
-    std::array<RECT,3> Layout() const noexcept {
+    std::array<RECT,4> Layout() const noexcept {
         RECT client{}; GetClientRect(Handle(),&client);
         const int margin = MulDiv(8,dpi_,96);
         const int buttonWidth = MulDiv(82,dpi_,96);
         const RECT cancel{client.right-margin-buttonWidth,margin,client.right-margin,client.bottom-margin};
         const RECT stop{cancel.left-margin-buttonWidth,margin,cancel.left-margin,client.bottom-margin};
-        const RECT timer{margin,margin,stop.left-margin,client.bottom-margin};
-        return {timer,stop,cancel};
+        const RECT pause{stop.left-margin-MulDiv(32,dpi_,96),margin,stop.left-margin,client.bottom-margin};
+        const RECT timer{margin,margin,pause.left-margin,client.bottom-margin};
+        return {timer,pause,stop,cancel};
     }
     void CreateResourcesForDpi() {
         const auto version = GetWindowsVersion();
@@ -265,6 +274,8 @@ private:
     }
     std::function<void(bool)> stop_;
     std::function<void(bool)> session_;
+    std::function<void()> togglePause_;
+    std::function<bool()> paused_;
     std::function<std::int64_t()> elapsed_;
     std::function<void()> retryCompletion_;
     bool english_;
@@ -432,7 +443,9 @@ struct Recorder::Implementation {
         border = std::make_unique<RecordBorder>();
         border->Open(bounds,owner);
         bar = std::make_unique<RecordBar>([this](bool cancel) { Stop(cancel); },
-            [this](bool paused) { Pause(paused,true); },[this] { return Elapsed(); },
+            [this](bool paused) { Pause(paused,true); },
+            [this] { bool paused; { const std::lock_guard lock(mutex); paused = userPaused; } Pause(!paused,false); },
+            [this] { const std::lock_guard lock(mutex); return userPaused; },[this] { return Elapsed(); },
             [this] { NotifyCompletion(); },english);
         bar->Open(bounds,owner);
         {

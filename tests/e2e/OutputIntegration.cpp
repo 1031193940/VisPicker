@@ -3,6 +3,8 @@
 #include "imaging/Clipboard.h"
 #include "imaging/ImageCodec.h"
 #include "gif/GifWriter.h"
+#include "gif/GifTrim.h"
+#include "platform/Gdi.h"
 #include "platform/Compat.h"
 #include "platform/Window.h"
 #include "recording/GifPreview.h"
@@ -78,6 +80,72 @@ std::vector<char> ReadFileBytes(const std::filesystem::path& path) {
     return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+constexpr UINT ImageClipboardReady = WM_APP + 83;
+
+void WaitForImageClipboard(vispick::ImageClipboard& clipboard, HWND owner, bool expectPng) {
+    const auto deadline = GetTickCount64() + 10000;
+    bool received = false;
+    while (GetTickCount64() < deadline) {
+        MSG message{};
+        while (PeekMessageW(&message, owner, ImageClipboardReady, ImageClipboardReady, PM_REMOVE)) {
+            clipboard.PublishReady();
+            received = true;
+        }
+        if (received && (!expectPng || IsClipboardFormatAvailable(RegisterClipboardFormatW(L"PNG")))) { return; }
+        Sleep(1);
+    }
+    throw std::runtime_error("Timed out waiting for image clipboard worker");
+}
+
+void CheckAsyncImageCopy(HWND owner, const vispick::Bitmap& pattern) {
+    const auto pngFormat = RegisterClipboardFormatW(L"PNG");
+    vispick::ImageClipboard clipboard(owner, ImageClipboardReady);
+    clipboard.Copy(pattern);
+    Require(IsClipboardFormatAvailable(CF_DIBV5) && IsClipboardFormatAvailable(CF_DIB) &&
+        !IsClipboardFormatAvailable(pngFormat), "Async copy immediately publishes DIBV5 and DIB before PNG completion");
+    const auto immediate = vispick::ReadClipboardImage(owner);
+    Require(immediate && std::equal(pattern.Pixels().begin(), pattern.Pixels().end(), immediate->Pixels().begin()),
+        "Immediate DIBV5 preserves screenshot pixels and straight alpha");
+    WaitForImageClipboard(clipboard, owner, true);
+    const auto completed = vispick::ReadClipboardImage(owner);
+    Require(completed && std::equal(pattern.Pixels().begin(), pattern.Pixels().end(), completed->Pixels().begin()),
+        "Background PNG preserves screenshot pixels and alpha");
+
+    clipboard.Copy(pattern);
+    vispick::CopyText(owner, L"后来复制的文字 / latest text");
+    WaitForImageClipboard(clipboard, owner, false);
+    Require(!IsClipboardFormatAvailable(pngFormat) && !IsClipboardFormatAvailable(CF_DIBV5),
+        "Old PNG cannot overwrite newer clipboard data from the same owner");
+    Require(OpenClipboard(owner) != FALSE, "open isolated clipboard to check Unicode text");
+    const auto textMemory = GetClipboardData(CF_UNICODETEXT);
+    const auto* text = textMemory ? static_cast<const wchar_t*>(GlobalLock(textMemory)) : nullptr;
+    const bool textMatches = text && std::wstring_view(text) == L"后来复制的文字 / latest text";
+    if (text) { GlobalUnlock(textMemory); }
+    CloseClipboard();
+    Require(textMatches, "CopyText retains Unicode text after stale PNG completion");
+
+    vispick::Bitmap latest;
+    for (int iteration = 0; iteration < 32; ++iteration) {
+        latest = pattern;
+        latest.Pixels()[1] = 0xFF112200U | static_cast<std::uint32_t>(iteration);
+        clipboard.Copy(latest);
+    }
+    WaitForImageClipboard(clipboard, owner, true);
+    const auto finalImage = vispick::ReadClipboardImage(owner);
+    Require(finalImage && std::equal(latest.Pixels().begin(), latest.Pixels().end(), finalImage->Pixels().begin()),
+        "Rapid copies coalesce to the newest image without stale PNG publication");
+
+    {
+        vispick::ImageClipboard closing(owner, ImageClipboardReady);
+        closing.Copy(pattern);
+    }
+    const auto afterClose = vispick::ReadClipboardImage(owner);
+    Require(afterClose && std::equal(pattern.Pixels().begin(), pattern.Pixels().end(), afterClose->Pixels().begin()),
+        "Worker shutdown joins safely and retains the immediate clipboard image");
+    MSG message{};
+    while (PeekMessageW(&message, owner, ImageClipboardReady, ImageClipboardReady, PM_REMOVE)) {}
+}
+
 void CheckGifPreviewCopy(HWND owner) {
     // The executable uses this fixture last. Only its own process environment
     // changes, so clipboard cleanup cannot see production temporary GIFs.
@@ -87,6 +155,7 @@ void CheckGifPreviewCopy(HWND owner) {
         !SetEnvironmentVariableW(L"TEMP", temporary.c_str())) {
         throw std::runtime_error("Isolate GIF clipboard fixture files failed");
     }
+    for (const bool trim : {false,true}) {
     vispick::recording::TemporaryGif recording(vispick::recording::TemporaryGifKind::Recording);
     {
         vispick::gif::GifWriter writer(recording.path, 2, 1);
@@ -97,6 +166,12 @@ void CheckGifPreviewCopy(HWND owner) {
         writer.Finish();
     }
     const auto original = ReadFileBytes(recording.path);
+    auto expected = original;
+    if (trim) {
+        vispick::recording::TemporaryGif selected(vispick::recording::TemporaryGifKind::Recording);
+        vispick::gif::TrimRecordedGif(recording.path,selected.path,{40,100});
+        expected = ReadFileBytes(selected.path);
+    }
     {
         vispick::GifPreview preview({recording.path, 2, 1, 2, 100}, {}, owner, WM_APP + 1,
             [](HWND, int, int) -> std::optional<std::filesystem::path> { return std::nullopt; }, true);
@@ -104,8 +179,34 @@ void CheckGifPreviewCopy(HWND owner) {
         RECT client{};
         if (!GetClientRect(preview.Handle(), &client)) { throw std::runtime_error("Read GIF preview bounds failed"); }
         const auto dpi = static_cast<int>(vispick::DpiForWindow(preview.Handle()));
-        const auto x = MulDiv(87, dpi, 96);
+        const auto x = MulDiv(32, dpi, 96);
         const auto y = client.bottom - MulDiv(20, dpi, 96);
+        if (trim) {
+            SendMessageW(preview.Handle(),WM_KEYDOWN,VK_SPACE,0);
+            vispick::DibSection image(client.right,client.bottom);
+            const auto waitForFrame = [&](std::uint32_t color) {
+                const auto deadline = std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                while (std::chrono::steady_clock::now() < deadline) {
+                    vispick::PumpWindowMessages();
+                    SendMessageW(preview.Handle(),WM_PRINTCLIENT,reinterpret_cast<WPARAM>(image.DeviceContext()),PRF_CLIENT);
+                    const auto row = (client.bottom-MulDiv(100,dpi,96))/2;
+                    if (image.Pixels()[static_cast<std::size_t>(row)*image.Width()+client.right/2-1] == color) { return; }
+                    Sleep(1);
+                }
+                throw std::runtime_error("Trim clipboard preview did not display the requested frame");
+            };
+            waitForFrame(0xFF33AA33U);
+            SendMessageW(preview.Handle(),WM_KEYDOWN,VK_OEM_6,0); // Keep the first frame.
+            SendMessageW(preview.Handle(),WM_LBUTTONUP,0,MAKELPARAM(MulDiv(158,dpi,96),y)); // Reset.
+            const int trackLeft = MulDiv(16,dpi,96);
+            const int trackRight = client.right-MulDiv(124,dpi,96)-1;
+            const auto seek = MAKELPARAM(trackLeft+(trackRight-trackLeft)*70/100,
+                client.bottom-MulDiv(83,dpi,96));
+            SendMessageW(preview.Handle(),WM_LBUTTONDOWN,MK_LBUTTON,seek);
+            SendMessageW(preview.Handle(),WM_LBUTTONUP,0,seek);
+            waitForFrame(0xFFFF1111U);
+            SendMessageW(preview.Handle(),WM_KEYDOWN,VK_OEM_4,0); // Keep the second frame.
+        }
         SendMessageW(preview.Handle(), WM_LBUTTONUP, 0, MAKELPARAM(x,y));
         if (!preview.Busy()) { throw std::runtime_error("GIF Copy button did not start publishing"); }
         const auto timeout = std::chrono::steady_clock::now() + std::chrono::seconds(5);
@@ -115,6 +216,7 @@ void CheckGifPreviewCopy(HWND owner) {
         }
         Require(!preview.Busy() && !preview.Closed() && std::filesystem::exists(recording.path),
             "GIF Copy completes while preserving the preview and recording");
+        Require(ReadFileBytes(recording.path) == original,"GIF Copy leaves original recording bytes unchanged");
     }
     Require(!std::filesystem::exists(recording.path), "Original recording is removed when the preview closes");
 
@@ -140,18 +242,19 @@ void CheckGifPreviewCopy(HWND owner) {
         if (dropEffect) { GlobalUnlock(effect); }
         Require(copy, "GIF file drop requests copy instead of move");
         const auto memory = GetClipboardData(RegisterClipboardFormatW(L"image/gif"));
-        if (!memory || GlobalSize(memory) < original.size()) { throw std::runtime_error("GIF clipboard animation missing"); }
+        if (!memory || GlobalSize(memory) < expected.size()) { throw std::runtime_error("GIF clipboard animation missing"); }
         const auto* data = static_cast<const char*>(GlobalLock(memory));
-        const bool matches = data && std::equal(original.begin(), original.end(), data);
+        const bool matches = data && std::equal(expected.begin(), expected.end(), data);
         if (data) { GlobalUnlock(memory); }
-        Require(matches, "Clipboard image/gif bytes retain the complete animation");
+        Require(matches, trim ? "Clipboard image/gif contains only the selected frame" : "Clipboard image/gif bytes retain the complete animation");
         EmptyClipboard();
     } catch (...) { CloseClipboard(); throw; }
     CloseClipboard();
     const auto info = vispick::gif::InspectGif(copied);
-    Require(ReadFileBytes(copied) == original && info.frameCount == 2 && info.durationCentiseconds == 100,
-        "Clipboard file drop preserves both frames after the preview closes");
+    Require(ReadFileBytes(copied) == expected && info.frameCount == (trim ? 1U : 2U) && info.durationCentiseconds == (trim ? 60U : 100U),
+        "Clipboard file drop preserves the selected range after the preview closes");
     std::filesystem::remove(copied);
+    }
     std::filesystem::remove(temporary / L"VisPick");
     std::filesystem::remove(temporary);
 }
@@ -201,6 +304,7 @@ void Run() {
     Require(OpenClipboard(owner.Handle()) != FALSE, "open isolated clipboard for cleanup");
     EmptyClipboard(); CloseClipboard();
     Require(!vispick::ReadClipboardImage(owner.Handle()), "empty clipboard returns no image");
+    CheckAsyncImageCopy(owner.Handle(), pattern);
     CheckGifPreviewCopy(owner.Handle());
 }
 }

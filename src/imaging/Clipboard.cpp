@@ -12,18 +12,23 @@
 #include <stdexcept>
 #include <thread>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <utility>
 
 namespace vispick {
 namespace {
 struct ClipboardScope {
-    explicit ClipboardScope(HWND owner) {
-        for (int attempt = 0; attempt < 10; ++attempt) {
-            if (OpenClipboard(owner)) { return; }
-            if (attempt != 9) { std::this_thread::sleep_for(std::chrono::milliseconds(20)); }
+    bool opened = false;
+    explicit ClipboardScope(HWND owner, bool required = true) {
+        const int attempts = required ? 10 : 1;
+        for (int attempt = 0; attempt < attempts; ++attempt) {
+            if (OpenClipboard(owner)) { opened = true; return; }
+            if (attempt + 1 < attempts) { std::this_thread::sleep_for(std::chrono::milliseconds(20)); }
         }
-        throw std::runtime_error("Clipboard is busy; please try again");
+        if (required) { throw std::runtime_error("Clipboard is busy; please try again"); }
     }
-    ~ClipboardScope() { CloseClipboard(); }
+    ~ClipboardScope() { if (opened) { CloseClipboard(); } }
 };
 struct Memory {
     HGLOBAL handle = nullptr;
@@ -75,11 +80,12 @@ bool Contiguous(std::uint32_t mask) {
     while (!(mask & 1U)) { mask >>= 1; }
     return (mask & (mask + 1)) == 0;
 }
-std::size_t DibSize(BitmapView image) {
-    if (image.Empty() || image.Pixels().size_bytes() > (std::numeric_limits<DWORD>::max)()) {
+std::size_t DibSize(BitmapView image, std::size_t headerSize = sizeof(BITMAPINFOHEADER)) {
+    if (image.Empty() || image.Pixels().size_bytes() > (std::numeric_limits<DWORD>::max)() ||
+        image.Pixels().size_bytes() > (std::numeric_limits<std::size_t>::max)() - headerSize) {
         throw std::length_error("Image does not fit a clipboard DIB");
     }
-    return sizeof(BITMAPINFOHEADER) + image.Pixels().size_bytes();
+    return headerSize + image.Pixels().size_bytes();
 }
 
 void WriteDib(std::uint8_t* bytes, BitmapView image) {
@@ -105,6 +111,162 @@ void WriteDib(std::uint8_t* bytes, BitmapView image) {
         destination += sizeof(pixel);
     }
 }
+
+struct PreparedImage {
+    Memory dibV5;
+    Memory dib;
+
+    explicit PreparedImage(BitmapView image)
+        : dibV5(DibSize(image, sizeof(BITMAPV5HEADER))), dib(DibSize(image)) {
+        {
+            const LockedMemory bytes(dibV5.handle);
+            BITMAPV5HEADER header{};
+            header.bV5Size = sizeof(header);
+            header.bV5Width = image.Width();
+            header.bV5Height = -image.Height();
+            header.bV5Planes = 1;
+            header.bV5BitCount = 32;
+            header.bV5Compression = BI_BITFIELDS;
+            header.bV5SizeImage = static_cast<DWORD>(image.Pixels().size_bytes());
+            header.bV5RedMask = 0x00FF0000;
+            header.bV5GreenMask = 0x0000FF00;
+            header.bV5BlueMask = 0x000000FF;
+            header.bV5AlphaMask = 0xFF000000;
+            header.bV5CSType = LCS_sRGB;
+            header.bV5Intent = LCS_GM_IMAGES;
+            std::memcpy(bytes.data, &header, sizeof(header));
+            std::memcpy(bytes.data + sizeof(header), image.Pixels().data(), image.Pixels().size_bytes());
+        }
+        const LockedMemory bytes(dib.handle);
+        WriteDib(bytes.data, image);
+    }
+
+    [[nodiscard]] DWORD Publish(HWND owner, Memory* png = nullptr, UINT pngFormat = 0) {
+        {
+            const ClipboardScope clipboard(owner);
+            if (!EmptyClipboard()) { throw std::runtime_error("Empty clipboard failed"); }
+            const bool dibV5Published = dibV5.Publish(CF_DIBV5);
+            const bool dibPublished = dib.Publish(CF_DIB);
+            const bool pngPublished = png && png->Publish(pngFormat);
+            if (!dibV5Published && !dibPublished && !pngPublished) {
+                throw std::runtime_error("Publish clipboard image failed");
+            }
+        }
+        // CloseClipboard can increment the sequence when it adds synthesized
+        // bitmap formats. Capture the final value, then reject any intervening
+        // external copy. Calls from this owner are serialized on its UI thread.
+        const DWORD sequence = GetClipboardSequenceNumber();
+        return GetClipboardOwner() == owner ? sequence : 0;
+    }
+};
+}
+
+struct ImageClipboard::Implementation {
+    struct Request {
+        Bitmap image;
+        DWORD sequence = 0;
+        std::uint64_t generation = 0;
+    };
+    struct Result {
+        DWORD sequence = 0;
+        std::uint64_t generation = 0;
+        std::unique_ptr<Memory> png;
+        std::exception_ptr error;
+    };
+    HWND owner;
+    UINT readyMessage;
+    UINT pngFormat;
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::optional<Request> pending;
+    std::optional<Result> ready;
+    std::uint64_t generation = 0;
+    bool stopping = false;
+    std::thread worker;
+
+    Implementation(HWND ownerWindow, UINT message)
+        : owner(ownerWindow), readyMessage(message), pngFormat(RegisterClipboardFormatW(L"PNG")) {
+        if (!owner || GetWindowThreadProcessId(owner, nullptr) != GetCurrentThreadId() ||
+            message < WM_APP || message > 0xBFFF) {
+            throw std::invalid_argument("Invalid image clipboard owner or callback message");
+        }
+        worker = std::thread([this] { Run(); });
+    }
+    ~Implementation() {
+        {
+            const std::lock_guard lock(mutex);
+            stopping = true;
+            pending.reset();
+            ready.reset();
+        }
+        changed.notify_one();
+        worker.join();
+    }
+    void Run() {
+        for (;;) {
+            Request request;
+            {
+                std::unique_lock lock(mutex);
+                changed.wait(lock, [this] { return stopping || pending.has_value(); });
+                if (stopping) { return; }
+                request = std::move(*pending);
+                pending.reset();
+            }
+            Result result{request.sequence, request.generation, nullptr, nullptr};
+            try {
+                if (!pngFormat) { throw std::runtime_error("Register PNG clipboard format failed"); }
+                result.png = std::make_unique<Memory>(static_cast<HGLOBAL>(nullptr));
+                result.png->handle = EncodeClipboardPng(request.image.View());
+            } catch (...) { result.error = std::current_exception(); }
+            request.image = {};
+            {
+                const std::lock_guard lock(mutex);
+                if (stopping) { return; }
+                if (request.generation != generation) { continue; }
+                ready = std::move(result);
+                // No pointer travels through the window queue: stale messages
+                // are harmless after a newer Copy or during owner teardown.
+                PostMessageW(owner, readyMessage, 0, 0);
+            }
+        }
+    }
+};
+
+ImageClipboard::ImageClipboard(HWND owner, UINT readyMessage)
+    : implementation_(std::make_unique<Implementation>(owner, readyMessage)) {}
+
+ImageClipboard::~ImageClipboard() = default;
+
+void ImageClipboard::Copy(Bitmap image) {
+    auto& state = *implementation_;
+    PreparedImage formats(image.View());
+    const DWORD sequence = formats.Publish(state.owner);
+    {
+        const std::lock_guard lock(state.mutex);
+        state.ready.reset();
+        state.pending.reset();
+        ++state.generation;
+        if (sequence) { state.pending = Implementation::Request{std::move(image), sequence, state.generation}; }
+    }
+    state.changed.notify_one();
+}
+
+void ImageClipboard::PublishReady() {
+    auto& state = *implementation_;
+    std::optional<Implementation::Result> result;
+    {
+        const std::lock_guard lock(state.mutex);
+        result.swap(state.ready);
+    }
+    if (!result) { return; }
+    // PNG is an optional addition; do not delay the UI if another app is pasting.
+    const ClipboardScope clipboard(state.owner, false);
+    if (!clipboard.opened || GetClipboardOwner() != state.owner ||
+        GetClipboardSequenceNumber() != result->sequence) { return; }
+    if (result->error) { std::rethrow_exception(result->error); }
+    if (!result->png->Publish(state.pngFormat)) {
+        throw std::runtime_error("Image copied, but adding its PNG clipboard format failed");
+    }
 }
 
 struct GifClipboardData::Implementation {
@@ -269,21 +431,29 @@ void CopyImage(HWND owner, BitmapView image) {
     const auto pngFormat = RegisterClipboardFormatW(L"PNG");
     // All allocations/encoding precede EmptyClipboard, retaining old contents
     // if preparation fails. Successful SetClipboardData transfers ownership.
-    Memory dib(DibSize(image));
-    {
-        const LockedMemory pixels(dib.handle);
-        WriteDib(pixels.data, image);
-    }
+    PreparedImage formats(image);
     std::optional<Memory> png;
     if (pngFormat) {
         try { png.emplace(EncodeClipboardPng(image)); }
         catch (const std::exception&) { /* DIB remains available when PNG preparation fails. */ }
     }
-    ClipboardScope clipboard(owner);
+    static_cast<void>(formats.Publish(owner, png ? &*png : nullptr, pngFormat));
+}
+
+void CopyText(HWND owner, const std::wstring& text) {
+    if (!owner) { throw std::invalid_argument("Clipboard publishing requires an owner window"); }
+    if (text.find(L'\0') != std::wstring::npos ||
+        text.size() >= (std::numeric_limits<std::size_t>::max)() / sizeof(wchar_t)) {
+        throw std::invalid_argument("Invalid clipboard text");
+    }
+    Memory memory((text.size() + 1) * sizeof(wchar_t));
+    {
+        const LockedMemory bytes(memory.handle);
+        std::memcpy(bytes.data, text.c_str(), (text.size() + 1) * sizeof(wchar_t));
+    }
+    const ClipboardScope clipboard(owner);
     if (!EmptyClipboard()) { throw std::runtime_error("Empty clipboard failed"); }
-    const bool dibPublished = dib.Publish(CF_DIB);
-    const bool pngPublished = png && png->Publish(pngFormat);
-    if (!dibPublished && !pngPublished) { throw std::runtime_error("Publish clipboard image failed"); }
+    if (!memory.Publish(CF_UNICODETEXT)) { throw std::runtime_error("Publish clipboard text failed"); }
 }
 
 std::optional<Bitmap> ReadClipboardImage(HWND owner) {

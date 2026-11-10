@@ -11,9 +11,11 @@
 #include "platform/Window.h"
 #include "platform/Compat.h"
 #include "platform/Console.h"
+#include "spikes/TestEnvironment.h"
 
 #include <dwmapi.h>
 #include <psapi.h>
+#include <wtsapi32.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -384,7 +386,7 @@ void CheckPreviewDpi(Report& report, HWND window, const std::filesystem::path& o
         PrintOwnedClient(window,image);
         const vispick::BitmapView rendered(image.Width(),image.Height(),image.Pixels());
         constexpr std::uint32_t copyFill = 0xFF215AADU;
-        const RECT copy{scale(10),client.bottom-scale(36),scale(164),client.bottom-scale(6)};
+        const RECT copy{scale(10),client.bottom-scale(36),scale(54),client.bottom-scale(6)};
         const auto buttonEdge = rendered.Row(copy.top+scale(3));
         const auto hasIcon = [&] {
             for (LONG row = copy.top+scale(5); row < copy.bottom-scale(5); ++row) {
@@ -473,6 +475,8 @@ void CheckPreviewTimeline(Report& report, Owner& owner, const std::filesystem::p
     constexpr auto fixtureTimeout = std::chrono::seconds(5);
     const auto suffix = std::to_wstring(GetCurrentProcessId())+L".gif";
     const auto variableFile = output/(L"preview-variable-"+suffix);
+    const auto trimFile = output/(L"preview-trim-"+suffix);
+    const auto trimmedFile = output/(L"preview-trimmed-"+suffix);
     const auto singleFile = output/(L"preview-single-"+suffix);
     const vispick::gif::IndexedImage base{{green},{0,0,0,0,0,0,0,0}};
     const auto fullFrame = vispick::gif::EncodeIndexedFrame(base);
@@ -486,6 +490,7 @@ void CheckPreviewTimeline(Report& report, Owner& owner, const std::filesystem::p
         writer.WriteFrame(vispick::gif::EncodeIndexedFrame(partial),{2,0,2,2,60});
         writer.Finish();
     }
+    std::filesystem::copy_file(variableFile,trimFile,std::filesystem::copy_options::overwrite_existing);
     {
         vispick::GifPreview preview({variableFile,4,2,3,400},{},owner.Handle(),PreviewClosed,noSave,true);
         preview.Show();
@@ -515,6 +520,36 @@ void CheckPreviewTimeline(Report& report, Owner& owner, const std::filesystem::p
         report.Require(fixture.FrameColors() == initial && fixture.ProgressColor(10) == emptyRail,"preview_rewind_preserves_paused_state");
         CheckPreviewDpi(report,window,output);
     }
+    {
+        unsigned saves = 0;
+        vispick::GifPreview preview({trimFile,4,2,3,400},{},owner.Handle(),PreviewClosed,
+            [&](HWND,int,int) -> std::optional<std::filesystem::path> {
+                if (++saves == 1) { return output/L"missing-trim-directory"/L"failed.gif"; }
+                return trimmedFile;
+            },true);
+        preview.Show();
+        const auto window = preview.Handle();
+        SendMessageW(window,WM_KEYDOWN,VK_SPACE,0);
+        PreviewFixture fixture(window);
+        WaitUntil([&] { return fixture.FrameColors() == std::array{green,green}; },fixtureTimeout);
+        fixture.Click(fixture.AtPercent(20));
+        WaitUntil([&] { return fixture.FrameColors() == std::array{blue,green}; },fixtureTimeout);
+        SendMessageW(window,WM_KEYDOWN,VK_OEM_4,0);
+        SendMessageW(window,WM_KEYDOWN,VK_OEM_6,0);
+        const auto savePoint = MAKELPARAM(fixture.client.right-fixture.Scale(145),fixture.client.bottom-fixture.Scale(20));
+        SendMessageW(window,WM_LBUTTONUP,0,savePoint);
+        WaitUntil([&] { return saves == 1 && !preview.Busy(); },fixtureTimeout);
+        report.Require(!preview.Closed() && std::filesystem::exists(trimFile) &&
+            vispick::gif::InspectGif(trimFile).durationCentiseconds == 400,"trim_save_failure_preserves_complete_original");
+        SendMessageW(window,WM_LBUTTONUP,0,savePoint);
+        WaitUntil([&] { return saves == 2 && preview.Closed(); },fixtureTimeout);
+        const std::array pixels{blue,blue,green,green,blue,blue,green,green};
+        const std::array hashes{vispick::gif::PixelHash(pixels)};
+        const auto inspection = vispick::gif::InspectGif(trimmedFile,hashes);
+        report.Require(inspection.frameCount == 1 && inspection.durationCentiseconds == 280 && inspection.mismatchedFrames == 0,
+            "trim_save_uses_frame_boundaries_variable_duration_and_composited_first_frame");
+    }
+    report.Require(!std::filesystem::exists(trimFile),"trim_success_closes_preview_and_releases_original_temporary");
     {
         vispick::gif::GifWriter writer(singleFile,4,2);
         writer.WriteFrame(fullFrame,static_cast<std::uint16_t>(vispick::Config::Gif::MaximumSeconds*100));
@@ -548,6 +583,20 @@ void ClickRecordingButton(Report& report, HWND owner, bool cancel, const std::fi
     const int x = client.right-margin-buttonWidth/2-(cancel ? 0 : buttonWidth+margin);
     const int y = client.bottom/2;
     if (!PostMessageW(search.found,WM_LBUTTONUP,0,MAKELPARAM(x,y))) { throw std::runtime_error("Cannot click owned recording button"); }
+}
+
+HWND ClickRecordingPause(Report& report, HWND owner) {
+    BarSearch search{owner};
+    EnumWindows(FindBar,reinterpret_cast<LPARAM>(&search));
+    report.Require(search.found != nullptr && IsWindowVisible(search.found),"pause_button_visible");
+    if (!search.found) { throw std::runtime_error("Recording toolbar was not found"); }
+    RECT client{}; GetClientRect(search.found,&client);
+    const int dpi = static_cast<int>(vispick::DpiForWindow(search.found));
+    const int margin = MulDiv(8,dpi,96);
+    const int buttonWidth = MulDiv(82,dpi,96);
+    const int x = client.right-3*margin-2*buttonWidth-MulDiv(16,dpi,96);
+    SendMessageW(search.found,WM_LBUTTONUP,0,MAKELPARAM(x,client.bottom/2));
+    return search.found;
 }
 
 std::size_t OwnTemporaryFiles() {
@@ -797,16 +846,19 @@ void Run(Report& report, const std::filesystem::path& output) {
     recorder = std::make_unique<vispick::Recorder>(pattern.bounds,options,owner.Handle(),RecordingDone,true);
     recorder->Start();
     PumpFor(std::chrono::milliseconds(350));
-    recorder->Pause(true);
-    PumpFor(std::chrono::milliseconds(450));
-    recorder->Pause(false);
+    const auto pausedToolbar = ClickRecordingPause(report,owner.Handle());
+    SendMessageW(pausedToolbar,WM_WTSSESSION_CHANGE,WTS_SESSION_LOCK,0);
+    PumpFor(std::chrono::milliseconds(200));
+    SendMessageW(pausedToolbar,WM_WTSSESSION_CHANGE,WTS_SESSION_UNLOCK,0);
+    PumpFor(std::chrono::milliseconds(250));
+    ClickRecordingPause(report,owner.Handle());
     PumpFor(std::chrono::milliseconds(350));
     ClickRecordingButton(report,owner.Handle(),false,output/L"recordbar-client.png");
     auto paused = Finish(owner,recorder);
     report.Require(paused.error.empty() && !paused.path.empty(),"paused_recording_completes");
     report.Require(paused.captureLayeredWindows,"explicit_recording_uses_captureblt");
     ValidateGif(report,paused,"paused",true);
-    report.Require(paused.stopNanoseconds >= 650000000 && paused.stopNanoseconds < 1000000000,"paused_wall_time_is_excluded");
+    report.Require(paused.stopNanoseconds >= 650000000 && paused.stopNanoseconds < 1000000000,"toolbar_pause_survives_session_unlock_and_excludes_paused_wall_time");
     std::filesystem::copy_file(paused.path,output/L"paused.gif",std::filesystem::copy_options::overwrite_existing);
     std::filesystem::remove(paused.path);
     const auto temporaryBefore = OwnTemporaryFiles();

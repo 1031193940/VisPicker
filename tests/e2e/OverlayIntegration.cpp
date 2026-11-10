@@ -24,6 +24,37 @@ void Require(const bool condition, const char* explanation) {
     if (!condition) { throw std::runtime_error(explanation); }
 }
 
+bool LockOwnedForeground(const HWND owner) {
+    SetLastError(ERROR_SUCCESS);
+    if (LockSetForegroundWindow(LSFW_LOCK)) { return true; }
+    const DWORD error = GetLastError();
+    const HWND foreground = GetForegroundWindow();
+    DWORD foregroundProcess = 0;
+    DWORD ownerProcess = 0;
+    if (foreground) { GetWindowThreadProcessId(foreground, &foregroundProcess); }
+    GetWindowThreadProcessId(owner, &ownerProcess);
+    std::fprintf(stderr, "LockSetForegroundWindow failed: last_error=%lu foreground_pid=%lu owner_pid=%lu "
+        "current_pid=%lu foreground_hwnd=%p owner_hwnd=%p\n", error, foregroundProcess, ownerProcess,
+        GetCurrentProcessId(), static_cast<void*>(foreground), static_cast<void*>(owner));
+    return false;
+}
+
+void PressKey(vispick::Overlay& overlay, const WPARAM key, const bool control = false, const bool shift = false) {
+    struct RestoreKeyboard {
+        BYTE previous[256]{};
+        RestoreKeyboard() { Require(GetKeyboardState(previous) != FALSE, "Get thread keyboard state failed"); }
+        ~RestoreKeyboard() { SetKeyboardState(previous); }
+    } restore;
+    BYTE keys[256]{};
+    std::copy(std::begin(restore.previous), std::end(restore.previous), std::begin(keys));
+    for (const auto modifier : {VK_CONTROL, VK_LCONTROL, VK_RCONTROL, VK_SHIFT, VK_LSHIFT, VK_RSHIFT,
+                               VK_MENU, VK_LMENU, VK_RMENU}) { keys[modifier] = 0; }
+    keys[VK_CONTROL] = static_cast<BYTE>(control ? 0x80 : 0);
+    keys[VK_SHIFT] = static_cast<BYTE>(shift ? 0x80 : 0);
+    Require(SetKeyboardState(keys) != FALSE, "Set thread keyboard state failed");
+    SendMessageW(overlay.Handle(), WM_KEYDOWN, key, 0);
+}
+
 std::uint32_t Pattern(const int screenX, const int screenY) {
     const auto horizontal = static_cast<std::uint32_t>(screenX);
     const auto vertical = static_cast<std::uint32_t>(screenY);
@@ -105,7 +136,7 @@ protected:
     LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override {
         if (message == LockFocus) {
             if (GetForegroundWindow() == alternative_) { SetForegroundWindow(Handle()); }
-            return GetForegroundWindow() == Handle() && LockSetForegroundWindow(LSFW_LOCK);
+            return GetForegroundWindow() == Handle() && LockOwnedForeground(Handle());
         }
         if (message == UnlockFocus || message == ChangeFocus) {
             return GetForegroundWindow() == Handle() && LockSetForegroundWindow(LSFW_UNLOCK) &&
@@ -303,14 +334,15 @@ void RunForegroundDenialTest() {
         SetWindowPos(foreground.Handle(), HWND_TOPMOST, 0, 0, 0, 0, showWithoutActivation),
         "Cannot show the owned foreground lock fixture");
     vispick::test::ActivateOwnedWindow(foreground.Handle());
-    Require(LockSetForegroundWindow(LSFW_LOCK) != FALSE, "Could not lock the owned test foreground window");
+    Require(LockOwnedForeground(foreground.Handle()), "Could not lock the owned test foreground window");
     ForegroundProbeProcess child;
     child.WaitForSuccess();
 }
 
-void Run(const std::filesystem::path& visualOutput, bool focusOnly) {
+void Run(const std::filesystem::path& visualOutput, bool focusOnly, bool selectionOnly) {
     vispick::InitializeDpiAwareness();
-    RunForegroundDenialTest();
+    if (selectionOnly) { std::puts("Selection-only run: foreground-denial fixture is not executed."); }
+    else { RunForegroundDenialTest(); }
     if (focusOnly) { return; }
     const RECT desktop = vispick::VirtualDesktopBounds();
     const auto monitors = vispick::EnumerateMonitors();
@@ -385,14 +417,27 @@ void Run(const std::filesystem::path& visualOutput, bool focusOnly) {
     const POINT sample{monitor.left + 60, monitor.top + 60};
     SendMessageW(overlay.Handle(), WM_MOUSEMOVE, 0, Position(sample, desktop));
     UpdateWindow(overlay.Handle()); GdiFlush(); DwmFlush();
-    const int scale = static_cast<int>(monitors.front().dpiX);
-    const LONG magnifierWidth = std::max<LONG>(122, MulDiv(156, scale, 96));
-    const LONG left = sample.x + MulDiv(24, scale, 96) + (magnifierWidth - 120) / 2;
-    const LONG top = sample.y + MulDiv(24, scale, 96) + 2;
-    const auto magnifier = vispick::CaptureScreen({left + 60, top + 60, left + 61, top + 61});
+    const auto layout = vispick::LayoutMagnifier(sample, monitor, monitors.front().dpiX);
+    const LONG centerX = (layout.center.left + layout.center.right) / 2;
+    const LONG centerY = (layout.center.top + layout.center.bottom) / 2;
+    const auto magnifier = vispick::CaptureScreen({centerX, centerY, centerX + 1, centerY + 1});
     Require((magnifier->Image().Pixels()[0] & 0xFFFFFFU) == (Pattern(sample.x, sample.y) & 0xFFFFFFU), "Magnifier center RGB mismatch");
     overlay.Cancel();
     config.capture.magnifier = false;
+
+    // Ctrl+A selects the display under the pointer; modifiers adjust physical
+    // selection pixels rather than DPI-scaled UI pixels. GIF avoids flattening.
+    result.reset();
+    begin(vispick::CaptureMode::Gif);
+    SendMessageW(overlay.Handle(), WM_MOUSEMOVE, 0, Position(sample, desktop));
+    PressKey(overlay, 'A', true);
+    PressKey(overlay, VK_LEFT, true);
+    PressKey(overlay, VK_UP, true, true);
+    PressKey(overlay, VK_RETURN);
+    const RECT keyboardSelection{monitor.left, monitor.top, monitor.right - 1, monitor.bottom - 10};
+    Require(result && result->action == vispick::OverlayAction::Record && EqualRect(&result->selection, &keyboardSelection),
+        "Ctrl+A / Ctrl+arrows did not select the pointer display and resize its right/bottom edges in physical pixels");
+    result.reset();
 
     // Save cancellation keeps the complete editor session; accepted save hands
     // ownership of the image to the callback and then completes with no duplicate.
@@ -511,6 +556,19 @@ void Run(const std::filesystem::path& visualOutput, bool focusOnly) {
         "Esc during a drag did not release capture and cancel safely");
     result.reset();
 
+    // Cancellation releases the full-screen window and gesture before invoking
+    // App completion, even if downstream error handling itself throws.
+    vispick::test::ActivateOwnedWindow(pattern.Handle());
+    overlay.Begin(vispick::CaptureMode::Screenshot, config, [](vispick::OverlayResult) {
+        throw std::runtime_error("Injected overlay completion failure");
+    });
+    SendMessageW(overlay.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, dragStart);
+    bool completionFailed = false;
+    try { overlay.Cancel(); }
+    catch (const std::runtime_error&) { completionFailed = true; }
+    Require(completionFailed && !overlay.Active() && !IsWindowVisible(overlay.Handle()) && GetCapture() != overlay.Handle(),
+        "Completion failure left the overlay visible or kept pointer capture");
+
     begin(vispick::CaptureMode::Screenshot);
     {
         FocusWindow focus({monitor.left, monitor.top});
@@ -544,13 +602,18 @@ int wmain(int count, wchar_t** arguments) {
     try {
         std::filesystem::path output;
         const bool focusOnly = count == 2 && std::wstring_view(arguments[1]) == L"--focus-only";
+        const bool selectionOnly = count == 2 && std::wstring_view(arguments[1]) == L"--selection-only";
         if (count == 3 && std::wstring_view(arguments[1]) == L"--foreground-lock-child") {
             CheckDeniedForeground(std::stoul(arguments[2]));
             return 0;
         }
         if (count == 3 && std::wstring_view(arguments[1]) == L"--visual-output") { output = arguments[2]; }
-        else if (count != 1 && !focusOnly) { throw std::invalid_argument("Usage: VisPickOverlayTests [--focus-only | --visual-output image.png]"); }
-        Run(output, focusOnly); std::puts("Overlay integration passed"); return 0;
+        else if (count != 1 && !focusOnly && !selectionOnly) {
+            throw std::invalid_argument("Usage: VisPickOverlayTests [--focus-only | --selection-only | --visual-output image.png]");
+        }
+        Run(output, focusOnly, selectionOnly);
+        std::puts(selectionOnly ? "Overlay selection integration passed; foreground-denial fixture was not run" : "Overlay integration passed");
+        return 0;
     }
     catch (const std::exception& error) { std::fprintf(stderr, "Overlay integration failed: %s\n", error.what()); return 1; }
 }

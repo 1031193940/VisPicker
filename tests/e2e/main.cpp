@@ -2,6 +2,7 @@
 #include "core/CommandLine.h"
 #include "core/Report.h"
 #include "platform/Compat.h"
+#include "spikes/TestEnvironment.h"
 #include "platform/Console.h"
 
 #include <algorithm>

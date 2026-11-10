@@ -11,6 +11,7 @@ enum class PinWheel { Zoom, Opacity };
 enum class CompactMode { Crop, Thumbnail };
 enum class TrayClick { Screenshot, Gif, Pin, None };
 enum class Language { Auto, Chinese, English };
+enum class NotificationMode { Errors, All, None };
 
 struct Config {
     struct Hotkeys {
@@ -71,6 +72,7 @@ struct Config {
     struct General {
         TrayClick trayClick = TrayClick::Screenshot;
         Language language = Language::Auto;
+        NotificationMode notify = NotificationMode::Errors;
         bool log = false;
     } general;
 };

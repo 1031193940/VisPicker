@@ -34,8 +34,16 @@ foreach ($relative in @('dist\VisPick.exe','dist\VisPick-x86.exe','CHANGELOG.md'
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination))
     Copy-Item -LiteralPath (Join-Path $projectRoot $relative) -Destination $destination
 }
-$readme = Get-Content -LiteralPath (Join-Path $projectRoot 'README.md') -Raw
-($readme -split '(?m)^## 构建\r?$', 2)[0].TrimEnd() | Set-Content -LiteralPath (Join-Path $packageRoot 'README.md') -Encoding utf8
+$versionNotes = Join-Path $projectRoot "docs\releases\VisPick-$Version.md"
+if (Test-Path -LiteralPath $versionNotes) {
+    # Repository README describes the latest public release; a local/new tag package
+    # must carry instructions for its own version even before publication.
+    $readme = Get-Content -LiteralPath $versionNotes -Raw
+} else {
+    $readme = (Get-Content -LiteralPath (Join-Path $projectRoot 'README.md') -Raw) -split '(?m)^## 构建\r?$', 2 |
+        Select-Object -First 1
+}
+$readme.TrimEnd() | Set-Content -LiteralPath (Join-Path $packageRoot 'README.md') -Encoding utf8
 $revision = $null
 if (Get-Command git -ErrorAction SilentlyContinue) {
     $gitRevision = & git -C $projectRoot rev-parse --verify HEAD 2>$null

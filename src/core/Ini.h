@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
@@ -39,5 +40,10 @@ struct IniDocument {
     std::optional<unsigned> legacyCodePage = std::nullopt);
 [[nodiscard]] std::wstring LowerAscii(std::wstring_view value);
 [[nodiscard]] std::wstring_view TrimIniWhitespace(std::wstring_view value) noexcept;
+
+// Atomically update the last matching entry, preserving encoding, spacing and comments.
+// Missing keys/sections are inserted. A malformed file or ambiguous value is rejected.
+void UpdateIniValue(const std::filesystem::path& path, std::wstring_view section,
+    std::wstring_view key, std::wstring_view value);
 
 } // namespace vispick

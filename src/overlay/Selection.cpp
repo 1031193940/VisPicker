@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <cwchar>
 
 namespace vispick {
 namespace {
@@ -77,6 +78,50 @@ RECT PlaceToolbar(const RECT selection, const SIZE size, const RECT monitor, con
     return {left, top, left + size.cx, top + size.cy};
 }
 
+std::optional<RECT> CycleWindowSelection(const std::span<const RECT> candidates,
+                                       const RECT current, const bool reverse) noexcept {
+    if (candidates.empty()) { return std::nullopt; }
+    const auto selected = std::find_if(candidates.begin(), candidates.end(), [&](const RECT& candidate) {
+        return EqualRect(&candidate, &current) != FALSE;
+    });
+    std::size_t position = selected == candidates.end() ? (reverse ? 0 : candidates.size() - 1) :
+        static_cast<std::size_t>(selected - candidates.begin());
+    for (std::size_t checked = 0; checked < candidates.size(); ++checked) {
+        position = reverse ? (position == 0 ? candidates.size() - 1 : position - 1) : (position + 1) % candidates.size();
+        const RECT candidate = candidates[position];
+        if (!IsRectEmpty(&candidate) && !EqualRect(&candidate, &current)) { return candidate; }
+    }
+    return selected != candidates.end() && !IsRectEmpty(&current) ? std::optional<RECT>{current} : std::nullopt;
+}
+
+MagnifierLayout LayoutMagnifier(const POINT pointer, const RECT monitor, const UINT dpi) noexcept {
+    const auto scale = [dpi](const int logical) { return MulDiv(logical, static_cast<int>(dpi), 96); };
+    const LONG cell = std::max(1, scale(8));
+    const LONG imageSide = cell * 15;
+    const LONG padding = std::max(1, scale(2));
+    const LONG width = std::max(imageSide + padding * 2, static_cast<LONG>(scale(156)));
+    const LONG height = imageSide + padding * 2 + scale(48);
+    LONG left = pointer.x + scale(24);
+    LONG top = pointer.y + scale(24);
+    if (left + width > monitor.right) { left = pointer.x - width - scale(24); }
+    if (top + height > monitor.bottom) { top = pointer.y - height - scale(24); }
+    left = std::clamp(left, monitor.left, std::max(monitor.left, monitor.right - width));
+    top = std::clamp(top, monitor.top, std::max(monitor.top, monitor.bottom - height));
+    const LONG imageLeft = left + (width - imageSide) / 2;
+    const LONG imageTop = top + padding;
+    return {{left, top, left + width, top + height},
+        {imageLeft, imageTop, imageLeft + imageSide, imageTop + imageSide},
+        {imageLeft + cell * 7, imageTop + cell * 7, imageLeft + cell * 8, imageTop + cell * 8},
+        {left + padding, imageTop + imageSide + padding, left + width - padding, top + height}};
+}
+
+std::wstring FormatSampledColor(const std::uint32_t color, const bool rgb) {
+    wchar_t text[32]{};
+    if (rgb) { swprintf_s(text, L"RGB(%u, %u, %u)", (color >> 16U) & 255U, (color >> 8U) & 255U, color & 255U); }
+    else { swprintf_s(text, L"#%06X", color & 0xFFFFFFU); }
+    return text;
+}
+
 void Selection::Reset(const RECT desktop) noexcept { desktop_ = desktop; Clear(); }
 void Selection::Clear() noexcept { rectangle_ = {}; initial_ = {}; dragging_ = false; handle_ = SelectionHandle::None; }
 void Selection::Set(const RECT rectangle) noexcept { rectangle_ = NormalizeSelection({rectangle.left, rectangle.top}, {rectangle.right, rectangle.bottom}, desktop_); }
@@ -110,6 +155,16 @@ void Selection::End(const POINT point, const RECT clickTarget) noexcept {
 
 void Selection::Nudge(const LONG deltaX, const LONG deltaY) noexcept {
     if (!dragging_ && HasSelection()) { rectangle_ = MoveSelection(rectangle_, deltaX, deltaY, desktop_); }
+}
+
+void Selection::ResizeBy(const LONG widthDelta, const LONG heightDelta) noexcept {
+    if (dragging_ || !HasSelection()) { return; }
+    rectangle_.right = static_cast<LONG>(std::clamp<std::int64_t>(
+        static_cast<std::int64_t>(rectangle_.right) + widthDelta,
+        static_cast<std::int64_t>(rectangle_.left) + 1, desktop_.right));
+    rectangle_.bottom = static_cast<LONG>(std::clamp<std::int64_t>(
+        static_cast<std::int64_t>(rectangle_.bottom) + heightDelta,
+        static_cast<std::int64_t>(rectangle_.top) + 1, desktop_.bottom));
 }
 
 void Selection::CancelDrag() noexcept {

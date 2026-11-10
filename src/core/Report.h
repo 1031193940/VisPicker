@@ -1,7 +1,7 @@
 #pragma once
 
 #include "spikes/Spikes.h"
-#include "platform/Compat.h"
+#include "spikes/TestEnvironment.h"
 #include <span>
 #include <string_view>
 

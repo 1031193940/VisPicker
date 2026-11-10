@@ -3,6 +3,8 @@
 #include "recording/GifPreview.h"
 #include "recording/RecordingFiles.h"
 #include "gif/Timing.h"
+#include "gif/GifTrim.h"
+#include "gif/GifWriter.h"
 #include "platform/FileCommit.h"
 
 #include <algorithm>
@@ -271,6 +273,79 @@ TEST_CASE("GIF save commits replacement and preserves the source when destinatio
     vispick::recording::CommitFile(source,destination);
     CHECK_FALSE(std::filesystem::exists(source));
     CHECK(Contents(destination) == "new GIF bytes");
+}
+
+TEST_CASE("GIF trim preserves variable delays and composes the new first frame across disposal") {
+    auto disposal = vispick::gif::DisposalMethod::Previous;
+    SUBCASE("Restore the canvas from before the frame") {}
+    SUBCASE("Restore the global background color") { disposal = vispick::gif::DisposalMethod::Background; }
+    RecordingTestDirectory directory;
+    const auto source = directory.path/L"original.gif";
+    const auto trimmed = directory.path/L"trimmed.gif";
+    constexpr std::uint32_t green = 0xFF228844, red = 0xFFCC2233, blue = 0xFF2255CC;
+    const std::array full{green,green,green,green};
+    {
+        const std::array background{green};
+        vispick::gif::GifWriter writer(source,2,2,background);
+        writer.WriteFrame(vispick::gif::EncodeFrame(full),3);
+        const std::array previous{red,red};
+        writer.WriteFrame(vispick::gif::EncodeFrame(previous),{0,0,1,2,7,disposal});
+        const std::array next{blue,blue};
+        writer.WriteFrame(vispick::gif::EncodeFrame(next),{1,0,1,2,11,vispick::gif::DisposalMethod::Keep});
+        writer.Finish();
+    }
+    const auto original = Contents(source);
+    const std::array second{red,green,red,green};
+    const std::array third{green,blue,green,blue};
+    const std::array expected{vispick::gif::PixelHash(second),vispick::gif::PixelHash(third)};
+    vispick::gif::TrimRecordedGif(source,trimmed,{3,21});
+    const auto inspection = vispick::gif::InspectGif(trimmed,expected);
+    CHECK(inspection.frameCount == 2);
+    CHECK(inspection.durationCentiseconds == 18);
+    CHECK(inspection.mismatchedFrames == 0);
+    {
+        vispick::gif::GifReader reader(trimmed);
+        CHECK(reader.ReadFrameMetadata(0).delayCentiseconds == 7);
+        CHECK(reader.ReadFrameMetadata(0).width == 2);
+        CHECK(reader.ReadFrameMetadata(0).height == 2);
+        CHECK(reader.ReadFrameMetadata(1).delayCentiseconds == 11);
+    }
+    CHECK(Contents(source) == original);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,source,{3,21}),std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{4,21}),std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{3,20}),std::invalid_argument);
+    CHECK_THROWS(vispick::gif::TrimRecordedGif(source,directory.path/L"missing"/L"failed.gif",{3,21}));
+    CHECK_THROWS(vispick::recording::CommitFile(trimmed,directory.path/L"missing"/L"failed.gif"));
+    CHECK(Contents(source) == original);
+    CHECK(vispick::gif::InspectGif(trimmed,expected).mismatchedFrames == 0);
+}
+
+TEST_CASE("GIF trim retains a minimum-delay final frame without extending duration") {
+    RecordingTestDirectory directory;
+    const auto source = directory.path/L"original.gif";
+    const auto trimmed = directory.path/L"trimmed.gif";
+    const std::array first{0xFF112233U};
+    const std::array last{0xFF446688U};
+    {
+        vispick::gif::GifWriter writer(source,1,1);
+        writer.WriteFrame(vispick::gif::EncodeFrame(first),30);
+        writer.WriteFrame(vispick::gif::EncodeFrame(last),2);
+        writer.Finish();
+    }
+    vispick::gif::TrimRecordedGif(source,trimmed,{30,32});
+    const std::array expected{vispick::gif::PixelHash(last)};
+    const auto inspection = vispick::gif::InspectGif(trimmed,expected);
+    CHECK(inspection.frameCount == 1);
+    CHECK(inspection.durationCentiseconds == 2);
+    CHECK(inspection.mismatchedFrames == 0);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{30,31}),std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{30,30}),std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{30,40}),std::invalid_argument);
+    const auto original = Contents(source);
+    unsigned checks = 0;
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{30,32},[&] { return ++checks == 4; }),std::runtime_error);
+    CHECK(checks == 4);
+    CHECK(Contents(source) == original);
 }
 
 TEST_CASE("GIF overwrite accepts a Unicode destination beyond MAX_PATH") {

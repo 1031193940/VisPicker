@@ -1,13 +1,13 @@
 #include <doctest/doctest.h>
 
-#include "platform/Compat.h"
+#include "spikes/TestEnvironment.h"
 
 namespace {
 
 vispick::TestEnvironment PhysicalEnvironment() {
     vispick::TestEnvironment environment;
     environment.sessionDetectionKnown = true;
-    vispick::MonitorInfo monitor;
+    vispick::TestMonitorInfo monitor;
     monitor.deviceName = L"\\\\.\\DISPLAY1";
     monitor.adapterName = L"NVIDIA Test Adapter";
     monitor.refreshHz = 60;

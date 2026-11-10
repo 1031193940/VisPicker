@@ -4,11 +4,31 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace vispick {
-// PNG retains alpha; CF_DIB is an opaque, top-down 32-bit fallback.
+// PNG and CF_DIBV5 retain alpha; CF_DIB is an opaque, top-down 32-bit fallback.
 void CopyImage(HWND owner, BitmapView image);
+void CopyText(HWND owner, const std::wstring& text);
 [[nodiscard]] std::optional<Bitmap> ReadClipboardImage(HWND owner);
+
+// UI-thread owner: publish raw pixels immediately, then append PNG when ready.
+// One worker keeps only the latest pending image. The owner must remain alive
+// until destruction, which joins any encoding already in progress.
+class ImageClipboard final {
+public:
+    ImageClipboard(HWND owner, UINT readyMessage);
+    ~ImageClipboard();
+    ImageClipboard(const ImageClipboard&) = delete;
+    ImageClipboard& operator=(const ImageClipboard&) = delete;
+    void Copy(Bitmap image);
+    // Call on readyMessage. Stale results are discarded; encoding/publication
+    // errors propagate while the already-published DIB formats remain usable.
+    void PublishReady();
+private:
+    struct Implementation;
+    std::unique_ptr<Implementation> implementation_;
+};
 
 struct GifClipboardFormats {
     bool animation;

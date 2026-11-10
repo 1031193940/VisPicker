@@ -243,14 +243,44 @@ void Command(const Child& child, const std::filesystem::path& config, vispick::A
         response != static_cast<DWORD_PTR>(vispick::SingleInstance::Accepted)) { throw std::runtime_error("Product rejected lifecycle command"); }
 }
 
-void Select(const Child& child, RECT selection, bool duplicateConfirm = false) {
+std::string ForegroundState(const DWORD childProcess, const HWND overlay) {
+    const HWND active = GetForegroundWindow();
+    DWORD foregroundProcess = 0;
+    if (active) { GetWindowThreadProcessId(active, &foregroundProcess); }
+    return "foreground_pid=" + std::to_string(foregroundProcess) + " child_pid=" + std::to_string(childProcess) +
+        " overlay_visible=" + std::to_string(overlay && IsWindowVisible(overlay) ? 1 : 0) +
+        " foreground_is_overlay=" + std::to_string(overlay && active == overlay ? 1 : 0);
+}
+
+void PrepareForeground(vispick::test::ForegroundFixture& foreground, const DWORD childProcess = 0,
+    const HWND overlay = nullptr) {
+    try {
+        if (childProcess) { foreground.GrantTo(childProcess); }
+        else { foreground.Activate(); }
+    } catch (const std::exception& error) {
+        throw std::runtime_error(std::string("Lifecycle foreground precondition failed: ") + error.what() + "; " +
+            ForegroundState(childProcess, overlay));
+    }
+}
+
+void Select(const Child& child, vispick::test::ForegroundFixture& foreground, RECT selection, bool duplicateConfirm = false) {
     HWND overlay = nullptr;
     Require(WaitUntil([&] { overlay = Windows(child.Identifier(), L"VisPick.Overlay", true).first; return overlay != nullptr; }), "selection_overlay_visible");
     RECT bounds{};
     if (!GetWindowRect(overlay, &bounds)) { throw std::runtime_error("Cannot read overlay bounds"); }
     const LPARAM start = MAKELPARAM(selection.left - bounds.left, selection.top - bounds.top);
     const LPARAM end = MAKELPARAM(selection.right - bounds.left, selection.bottom - bounds.top);
+    // Desktop capture can outlast the initial IPC grant. Renew it once, only
+    // through our owned fixture, then let the product's normal click activate.
+    if (GetForegroundWindow() != overlay) {
+        PrepareForeground(foreground, child.Identifier(), overlay);
+        std::cout << "INFO selection_foreground_grant_requested " << ForegroundState(child.Identifier(), overlay) << '\n';
+    }
     SendOwned(overlay, WM_LBUTTONDOWN, MK_LBUTTON, start);
+    if (!IsWindowVisible(overlay) || GetForegroundWindow() != overlay) {
+        throw std::runtime_error("Lifecycle selection foreground precondition failed after the activation click; " +
+            ForegroundState(child.Identifier(), overlay));
+    }
     SendOwned(overlay, WM_MOUSEMOVE, MK_LBUTTON, end);
     SendOwned(overlay, WM_LBUTTONUP, 0, end);
     if (!PostMessageW(overlay, WM_KEYDOWN, VK_RETURN, 0) ||
@@ -335,11 +365,11 @@ void Run(const std::filesystem::path& product, const std::filesystem::path& outp
     Pattern pattern;
     vispick::test::ForegroundFixture foreground;
     {
-        foreground.Activate();
+        PrepareForeground(foreground);
         Child application(executable, config, temporary);
         Require(WaitUntil([&] { return application.Main() != nullptr; }), "pin_product_started");
-        foreground.GrantTo(application.Identifier());
-        Command(application, config, vispick::AppCommand::Pin); Select(application, pattern.Selection());
+        PrepareForeground(foreground, application.Identifier());
+        Command(application, config, vispick::AppCommand::Pin); Select(application, foreground, pattern.Selection());
         Require(WaitUntil([&] { return Windows(application.Identifier(), L"VisPick.Pin", true).count == 1; }), "selection_created_one_pin");
         {
             Child exit(executable, config, temporary, L"--exit");
@@ -356,11 +386,11 @@ void Run(const std::filesystem::path& product, const std::filesystem::path& outp
     }
     std::filesystem::path preserved;
     {
-        foreground.Activate();
+        PrepareForeground(foreground);
         Child application(executable, config, temporary);
         Require(WaitUntil([&] { return application.Main() != nullptr; }), "gif_product_started");
-        foreground.GrantTo(application.Identifier());
-        Command(application, config, vispick::AppCommand::Gif); Select(application, pattern.Selection(), true);
+        PrepareForeground(foreground, application.Identifier());
+        Command(application, config, vispick::AppCommand::Gif); Select(application, foreground, pattern.Selection(), true);
         Require(WaitUntil([&] { return Windows(application.Identifier(), L"VisPick.RecordBar").count == 1; }), "duplicate_enter_starts_one_recording");
         const auto started = Clock::now();
         Require(WaitUntil([&] { return Clock::now() - started >= std::chrono::milliseconds(500); }), "recording_interval_elapsed");
@@ -389,12 +419,12 @@ void Run(const std::filesystem::path& product, const std::filesystem::path& outp
             "empty_product_exits_without_confirmation");
     }
     {
-        foreground.Activate();
+        PrepareForeground(foreground);
         Child application(executable, config, temporary);
         Require(WaitUntil([&] { return application.Main() != nullptr; }), "exit_while_recording_product_started");
-        foreground.GrantTo(application.Identifier());
+        PrepareForeground(foreground, application.Identifier());
         Command(application, config, vispick::AppCommand::Gif);
-        Select(application, pattern.Selection());
+        Select(application, foreground, pattern.Selection());
         Require(WaitUntil([&] { return Windows(application.Identifier(), L"VisPick.RecordBar", true).count == 1; }), "exit_test_recording_started");
         const auto started = Clock::now();
         Require(WaitUntil([&] { return Clock::now() - started >= std::chrono::milliseconds(500); }), "exit_test_recorded_frames");

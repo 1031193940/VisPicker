@@ -8,6 +8,7 @@
 #include "imaging/ImageCodec.h"
 #include "pin/PinManager.h"
 #include "platform/Compat.h"
+#include "spikes/TestEnvironment.h"
 #include "platform/Console.h"
 #include "platform/Gdi.h"
 #include "platform/Window.h"

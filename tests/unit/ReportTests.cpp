@@ -35,7 +35,7 @@ TEST_CASE("A successful diagnostic in an invalid environment is never an accepta
     environment.remoteSession = true;
     environment.sessionDetectionKnown = true;
     environment.invalidReasons = {"Remote session"};
-    vispick::MonitorInfo monitor;
+    vispick::TestMonitorInfo monitor;
     monitor.deviceName = L"DISPLAY1";
     monitor.adapterName = L"Remote 显示适配器";
     monitor.refreshHz = 32;

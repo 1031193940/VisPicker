@@ -2,6 +2,7 @@
 
 #include "capture/ScreenGrab.h"
 #include "platform/Compat.h"
+#include "spikes/TestEnvironment.h"
 #include "spikes/VisualSupport.h"
 #include "platform/Compat.h"
 

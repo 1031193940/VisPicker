@@ -16,6 +16,7 @@ class HotkeyRegistration;
 class Tray;
 class Autostart;
 class ImageSaver;
+class ImageClipboard;
 class PinManager;
 class Recorder;
 class GifPreview;
@@ -33,7 +34,7 @@ private:
     void ApplyConfiguration(bool retryHotkeys);
     void RebindHotkeys(bool announceFailure = false);
     void Report(std::wstring_view message, bool warning = false);
-    void NotifyStartup();
+    void NotifyStartup(bool repeatedLaunch = false);
     void Queue(LaunchOptions options);
     void ProcessCommands();
     void BeginSelection(CaptureMode mode);
@@ -61,6 +62,7 @@ private:
     std::unique_ptr<ConfigWatcher> watcher_;
     std::unique_ptr<Overlay> overlay_;
     std::unique_ptr<ImageSaver> imageSaver_;
+    std::unique_ptr<ImageClipboard> imageClipboard_;
     std::unique_ptr<PinManager> pins_;
     std::unique_ptr<Recorder> recorder_;
     std::unique_ptr<GifPreview> preview_;
@@ -69,6 +71,7 @@ private:
     std::filesystem::path lastSaveFolder_;
     std::wstring configurationProblems_;
     std::wstring hotkeyProblems_;
+    std::wstring startupProblem_;
     bool performanceLogging_ = false;
     bool startupNotificationPending_ = true;
     bool stopping_ = false;

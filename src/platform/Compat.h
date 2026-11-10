@@ -13,24 +13,7 @@ struct MonitorInfo {
     UINT dpiY = 96;
     bool primary = false;
     std::wstring deviceName;
-    std::wstring adapterName;
-    DWORD refreshHz = 0;
-    DWORD adapterFlags = 0;
-    bool physicalDisplayVerified = false;
 };
-
-struct TestEnvironment {
-    bool remoteSession = false;
-    bool remoteSessionMetric = false;
-    bool sessionDetectionKnown = false;
-    bool physicalAcceptanceEligible = false;
-    std::vector<MonitorInfo> monitors;
-    std::vector<std::string> invalidReasons;
-};
-
-[[nodiscard]] TestEnvironment DetectTestEnvironment();
-// Pure policy used by tests as well as the OS detector. Unknown is ineligible.
-void EvaluateTestEnvironment(TestEnvironment& environment);
 
 struct WindowsVersion {
     DWORD major = 0;

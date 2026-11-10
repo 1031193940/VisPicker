@@ -529,3 +529,17 @@ kernel32.dll!ReplaceFileW
 # mappings are linked at the top of this file, and these wrappers support XP:
 # https://learn.microsoft.com/windows/win32/api/gdiplusbrush/nf-gdiplusbrush-brush-clone
 # https://learn.microsoft.com/windows/win32/api/gdiplusgraphics/nf-gdiplusgraphics-graphics-setcompositingmode
+
+# 0.6.0 review additions, verified against Microsoft requirements on 2026-11-10.
+# Windows 2000 Professional: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-ischild
+user32.dll!IsChild
+# Windows 2000 Professional: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipboardowner
+user32.dll!GetClipboardOwner
+# Windows 2000 Professional: https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-getobjectw
+gdi32.dll!GetObjectW
+# GDI+ 1.0, Windows XP / Windows 2000 Professional. Flat-to-wrapper mapping:
+# https://learn.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-graphics-flat
+# DrawLines(PointF*) Requirements: https://learn.microsoft.com/en-us/previous-versions//ms536019%28v%3Dvs.85%29
+gdiplus.dll!GdipDrawLines
+# FillRectangle(REAL...) Requirements: https://learn.microsoft.com/en-us/windows/win32/api/gdiplusgraphics/nf-gdiplusgraphics-graphics-fillrectangle%28constbrush_real_real_real_real%29
+gdiplus.dll!GdipFillRectangle

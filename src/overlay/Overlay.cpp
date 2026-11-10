@@ -4,6 +4,7 @@
 #include "editor/Annotation.h"
 #include "editor/Renderer.h"
 #include "editor/TextInput.h"
+#include "imaging/Clipboard.h"
 #include "overlay/Selection.h"
 #include "platform/Compat.h"
 #include "platform/Gdi.h"
@@ -262,16 +263,14 @@ struct Overlay::State {
 
     [[nodiscard]] RECT MagnifierBounds() const noexcept {
         if (!config.capture.magnifier || (selection.HasSelection() && !selection.Dragging())) { return {}; }
-        const RECT monitor = MonitorAt(pointer);
-        const LONG width = std::max<LONG>(122, Scale(156));
-        const LONG height = 124 + Scale(40);
-        LONG left = pointer.x + Scale(24);
-        LONG top = pointer.y + Scale(24);
-        if (left + width > monitor.right) { left = pointer.x - width - Scale(24); }
-        if (top + height > monitor.bottom) { top = pointer.y - height - Scale(24); }
-        left = std::clamp(left, monitor.left, std::max(monitor.left, monitor.right - width));
-        top = std::clamp(top, monitor.top, std::max(monitor.top, monitor.bottom - height));
-        return {left, top, left + width, top + height};
+        return LayoutMagnifier(pointer, MonitorAt(pointer), dpi).bounds;
+    }
+
+    [[nodiscard]] std::uint32_t SampledColor() const noexcept {
+        const auto image = frozen->Image();
+        const POINT source = Local(pointer);
+        return image.Row(std::clamp<int>(source.y, 0, image.Height() - 1))[
+            std::clamp<int>(source.x, 0, image.Width() - 1)] & 0xFFFFFFU;
     }
 
     [[nodiscard]] const Button* HoverButton() const noexcept {
@@ -462,6 +461,8 @@ struct Overlay::State {
         const RECT screenBounds = MagnifierBounds();
         if (IsRectEmpty(&screenBounds)) { return; }
         const RECT bounds = Local(screenBounds);
+        const auto layout = LayoutMagnifier(pointer, MonitorAt(pointer), dpi);
+        const RECT image = Local(layout.image);
         Fill(context, bounds, RGB(30, 32, 36));
         const auto view = frozen->Image();
         const POINT source = Local(pointer);
@@ -479,18 +480,17 @@ struct Overlay::State {
         information.bmiHeader.biHeight = -15;
         information.bmiHeader.biPlanes = 1;
         information.bmiHeader.biBitCount = 32;
-        const LONG left = bounds.left + (bounds.right - bounds.left - 120) / 2;
-        const LONG top = bounds.top + 2;
         SetStretchBltMode(context, COLORONCOLOR);
-        StretchDIBits(context, left, top, 120, 120, 0, 0, 15, 15, pixels.data(), &information, DIB_RGB_COLORS, SRCCOPY);
+        StretchDIBits(context, image.left, image.top, image.right - image.left, image.bottom - image.top,
+            0, 0, 15, 15, pixels.data(), &information, DIB_RGB_COLORS, SRCCOPY);
         SetDCBrushColor(context, RGB(255, 255, 255));
-        RECT center{left + 56, top + 56, left + 64, top + 64};
+        const RECT center = Local(layout.center);
         FrameRect(context, &center, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
         const auto color = pixels[112] & 0xFFFFFFU;
         wchar_t caption[96]{};
         swprintf_s(caption, L"%ld, %ld\n#%06X  RGB %u %u %u", pointer.x, pointer.y, color,
             (color >> 16U) & 255U, (color >> 8U) & 255U, color & 255U);
-        RECT label{bounds.left + 2, top + 122, bounds.right - 2, bounds.bottom};
+        RECT label = Local(layout.label);
         DrawTextW(context, caption, -1, &label, DT_CENTER | DT_NOPREFIX);
     }
 
@@ -764,6 +764,16 @@ struct Overlay::State {
         const auto old = Snapshot(); selection.Clear(); UpdateSelectionDpi(); hover = SnapAt(pointer); Changed(old);
     }
 
+    void SelectBounds(const RECT bounds) {
+        if (selection.Dragging() || drawing || !CommitText()) { return; }
+        const auto old = Snapshot();
+        selection.Set(bounds);
+        if (annotations) { annotations->SetSelection(selection.Bounds()); }
+        choosingGifFrameRate = false;
+        UpdateSelectionDpi();
+        Changed(old);
+    }
+
     void Key(const WPARAM key) {
         if (key == VK_ESCAPE) {
             if (choosingGifFrameRate) { ToggleGifFrameRatePicker(); }
@@ -772,8 +782,22 @@ struct Overlay::State {
             return;
         }
         if (key == VK_RETURN) { Finish(DefaultAction()); return; }
-        if (!selection.HasSelection()) { return; }
         const bool control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        const bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+        // The native text editor owns its selection, Tab and character input.
+        if (textInput && textInput->Active()) { return; }
+        if (alt) { return; }
+        if (control && key == 'A') { SelectBounds(MonitorAt(pointer)); return; }
+        if (!control && key == VK_TAB) {
+            if (const auto candidate = CycleWindowSelection(windows, VisualSelection(), shift)) { SelectBounds(*candidate); }
+            return;
+        }
+        if (!control && key == 'C') {
+            CopyText(window.Handle(), FormatSampledColor(SampledColor(), shift));
+            return;
+        }
+        if (!selection.HasSelection()) { return; }
         if (control && annotations && mode != CaptureMode::Gif) {
             if (key == 'C') { Finish(OverlayAction::Copy); return; }
             if (key == 'S') { Save(); return; }
@@ -785,9 +809,11 @@ struct Overlay::State {
         if (key >= VK_LEFT && key <= VK_DOWN) {
             if (selection.Dragging() || drawing || !CommitText()) { return; }
             const auto old = Snapshot();
-            const LONG step = (GetKeyState(VK_SHIFT) & 0x8000) != 0 ? 10 : 1;
-            selection.Nudge(key == VK_LEFT ? -step : key == VK_RIGHT ? step : 0,
-                key == VK_UP ? -step : key == VK_DOWN ? step : 0);
+            const LONG step = shift ? 10 : 1;
+            const LONG horizontal = key == VK_LEFT ? -step : key == VK_RIGHT ? step : 0;
+            const LONG vertical = key == VK_UP ? -step : key == VK_DOWN ? step : 0;
+            if (control) { selection.ResizeBy(horizontal, vertical); }
+            else { selection.Nudge(horizontal, vertical); }
             if (annotations) { annotations->SetSelection(selection.Bounds()); }
             UpdateSelectionDpi();
             Changed(old); return;

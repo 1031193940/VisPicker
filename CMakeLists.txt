@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.29)
-project(VisPick VERSION 0.5.11 LANGUAGES CXX RC)
+project(VisPick VERSION 0.6.0 LANGUAGES CXX RC)
 set(VISPICK_PRODUCT_VERSION "${PROJECT_VERSION}")
 
 if(NOT WIN32 OR NOT MSVC)
     message(FATAL_ERROR "VisPick requires Windows and the MSVC v143 toolset.")
 endif()
-if(MSVC_VERSION LESS 1942 OR MSVC_VERSION GREATER_EQUAL 1943)
-    message(FATAL_ERROR "The Windows 7 import baseline is validated with MSVC 14.42.x (VS 2022 17.12). Select it with build.ps1.")
+if(MSVC_VERSION LESS 1942 OR MSVC_VERSION GREATER_EQUAL 1950)
+    message(FATAL_ERROR "Use VS 2022 with MSVC 14.42 through 14.49; 14.44 is recommended. Windows 7 imports are checked separately.")
 endif()
 if(DEFINED VISPICK_EXPECTED_BITS)
     math(EXPR VISPICK_ACTUAL_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
@@ -66,7 +66,7 @@ add_library(vispick_core STATIC
     src/platform/Window.cpp src/platform/Console.cpp src/platform/ToolbarIcon.cpp
     src/capture/ScreenGrab.cpp
     src/gif/Lzw.cpp src/gif/Quantizer.cpp src/gif/GifWriter.cpp
-    src/gif/GifReader.cpp src/gif/Timing.cpp)
+    src/gif/GifReader.cpp src/gif/GifTrim.cpp src/gif/Timing.cpp)
 target_include_directories(vispick_core PUBLIC src)
 target_link_libraries(vispick_core PUBLIC vispick_options
     user32 gdi32 shell32 ole32 windowscodecs dwmapi winmm advapi32 wtsapi32 psapi gdiplus imm32)
@@ -74,7 +74,7 @@ target_link_libraries(vispick_core PUBLIC vispick_options
 if(VISPICK_BUILD_SPIKES OR VISPICK_BUILD_TESTS)
 add_library(vispick_spikes STATIC
     src/core/CommandLine.cpp src/core/Report.cpp
-    src/spikes/CaptureSpike.cpp src/spikes/OverlaySpike.cpp
+    src/spikes/TestEnvironment.cpp src/spikes/CaptureSpike.cpp src/spikes/OverlaySpike.cpp
     src/spikes/PinSpike.cpp src/spikes/GifSpike.cpp
     src/spikes/PatternProcess.cpp src/spikes/GifPipelineSpike.cpp
     src/spikes/QuantizerBenchmark.cpp)
@@ -120,7 +120,7 @@ if(VISPICK_BUILD_TESTS)
         tests/unit/IniTests.cpp tests/unit/ConfigTests.cpp
         tests/unit/HotkeyTests.cpp tests/unit/PathsTests.cpp
         tests/unit/SingleInstanceTests.cpp tests/unit/AutostartTests.cpp
-        tests/unit/LogTests.cpp tests/unit/TrayTests.cpp tests/unit/ImageCodecTests.cpp
+        tests/unit/LogTests.cpp tests/unit/TrayTests.cpp tests/unit/ToolbarIconTests.cpp tests/unit/ImageCodecTests.cpp
         tests/unit/SelectionTests.cpp tests/unit/AnnotationTests.cpp
         tests/unit/PinTests.cpp
         tests/unit/RecordingTests.cpp
@@ -179,13 +179,13 @@ if(VISPICK_BUILD_TESTS)
         target_compile_options(VisPickPinTests PRIVATE /analyze)
     endif()
     add_executable(VisPickRecordingIntegration tests/e2e/RecordingIntegration.cpp)
-    target_link_libraries(VisPickRecordingIntegration PRIVATE vispick_core)
+    target_link_libraries(VisPickRecordingIntegration PRIVATE vispick_spikes)
     vispick_manifest(VisPickRecordingIntegration)
     if(VISPICK_ANALYZE)
         target_compile_options(VisPickRecordingIntegration PRIVATE /analyze)
     endif()
     add_executable(VisPickSoak tests/e2e/Soak.cpp)
-    target_link_libraries(VisPickSoak PRIVATE vispick_core)
+    target_link_libraries(VisPickSoak PRIVATE vispick_spikes)
     vispick_manifest(VisPickSoak)
     if(VISPICK_ANALYZE)
         target_compile_options(VisPickSoak PRIVATE /analyze)

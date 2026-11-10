@@ -69,6 +69,72 @@ TEST_CASE("Config embedded default template is complete and valid") {
     CHECK(result.config.gif.fps == 30); CHECK(result.config.gif.maxSeconds == 300); CHECK(result.config.gif.showCursor);
     CHECK_FALSE(result.config.gif.highlightClicks); CHECK_FALSE(result.config.gif.dither); CHECK(result.config.gif.scale == 100);
     CHECK(result.config.general.trayClick == vispick::TrayClick::Screenshot); CHECK(result.config.general.language == vispick::Language::Auto); CHECK_FALSE(result.config.general.log);
+    CHECK(result.config.general.notify == vispick::NotificationMode::Errors);
+}
+TEST_CASE("Notification configuration defaults to errors and preserves the last valid policy") {
+    using vispick::NotificationMode;
+    CHECK(vispick::Config{}.general.notify == NotificationMode::Errors);
+    CHECK(ParseSettings("[General]\nNotify=ERRORS").config.general.notify == NotificationMode::Errors);
+    const auto all = ParseSettings("[General]\nNotify=all");
+    REQUIRE(all.diagnostics.empty()); CHECK(all.config.general.notify == NotificationMode::All);
+    const auto none = ParseSettings("[General]\nNotify=none");
+    REQUIRE(none.diagnostics.empty()); CHECK(none.config.general.notify == NotificationMode::None);
+    const auto invalid = ParseSettings("[General]\nNotify=silent", &all.config);
+    REQUIRE(invalid.diagnostics.size() == 1); CHECK(invalid.config.general.notify == NotificationMode::All);
+    CHECK(ParseSettings("[General]\nLog=true", &none.config).config.general.notify == NotificationMode::None);
+}
+
+TEST_CASE("General INI updates preserve spelling comments and unrelated keys") {
+    const ConfigurationFile file;
+    file.Write("; keep\n[General]\nNotify=errors\nNOTIFY = none ; comment\n[Save]\nFolder=C:\\Shots\n");
+    vispick::UpdateIniValue(file.path, L"General", L"Notify", L"all");
+    CHECK(file.Read() == "; keep\n[General]\nNotify=errors\nNOTIFY = all ; comment\n[Save]\nFolder=C:\\Shots\n");
+    vispick::UpdateIniValue(file.path, L"Save", L"FileName", L"shot_{time}");
+    vispick::UpdateIniValue(file.path, L"Capture", L"Magnifier", L"false");
+    const auto settings = vispick::LoadConfig(file.path);
+    CHECK(settings.config.general.notify == vispick::NotificationMode::All);
+    CHECK(settings.config.save.fileName == L"shot_{time}");
+    CHECK(settings.config.save.folder == L"C:\\Shots");
+    CHECK_FALSE(settings.config.capture.magnifier);
+    CHECK(file.FileCount() == 1);
+}
+
+TEST_CASE("General INI updates support empty and Unicode values without consuming comments") {
+    const ConfigurationFile file;
+    for (const bool littleEndian : {true, false}) {
+        file.Write(Utf16Bytes(L"[Editor]\r\nFontName =   ; keep\r\n", littleEndian));
+        vispick::UpdateIniValue(file.path, L"Editor", L"FontName", L"微软雅黑");
+        CHECK(file.Read() == Utf16Bytes(L"[Editor]\r\nFontName =   微软雅黑 ; keep\r\n", littleEndian));
+        vispick::UpdateIniValue(file.path, L"Editor", L"FontName", L"");
+        const auto text = file.Read();
+        const auto parsed = vispick::ParseIni({reinterpret_cast<const std::uint8_t*>(text.data()), text.size()});
+        REQUIRE(parsed.valid); REQUIRE(parsed.entries.size() == 1); CHECK(parsed.entries[0].value.empty());
+    }
+}
+
+TEST_CASE("General INI updates reject ambiguous input before touching the file") {
+    const ConfigurationFile file;
+    const std::string original = "[General]\nNotify=errors\n";
+    file.Write(original);
+    for (const auto* value : {L"all\nLog=true", L"all ; hidden", L" all", L"all "}) {
+        CHECK_THROWS_AS(vispick::UpdateIniValue(file.path, L"General", L"Notify", value), std::invalid_argument);
+        CHECK(file.Read() == original); CHECK(file.FileCount() == 1);
+    }
+    CHECK_THROWS_AS(vispick::UpdateIniValue(file.path, L"General]\n[Pin", L"Notify", L"all"), std::invalid_argument);
+    CHECK_THROWS_AS(vispick::UpdateIniValue(file.path, L"General", L"Notify=none", L"all"), std::invalid_argument);
+    CHECK_THROWS_AS(vispick::UpdateIniValue(file.path, L"General", L"Notify", std::wstring_view(L"a\0b", 3)), std::invalid_argument);
+    CHECK(file.Read() == original);
+}
+
+TEST_CASE("INI updates validate a leading semicolon against the preserved whitespace") {
+    const ConfigurationFile file;
+    const std::string original = "[Save]\nFileName = old ; keep\n";
+    file.Write(original);
+    CHECK_THROWS_AS(vispick::UpdateIniValue(file.path, L"Save", L"FileName", L";literal"), std::invalid_argument);
+    CHECK(file.Read() == original); CHECK(file.FileCount() == 1);
+    file.Write("[Save]\nFileName=old ; keep\n");
+    vispick::UpdateIniValue(file.path, L"Save", L"FileName", L";literal");
+    CHECK(file.Read() == "[Save]\nFileName=;literal ; keep\n");
 }
 TEST_CASE("Config reports unknown section at its declaration") {
     const auto result = ParseSettings("; comment\n[Future]\na=1");
@@ -102,6 +168,8 @@ TEST_CASE("Layered-window capture is an explicit GIF opt-in") {
     const auto result = ParseSettings("[Advanced]\ncapture_layered_gif=true");
     REQUIRE(result.diagnostics.empty()); CHECK(result.config.gif.captureLayeredWindows);
     CHECK(ParseSettings("[Gif]\nFps=20", &result.config).config.gif.captureLayeredWindows);
+    CHECK(ParseSettings("[Advanced]\nCaptureLayeredGif=true").config.gif.captureLayeredWindows);
+    CHECK_FALSE(ParseSettings("[Advanced]\ncapture_layered_gif=true\nCaptureLayeredGif=false").config.gif.captureLayeredWindows);
 }
 TEST_CASE("Reference images stay on their desktop by default and accept an explicit opt-in") {
     CHECK_FALSE(vispick::Config{}.pin.acrossDesktops);

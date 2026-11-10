@@ -42,3 +42,21 @@ TEST_CASE("Tray validates owner icon and callback and registers stable recovery 
     CHECK(message >= 0xC000);
     CHECK(vispick::Tray::TaskbarCreatedMessage() == message);
 }
+
+TEST_CASE("Tray shortcut labels display configured bindings and omit disabled shortcuts") {
+    const std::string_view settings = "[Hotkeys]\nScreenshot=Alt+Q\nGif=Ctrl+Shift+F12\n"
+        "PinClipboard=Win+Insert\nTogglePins=\n";
+    const auto loaded = vispick::ParseConfig({reinterpret_cast<const std::uint8_t*>(settings.data()), settings.size()});
+    REQUIRE(loaded.accepted);
+    REQUIRE(loaded.diagnostics.empty());
+    const auto& hotkeys = loaded.config.hotkeys;
+    CHECK(vispick::Tray::ShortcutLabel(L"截图", hotkeys.screenshot) == L"截图\tAlt+Q");
+    CHECK(vispick::Tray::ShortcutLabel(L"Record GIF", hotkeys.gif) == L"Record GIF\tCtrl+Shift+F12");
+    CHECK(vispick::Tray::ShortcutLabel(L"Pin clipboard image", hotkeys.pinClipboard) == L"Pin clipboard image\tWin+insert");
+    CHECK(vispick::Tray::ShortcutLabel(L"显示 / 隐藏参考图", hotkeys.togglePins) == L"显示 / 隐藏参考图");
+    CHECK(vispick::Tray::ShortcutLabel(L"Disabled", {MOD_CONTROL, 0}) == L"Disabled");
+
+    const vispick::Config defaults;
+    CHECK(vispick::Tray::ShortcutLabel(L"Screenshot", defaults.hotkeys.screenshot) == L"Screenshot\tCtrl+1");
+    CHECK(vispick::Tray::ShortcutLabel(L"Record GIF", defaults.hotkeys.gif) == L"Record GIF\tCtrl+2");
+}

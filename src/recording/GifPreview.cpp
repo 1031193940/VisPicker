@@ -2,6 +2,7 @@
 #include "recording/FrameChange.h"
 #include "recording/RecordingFiles.h"
 #include "gif/GifReader.h"
+#include "gif/GifTrim.h"
 #include "imaging/Clipboard.h"
 #include "platform/Compat.h"
 #include "platform/Console.h"
@@ -30,7 +31,7 @@ namespace {
 using PreviewClock = std::chrono::steady_clock;
 constexpr UINT WorkerUpdated = WM_APP + 1;
 constexpr UINT_PTR PlaybackTimer = 1;
-enum class PreviewAction { None, Copy, Save, Discard };
+enum class PreviewAction { None, Copy, TrimStart, TrimEnd, ResetTrim, Save, Discard };
 
 struct FrameTiming {
     std::int64_t begin = 0;
@@ -44,8 +45,9 @@ struct TimelineEntry {
 
 class PreparedGifCopy final {
 public:
-    explicit PreparedGifCopy(const std::filesystem::path& source)
-        : data_(StageFile(source, file_.path)) {}
+    PreparedGifCopy(const std::filesystem::path& source, const std::optional<gif::GifTrimRange>& range,
+                    const std::function<bool()>& cancelled)
+        : data_(StageFile(source, file_.path,range,cancelled)) {}
 
     [[nodiscard]] GifClipboardFormats Publish(HWND owner) {
         const auto formats = data_.Publish(owner);
@@ -62,9 +64,14 @@ public:
 
 private:
     static const std::filesystem::path& StageFile(const std::filesystem::path& source,
-                                                  const std::filesystem::path& destination) {
-        std::filesystem::copy_file(ExtendedFilePath(source), ExtendedFilePath(destination),
-            std::filesystem::copy_options::overwrite_existing);
+                                                  const std::filesystem::path& destination,
+                                                  const std::optional<gif::GifTrimRange>& range,
+                                                  const std::function<bool()>& cancelled) {
+        if (range) { gif::TrimRecordedGif(source,destination,*range,cancelled); }
+        else {
+            std::filesystem::copy_file(ExtendedFilePath(source), ExtendedFilePath(destination),
+                std::filesystem::copy_options::overwrite_existing);
+        }
         return destination;
     }
 
@@ -96,15 +103,19 @@ struct GifPreview::Implementation final : Window {
     std::vector<std::uint32_t> prefetchedPixels;
     std::optional<std::int64_t> seekRequest;
     std::optional<std::filesystem::path> saveDestination;
+    std::optional<gif::GifTrimRange> outputTrim;
     bool copyRequested = false;
     std::unique_ptr<PreparedGifCopy> preparedCopy;
     std::exception_ptr copyFailure;
     bool saveComplete = false;
+    bool originalCommitted = false;
     std::exception_ptr saveFailure;
     std::exception_ptr playbackFailure;
     std::vector<std::uint32_t> displayedPixels;
     FrameTiming displayedTiming;
     std::int64_t duration = 0;
+    std::int64_t trimBegin = 0;
+    std::int64_t trimEnd = 0;
     std::int64_t position = 0;
     PreviewClock::time_point playbackAnchor;
     std::optional<std::int64_t> pendingSeek;
@@ -148,6 +159,7 @@ struct GifPreview::Implementation final : Window {
             result.durationCentiseconds > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() / 10) ||
             owner == nullptr || closedMessage < WM_APP || closedMessage > 0xBFFF) { throw std::invalid_argument("Invalid GIF preview result or callback"); }
         duration = static_cast<std::int64_t>(result.durationCentiseconds * 10);
+        trimEnd = duration;
         durationText = FormatTime(duration);
         std::wostringstream description;
         description << result.width << L"×" << result.height << L" · " << std::fixed << std::setprecision(1)
@@ -185,6 +197,7 @@ struct GifPreview::Implementation final : Window {
         };
         for (;;) {
             std::optional<std::filesystem::path> destination;
+            std::optional<gif::GifTrimRange> trim;
             bool copy = false;
             {
                 std::unique_lock lock(workerMutex);
@@ -194,23 +207,46 @@ struct GifPreview::Implementation final : Window {
                 if (stopWorker && !saveDestination) { return; }
                 destination = std::exchange(saveDestination,std::nullopt);
                 copy = std::exchange(copyRequested,false);
+                if (destination || copy) { trim = std::exchange(outputTrim,std::nullopt); }
                 if (seekRequest) { activeSeek = std::exchange(seekRequest,std::nullopt); }
             }
             if (destination) {
                 reader.reset(); // WIC may hold a non-delete-sharing file handle.
+                if (trim) { canvas.reset(); } // Reuse this memory for the export's composed canvas.
                 std::exception_ptr failure;
-                try { recording::CommitFile(result.path,*destination); }
+                bool movedOriginal = false;
+                try {
+                    if (trim) {
+                        std::error_code error;
+                        if (std::filesystem::equivalent(result.path,*destination,error)) {
+                            throw std::invalid_argument("The output path must differ from the recording's temporary file");
+                        }
+                        recording::TemporaryGif staged(recording::TemporaryGifKind::Recording);
+                        gif::TrimRecordedGif(result.path,staged.path,*trim);
+                        recording::CommitFile(staged.path,*destination);
+                    } else {
+                        recording::CommitFile(result.path,*destination);
+                        movedOriginal = true;
+                    }
+                }
                 catch (...) { failure = std::current_exception(); }
                 if (!failure) { decodingDone = true; activeSeek.reset(); }
                 {
                     const std::lock_guard lock(workerMutex);
                     saveFailure = failure;
+                    originalCommitted = movedOriginal;
                     saveComplete = true;
                 }
             } else if (copy) {
                 std::unique_ptr<PreparedGifCopy> prepared;
                 std::exception_ptr failure;
-                try { prepared = std::make_unique<PreparedGifCopy>(result.path); }
+                if (trim) { reader.reset(); canvas.reset(); }
+                try {
+                    prepared = std::make_unique<PreparedGifCopy>(result.path,trim,[this] {
+                        const std::lock_guard lock(workerMutex);
+                        return stopWorker;
+                    });
+                }
                 catch (...) { failure = std::current_exception(); }
                 const std::lock_guard lock(workerMutex);
                 preparedCopy = std::move(prepared);
@@ -303,7 +339,7 @@ struct GifPreview::Implementation final : Window {
         const auto bounds = AdjustWindowBoundsForDpi({0,0,clientWidth,clientHeight},WS_OVERLAPPEDWINDOW,0,static_cast<UINT>(dpi));
         return {bounds.right-bounds.left,bounds.bottom-bounds.top};
     }
-    struct ActionButtons { RECT clipboard; RECT save; RECT discard; };
+    struct ActionButtons { RECT clipboard; RECT trimStart; RECT trimEnd; RECT resetTrim; RECT save; RECT discard; };
     ActionButtons LayoutActions() const noexcept {
         RECT client{}; GetClientRect(Handle(),&client);
         const LONG top = client.bottom-Scale(36);
@@ -311,12 +347,16 @@ struct GifPreview::Implementation final : Window {
         const LONG right = client.right-Scale(10);
         const LONG discardLeft = right-Scale(78);
         const LONG saveRight = discardLeft-Scale(8);
-        return {{Scale(10),top,Scale(164),bottom}, {saveRight-Scale(76),top,saveRight,bottom},
+        return {{Scale(10),top,Scale(54),bottom}, {Scale(62),top,Scale(94),bottom},
+            {Scale(102),top,Scale(134),bottom}, {Scale(142),top,Scale(174),bottom}, {saveRight-Scale(76),top,saveRight,bottom},
             {discardLeft,top,right,bottom}};
     }
     PreviewAction ActionAt(POINT point) const noexcept {
         const auto actions = LayoutActions();
         if (PtInRect(&actions.clipboard,point)) { return PreviewAction::Copy; }
+        if (PtInRect(&actions.trimStart,point)) { return PreviewAction::TrimStart; }
+        if (PtInRect(&actions.trimEnd,point)) { return PreviewAction::TrimEnd; }
+        if (PtInRect(&actions.resetTrim,point)) { return PreviewAction::ResetTrim; }
         if (PtInRect(&actions.save,point)) { return PreviewAction::Save; }
         if (PtInRect(&actions.discard,point)) { return PreviewAction::Discard; }
         return PreviewAction::None;
@@ -340,6 +380,9 @@ struct GifPreview::Implementation final : Window {
     const wchar_t* ActionHint() const noexcept {
         switch (hoveredAction) {
         case PreviewAction::Copy: return english ? L"Copy GIF to clipboard (Ctrl+C)" : L"复制 GIF 到剪贴板 (Ctrl+C)";
+        case PreviewAction::TrimStart: return english ? L"Start at this frame ([)" : L"从当前帧开始 ([)";
+        case PreviewAction::TrimEnd: return english ? L"End after this frame (])" : L"在当前帧结束 (])";
+        case PreviewAction::ResetTrim: return english ? L"Restore the full recording (Ctrl+R)" : L"恢复完整录制 (Ctrl+R)";
         case PreviewAction::Save: return english ? L"Save GIF to file (Ctrl+S)" : L"保存 GIF 到文件 (Ctrl+S)";
         case PreviewAction::Discard: return english ? L"Discard GIF (Esc)" : L"放弃 GIF (Esc)";
         default: return nullptr;
@@ -413,14 +456,15 @@ struct GifPreview::Implementation final : Window {
         if (saving) {
             std::exception_ptr failure;
             bool complete = false;
+            bool movedOriginal = false;
             {
                 const std::lock_guard lock(workerMutex);
                 complete = std::exchange(saveComplete,false);
-                if (complete) { failure = std::exchange(saveFailure,{}); }
+                if (complete) { failure = std::exchange(saveFailure,{}); movedOriginal = originalCommitted; }
             }
             if (!complete) { WakeWithin(50); return; }
             saving = false;
-            if (!failure) { ownsTemporary = false; Close(); return; }
+            if (!failure) { ownsTemporary = !movedOriginal; Close(); return; }
             try { std::rethrow_exception(failure); }
             catch (const std::exception& error) {
                 outputStatus = (english ? L"Save failed. " : L"保存失败。") + ExceptionMessage(error);
@@ -436,6 +480,11 @@ struct GifPreview::Implementation final : Window {
         }
         const auto now = PreviewClock::now();
         const bool first = displayedPixels.empty();
+        if (!first && !paused && !pendingSeek && PlaybackPosition(now) >= trimEnd) {
+            RequestSeek(trimBegin);
+            Schedule();
+            return;
+        }
         const bool frameDue = !paused && !pendingSeek && PlaybackPosition(now) >= displayedTiming.end;
         bool presented = false;
         std::exception_ptr failure;
@@ -462,7 +511,6 @@ struct GifPreview::Implementation final : Window {
             workerChanged.notify_one();
             InvalidateRect(Handle(),nullptr,FALSE);
         } else if (!paused && !pendingSeek && !scrubPosition) {
-            if (frameDue && !first && result.frameCount == 1) { position = 0; playbackAnchor = now; }
             InvalidateProgress();
         }
         Schedule();
@@ -471,7 +519,10 @@ struct GifPreview::Implementation final : Window {
         if (pause == paused || closed) { return; }
         const auto now = PreviewClock::now();
         if (pause) { position = PlaybackPosition(now); KillTimer(Handle(),PlaybackTimer); }
-        else { playbackAnchor = now; }
+        else {
+            playbackAnchor = now;
+            if (!pendingSeek && (position < trimBegin || position >= trimEnd)) { RequestSeek(trimBegin); }
+        }
         paused = pause;
         if (!pause) { Schedule(); }
         InvalidateProgress();
@@ -483,18 +534,38 @@ struct GifPreview::Implementation final : Window {
         // Split the multiply so even a large valid duration fits in int64_t.
         return (duration / width) * offset + (duration % width) * offset / width;
     }
+    void RequestSeek(std::int64_t target) {
+        pendingSeek = target;
+        {
+            const std::lock_guard lock(workerMutex);
+            seekRequest = target;
+            prefetchedTiming.reset();
+        }
+        workerChanged.notify_one();
+    }
+    [[nodiscard]] std::optional<gif::GifTrimRange> SelectedTrim() const noexcept {
+        if (trimBegin == 0 && trimEnd == duration) { return std::nullopt; }
+        return gif::GifTrimRange{static_cast<std::uint64_t>(trimBegin/10),static_cast<std::uint64_t>(trimEnd/10)};
+    }
+    void Trim(PreviewAction action) {
+        if (Busy() || closed || scrubPosition || pendingSeek || displayedPixels.empty() || playbackUnavailable) { return; }
+        SetPaused(true);
+        if (action == PreviewAction::TrimStart) {
+            if (displayedTiming.begin >= trimEnd) { throw std::invalid_argument("The start frame must precede the end frame"); }
+            trimBegin = displayedTiming.begin;
+        } else if (action == PreviewAction::TrimEnd) {
+            if (displayedTiming.end <= trimBegin) { throw std::invalid_argument("The end frame must follow the start frame"); }
+            trimEnd = displayedTiming.end;
+        } else { trimBegin = 0; trimEnd = duration; }
+        outputStatus.clear();
+        InvalidateProgress();
+    }
     void FinishScrub(bool seek) {
         if (!scrubPosition) { return; }
         const auto target = *std::exchange(scrubPosition,std::nullopt);
         if (GetCapture() == Handle()) { ReleaseCapture(); }
         if (seek && !playbackUnavailable) {
-            pendingSeek = target;
-            {
-                const std::lock_guard lock(workerMutex);
-                seekRequest = target;
-                prefetchedTiming.reset();
-            }
-            workerChanged.notify_one();
+            RequestSeek(target);
         }
         if (resumeAfterScrub && (!seek || target != duration)) { SetPaused(false); }
         Schedule();
@@ -544,6 +615,7 @@ struct GifPreview::Implementation final : Window {
         {
             const std::lock_guard lock(workerMutex);
             saveDestination = std::move(*destination);
+            outputTrim = SelectedTrim();
         }
         workerChanged.notify_one();
         InvalidateRect(Handle(),nullptr,FALSE);
@@ -560,6 +632,7 @@ struct GifPreview::Implementation final : Window {
         {
             const std::lock_guard lock(workerMutex);
             copyRequested = true;
+            outputTrim = SelectedTrim();
         }
         workerChanged.notify_one();
         InvalidateProgress();
@@ -575,9 +648,7 @@ struct GifPreview::Implementation final : Window {
         if (!prepared && !failure) { WakeWithin(50); return; }
         try {
             if (failure) { std::rethrow_exception(failure); }
-            const auto formats = prepared->Publish(Handle());
-            outputStatus = formats.animation ? (english ? L"GIF copied to clipboard" : L"GIF 已复制到剪贴板") :
-                (english ? L"GIF copied as a file" : L"已将 GIF 文件复制到剪贴板");
+            static_cast<void>(prepared->Publish(Handle()));
         } catch (const std::exception& error) {
             outputStatus = (english ? L"Copy failed. " : L"复制失败。") + ExceptionMessage(error);
         } catch (...) { outputStatus = english ? L"Could not copy the recording." : L"无法复制录制。"; }
@@ -601,6 +672,21 @@ struct GifPreview::Implementation final : Window {
         const RECT filled{rail.left,rail.top,marker,rail.bottom};
         SetDCBrushColor(context,RGB(99,164,255));
         FillRect(context,&filled,brush);
+        if (SelectedTrim()) {
+            const auto atTime = [&](std::int64_t time) { return track.left+static_cast<LONG>(static_cast<double>(time)/static_cast<double>(duration)*width); };
+            const LONG start = atTime(trimBegin);
+            const LONG end = atTime(trimEnd);
+            SetDCBrushColor(context,RGB(46,48,55));
+            const RECT excludedStart{rail.left,rail.top,start,rail.bottom};
+            const RECT excludedEnd{end,rail.top,rail.right,rail.bottom};
+            FillRect(context,&excludedStart,brush);
+            FillRect(context,&excludedEnd,brush);
+            SetDCBrushColor(context,RGB(255,194,86));
+            const RECT startMark{start-Scale(1),centerY-Scale(9),start+Scale(2),centerY+Scale(9)};
+            const RECT endMark{end-Scale(1),centerY-Scale(9),end+Scale(2),centerY+Scale(9)};
+            FillRect(context,&startMark,brush);
+            FillRect(context,&endMark,brush);
+        }
         if (!playbackUnavailable) {
             const RECT thumb{marker-Scale(3),centerY-Scale(7),marker+Scale(4),centerY+Scale(7)};
             SetDCBrushColor(context,RGB(226,238,255));
@@ -652,6 +738,9 @@ struct GifPreview::Implementation final : Window {
         if (IntersectRect(&intersection,&dirty,&progress)) { PaintProgress(context); }
         RECT informationArea{Scale(12),imageHeight+Scale(35),client.right-Scale(12),imageHeight+Scale(58)};
         const wchar_t* status = information.c_str();
+        const auto selection = (english ? L"Keep " : L"保留 ") + FormatTime(trimBegin) + L" – " + FormatTime(trimEnd) +
+            L" · " + FormatTime(trimEnd-trimBegin) + (english ? L" · Space: play/pause" : L" · 空格：播放/暂停");
+        if (SelectedTrim()) { status = selection.c_str(); }
         if (saving) { status = english ? L"Saving…" : L"正在保存…"; }
         else if (copying) { status = english ? L"Copying GIF…" : L"正在复制 GIF…"; }
         else if (pendingSeek) { status = english ? L"Seeking…" : L"正在跳转…"; }
@@ -669,6 +758,9 @@ struct GifPreview::Implementation final : Window {
         };
         const auto neutral = [&](PreviewAction action) { return hoveredAction == action ? RGB(75,78,85) : RGB(60,65,75); };
         drawAction(actions.clipboard,ToolbarIcon::Copy,hoveredAction == PreviewAction::Copy ? RGB(43,109,199) : RGB(33,90,173));
+        drawAction(actions.trimStart,ToolbarIcon::TrimStart,neutral(PreviewAction::TrimStart));
+        drawAction(actions.trimEnd,ToolbarIcon::TrimEnd,neutral(PreviewAction::TrimEnd));
+        drawAction(actions.resetTrim,ToolbarIcon::Reset,neutral(PreviewAction::ResetTrim));
         drawAction(actions.save,ToolbarIcon::Save,neutral(PreviewAction::Save));
         drawAction(actions.discard,ToolbarIcon::Cancel,neutral(PreviewAction::Discard));
     }
@@ -736,6 +828,9 @@ struct GifPreview::Implementation final : Window {
             case WM_KEYDOWN:
                 if (parameter == VK_SPACE) { if (!Busy() && !scrubPosition) { SetPaused(!paused); } return 0; }
                 if (parameter == VK_ESCAPE) { Discard(); return 0; }
+                if (parameter == VK_OEM_4) { Trim(PreviewAction::TrimStart); return 0; }
+                if (parameter == VK_OEM_6) { Trim(PreviewAction::TrimEnd); return 0; }
+                if (parameter == 'R' && (GetKeyState(VK_CONTROL)&0x8000) != 0) { Trim(PreviewAction::ResetTrim); return 0; }
                 if (parameter == 'S' && (GetKeyState(VK_CONTROL)&0x8000) != 0) { Save(); return 0; }
                 if (parameter == 'C' && (GetKeyState(VK_CONTROL)&0x8000) != 0) {
                     constexpr LPARAM wasAlreadyDown = 1L << 30;
@@ -774,6 +869,9 @@ struct GifPreview::Implementation final : Window {
                 if (scrubPosition) { scrubPosition = SeekPosition(point.x); FinishScrub(true); return 0; }
                 switch (ActionAt(point)) {
                 case PreviewAction::Copy: Copy(); break;
+                case PreviewAction::TrimStart:
+                case PreviewAction::TrimEnd:
+                case PreviewAction::ResetTrim: Trim(ActionAt(point)); break;
                 case PreviewAction::Save: Save(); break;
                 case PreviewAction::Discard: Discard(); break;
                 default: break;
