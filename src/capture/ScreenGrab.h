@@ -22,6 +22,7 @@ public:
     [[nodiscard]] CaptureTimings CaptureTimed(bool includeLayeredWindows = true);
     [[nodiscard]] BitmapView Image() const;
     [[nodiscard]] const RECT& Bounds() const noexcept { return bounds_; }
+
 private:
     RECT bounds_;
     ScreenDc desktopContext_;
@@ -36,11 +37,13 @@ public:
     [[nodiscard]] BitmapView Image() const;
     [[nodiscard]] const RECT& Bounds() const noexcept { return bounds_; }
     void BlitTo(HDC destination, RECT localSource, POINT destinationOrigin) const;
+
 private:
     RECT bounds_;
     DibSection surface_;
 };
 
-[[nodiscard]] std::shared_ptr<const FrozenScreen> CaptureScreen(RECT bounds, bool includeLayeredWindows = true, bool includeCursor = false);
+[[nodiscard]] std::shared_ptr<const FrozenScreen> CaptureScreen(RECT bounds, bool includeLayeredWindows = true,
+                                                                bool includeCursor = false);
 
 } // namespace vispick

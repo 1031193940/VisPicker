@@ -28,8 +28,7 @@ namespace {
 
 // Independent table-of-strings decoder. Intentionally different from the
 // encoder's prefix/hash dictionary to catch bit-width and reset mistakes.
-std::vector<std::uint8_t> DecodeLzw(std::span<const std::uint8_t> bytes,
-                                  int minimumCodeSize) {
+std::vector<std::uint8_t> DecodeLzw(std::span<const std::uint8_t> bytes, int minimumCodeSize) {
     const int clearCode = 1 << minimumCodeSize;
     const int endCode = clearCode + 1;
     std::vector<std::vector<std::uint8_t>> dictionary(4096);
@@ -47,9 +46,7 @@ std::vector<std::uint8_t> DecodeLzw(std::span<const std::uint8_t> bytes,
         }
         int code = 0;
         for (int bit = 0; bit < codeSize; ++bit, ++bitOffset) {
-            if ((bytes[bitOffset / 8] & (1U << (bitOffset % 8))) != 0) {
-                code |= 1 << bit;
-            }
+            if ((bytes[bitOffset / 8] & (1U << (bitOffset % 8))) != 0) { code |= 1 << bit; }
         }
         if (code == clearCode) {
             codeSize = minimumCodeSize + 1;
@@ -57,9 +54,7 @@ std::vector<std::uint8_t> DecodeLzw(std::span<const std::uint8_t> bytes,
             previous.clear();
             continue;
         }
-        if (code == endCode) {
-            return output;
-        }
+        if (code == endCode) { return output; }
         std::vector<std::uint8_t> entry;
         if (code < nextCode) {
             entry = dictionary[static_cast<std::size_t>(code)];
@@ -69,17 +64,13 @@ std::vector<std::uint8_t> DecodeLzw(std::span<const std::uint8_t> bytes,
         } else {
             throw std::runtime_error("Invalid LZW dictionary code");
         }
-        if (entry.empty()) {
-            throw std::runtime_error("Empty LZW dictionary entry");
-        }
+        if (entry.empty()) { throw std::runtime_error("Empty LZW dictionary entry"); }
         output.insert(output.end(), entry.begin(), entry.end());
         if (!previous.empty() && nextCode < 4096) {
             auto added = previous;
             added.push_back(entry.front());
             dictionary[static_cast<std::size_t>(nextCode++)] = std::move(added);
-            if (nextCode == (1 << codeSize) && codeSize < 12) {
-                ++codeSize;
-            }
+            if (nextCode == (1 << codeSize) && codeSize < 12) { ++codeSize; }
         }
         previous = std::move(entry);
     }
@@ -89,9 +80,8 @@ class TestFile {
 public:
     TestFile() {
         static std::atomic<unsigned int> sequence{0};
-        path = std::filesystem::temp_directory_path() /
-            (L"VisPick-gif-test-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
-             std::to_wstring(sequence.fetch_add(1)) + L".gif");
+        path = std::filesystem::temp_directory_path() / (L"VisPick-gif-test-" + std::to_wstring(GetCurrentProcessId()) +
+                                                         L"-" + std::to_wstring(sequence.fetch_add(1)) + L".gif");
     }
     ~TestFile() {
         std::error_code ignored;
@@ -132,9 +122,7 @@ TEST_CASE("LZW repetitive data exercises the missing-code special case") {
 TEST_CASE("LZW random input grows to twelve bits and clears full dictionaries") {
     std::mt19937 random(0x45678);
     std::vector<std::uint8_t> input(250000);
-    for (auto& pixel : input) {
-        pixel = static_cast<std::uint8_t>(random() & 255);
-    }
+    for (auto& pixel : input) { pixel = static_cast<std::uint8_t>(random() & 255); }
     CHECK(DecodeLzw(vispick::gif::EncodeLzw(input), 8) == input);
 }
 
@@ -142,9 +130,7 @@ TEST_CASE("LZW supports all GIF minimum code sizes") {
     std::mt19937 random(0x12345);
     for (int minimumCodeSize = 2; minimumCodeSize <= 8; ++minimumCodeSize) {
         std::vector<std::uint8_t> input(10000);
-        for (auto& pixel : input) {
-            pixel = static_cast<std::uint8_t>(random() & ((1U << minimumCodeSize) - 1));
-        }
+        for (auto& pixel : input) { pixel = static_cast<std::uint8_t>(random() & ((1U << minimumCodeSize) - 1)); }
         CHECK(DecodeLzw(vispick::gif::EncodeLzw(input, minimumCodeSize), minimumCodeSize) == input);
     }
 }
@@ -208,8 +194,8 @@ TEST_CASE("Wu fallback stays within 255 colors and is deterministic") {
         REQUIRE(result.pixels[pixelIndex] < result.palette.size());
         const auto mapped = result.palette[result.pixels[pixelIndex]];
         for (int shift = 0; shift <= 16; shift += 8) {
-            const int difference = static_cast<int>((mapped >> shift) & 255) -
-                static_cast<int>((pixels[pixelIndex] >> shift) & 255);
+            const int difference =
+                static_cast<int>((mapped >> shift) & 255) - static_cast<int>((pixels[pixelIndex] >> shift) & 255);
             squaredError += difference * difference;
         }
     }
@@ -218,9 +204,7 @@ TEST_CASE("Wu fallback stays within 255 colors and is deterministic") {
 
 TEST_CASE("Wu handles 256 gray values without empty boxes or invalid indices") {
     std::vector<std::uint32_t> pixels;
-    for (std::uint32_t gray = 0; gray < 256; ++gray) {
-        pixels.push_back(0xFF000000U | (gray * 0x010101U));
-    }
+    for (std::uint32_t gray = 0; gray < 256; ++gray) { pixels.push_back(0xFF000000U | (gray * 0x010101U)); }
     const auto result = vispick::gif::Quantize(pixels);
     REQUIRE_FALSE(result.exact);
     for (std::size_t pixelIndex = 0; pixelIndex < pixels.size(); ++pixelIndex) {
@@ -235,8 +219,8 @@ TEST_CASE("Fused Wu mapping preserves baseline palette indices and exact error a
         std::vector<std::uint32_t> source(8192);
         for (std::size_t pixelIndex = 0; pixelIndex < source.size(); ++pixelIndex) {
             const auto color = static_cast<std::uint32_t>((pixelIndex * 37 + pixelIndex / 131) % colorCount);
-            source[pixelIndex] = ((static_cast<std::uint32_t>(pixelIndex) & 3U) << 24) |
-                ((color * 2654435761U) & 0x00FFFFFFU);
+            source[pixelIndex] =
+                ((static_cast<std::uint32_t>(pixelIndex) & 3U) << 24) | ((color * 2654435761U) & 0x00FFFFFFU);
         }
         const auto baseline = vispick::quantizer_baseline::Quantize(source);
         REQUIRE_FALSE(baseline.exact);
@@ -244,9 +228,9 @@ TEST_CASE("Fused Wu mapping preserves baseline palette indices and exact error a
         for (std::size_t pixelIndex = 0; pixelIndex < source.size(); ++pixelIndex) {
             const auto mapped = baseline.palette[baseline.pixels[pixelIndex]];
             for (const unsigned shift : {0U, 8U, 16U}) {
-                expectedMaximumError = std::max(expectedMaximumError,
-                    std::abs(static_cast<int>((mapped >> shift) & 255U) -
-                             static_cast<int>((source[pixelIndex] >> shift) & 255U)));
+                expectedMaximumError =
+                    std::max(expectedMaximumError, std::abs(static_cast<int>((mapped >> shift) & 255U) -
+                                                            static_cast<int>((source[pixelIndex] >> shift) & 255U)));
             }
         }
         for (const bool reuse : {false, true}) {
@@ -268,9 +252,7 @@ TEST_CASE("GIF 30 fps delays are 3 3 4 centiseconds without accumulated drift") 
     CHECK(vispick::gif::FrameDelay(1, 30) == 3);
     CHECK(vispick::gif::FrameDelay(2, 30) == 4);
     unsigned int duration = 0;
-    for (int frame = 0; frame < 1800; ++frame) {
-        duration += vispick::gif::FrameDelay(frame, 30);
-    }
+    for (int frame = 0; frame < 1800; ++frame) { duration += vispick::gif::FrameDelay(frame, 30); }
     CHECK(duration == 6000);
     CHECK_THROWS_AS(vispick::gif::FrameDelay(-1, 30), std::invalid_argument);
     CHECK_THROWS_AS(vispick::gif::FrameDelay(0, 0), std::invalid_argument);
@@ -280,9 +262,7 @@ TEST_CASE("GIF 30 fps delays are 3 3 4 centiseconds without accumulated drift") 
 TEST_CASE("GIF delay accounting preserves a second for every supported integer fps") {
     for (int rate = 1; rate <= 50; ++rate) {
         unsigned int duration = 0;
-        for (int frame = 0; frame < rate; ++frame) {
-            duration += vispick::gif::FrameDelay(frame, rate);
-        }
+        for (int frame = 0; frame < rate; ++frame) { duration += vispick::gif::FrameDelay(frame, rate); }
         CHECK(duration == 100);
     }
 }
@@ -326,16 +306,12 @@ TEST_CASE("WIC decodes Wu-quantized output to exactly the chosen palette colors"
     TestFile file;
     std::mt19937 random(0x9876);
     std::vector<std::uint32_t> pixels(256 * 128);
-    for (auto& pixel : pixels) {
-        pixel = static_cast<std::uint32_t>(random()) | 0xFF000000U;
-    }
+    for (auto& pixel : pixels) { pixel = static_cast<std::uint32_t>(random()) | 0xFF000000U; }
     const auto quantized = vispick::gif::Quantize(pixels);
     REQUIRE_FALSE(quantized.exact);
     std::vector<std::uint32_t> expected;
     expected.reserve(pixels.size());
-    for (const auto paletteIndex : quantized.pixels) {
-        expected.push_back(quantized.palette[paletteIndex]);
-    }
+    for (const auto paletteIndex : quantized.pixels) { expected.push_back(quantized.palette[paletteIndex]); }
     vispick::gif::GifWriter writer(file.path, 256, 128);
     writer.WriteFrame(vispick::gif::EncodeFrame(pixels), 5);
     writer.Finish();
@@ -471,9 +447,7 @@ TEST_CASE("Wu palette reuse is static-stable and accepts only bounded per-channe
                            static_cast<int>((pixels[pixelIndex] >> shift) & 255)) <= 8);
         }
     }
-    for (auto& pixel : pixels) {
-        pixel = (pixel & 0xFF00FFFFU) | 0x00FF0000U;
-    }
+    for (auto& pixel : pixels) { pixel = (pixel & 0xFF00FFFFU) | 0x00FF0000U; }
     const auto rejected = quantizer.Quantize(pixels);
     CHECK_FALSE(rejected.paletteReused);
 }
@@ -484,7 +458,7 @@ TEST_CASE("Timestamp delay conversion preserves actual irregular capture interva
     CHECK(delays.AdvanceTo(1066700000) == 3);
     CHECK(delays.AdvanceTo(1100000000) == 4);
     CHECK(delays.AdvanceTo(1215000000) == 11); // Two or more skipped capture ticks.
-    CHECK(delays.AdvanceTo(1221000000) == 1); // Carries the previous 5 ms remainder.
+    CHECK(delays.AdvanceTo(1221000000) == 1);  // Carries the previous 5 ms remainder.
     CHECK(delays.TotalCentiseconds() == 22);
     CHECK(delays.RemainderNanoseconds() == 1000000);
     CHECK_THROWS_AS(static_cast<void>(delays.AdvanceTo(1220000000)), std::invalid_argument);
@@ -533,8 +507,7 @@ TEST_CASE("WIC raw subframes compose transparency and disposal one two three cor
     expected.push_back(canvas);
     {
         vispick::gif::GifWriter writer(file.path, 4, 3, global);
-        const auto write = [&](std::vector<std::uint8_t> indices,
-                               vispick::gif::GifFrameMetadata metadata) {
+        const auto write = [&](std::vector<std::uint8_t> indices, vispick::gif::GifFrameMetadata metadata) {
             vispick::gif::IndexedImage indexed{global, std::move(indices)};
             writer.WriteFrame(vispick::gif::EncodeIndexedFrame(indexed), metadata);
         };

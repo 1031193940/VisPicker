@@ -28,8 +28,8 @@ public:
     ~MessageTimer();
     MessageTimer(const MessageTimer&) = delete;
     MessageTimer& operator=(const MessageTimer&) = delete;
-    bool WaitUntil(std::chrono::steady_clock::time_point deadline,
-                   std::span<const HANDLE> cancellationHandles = {});
+    bool WaitUntil(std::chrono::steady_clock::time_point deadline, std::span<const HANDLE> cancellationHandles = {});
+
 private:
     HANDLE timer_ = nullptr;
     bool timerResolution_ = false;
@@ -51,6 +51,7 @@ public:
     [[nodiscard]] PatternSnapshot Snapshot() const noexcept;
     [[nodiscard]] bool Running() const noexcept;
     void Stop() noexcept;
+
 private:
     struct State;
     std::unique_ptr<State> state_;

@@ -44,16 +44,20 @@ struct LocalArgumentsDeleter {
 std::string WideToUtf8(std::wstring_view text) {
     if (text.empty()) { return {}; }
     const int length = TextLength(text.size());
-    const int count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), length, nullptr, 0, nullptr, nullptr);
+    const int count =
+        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), length, nullptr, 0, nullptr, nullptr);
     if (count == 0) { throw std::invalid_argument("Invalid UTF-16 text"); }
     std::string converted(static_cast<std::size_t>(count), '\0');
-    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), length, converted.data(), count, nullptr, nullptr) != count) {
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), length, converted.data(), count, nullptr,
+                            nullptr) != count) {
         throw std::runtime_error("UTF-8 conversion failed");
     }
     return converted;
 }
 
-std::wstring Utf8ToWide(std::string_view text) { return Decode(text, CP_UTF8, MB_ERR_INVALID_CHARS); }
+std::wstring Utf8ToWide(std::string_view text) {
+    return Decode(text, CP_UTF8, MB_ERR_INVALID_CHARS);
+}
 std::wstring ExceptionMessage(const std::exception& error) {
     // Recover filesystem paths from their native UTF-16 representation rather
     // than guessing the narrow encoding selected by filesystem_error::what().
@@ -86,8 +90,8 @@ ConsoleOutput::ConsoleOutput() noexcept
     if (preserveOutput) { SetStdHandle(STD_OUTPUT_HANDLE, originalOutput_); }
     if (preserveError) { SetStdHandle(STD_ERROR_HANDLE, originalError_); }
     if (!ValidHandle(GetStdHandle(STD_OUTPUT_HANDLE)) || !ValidHandle(GetStdHandle(STD_ERROR_HANDLE))) {
-        ownedConsole_ = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+        ownedConsole_ = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                    nullptr, OPEN_EXISTING, 0, nullptr);
         if (ownedConsole_ != INVALID_HANDLE_VALUE) {
             if (!ValidHandle(GetStdHandle(STD_OUTPUT_HANDLE))) { SetStdHandle(STD_OUTPUT_HANDLE, ownedConsole_); }
             if (!ValidHandle(GetStdHandle(STD_ERROR_HANDLE))) { SetStdHandle(STD_ERROR_HANDLE, ownedConsole_); }

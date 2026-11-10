@@ -23,8 +23,7 @@ struct PinMemory {
 class PinManager {
 public:
     static constexpr UINT PendingMessage = WM_APP + 61;
-    PinManager(HWND owner, std::function<void(Bitmap)> save,
-               std::function<void(std::wstring, bool)> notify);
+    PinManager(HWND owner, std::function<void(Bitmap)> save, std::function<void(std::wstring, bool)> notify);
     ~PinManager();
     PinManager(const PinManager&) = delete;
     PinManager& operator=(const PinManager&) = delete;
@@ -43,6 +42,7 @@ public:
     // deletion and modal save dialogs happen only after those callbacks return.
     void ProcessPending();
     [[nodiscard]] PinMemory Memory() const noexcept;
+
 private:
     struct State;
     std::unique_ptr<State> state_;

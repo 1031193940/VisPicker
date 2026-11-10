@@ -19,12 +19,15 @@ namespace {
 class InputContext {
 public:
     explicit InputContext(HWND window) : window_(window), context_(ImmGetContext(window)) {}
-    ~InputContext() { if (context_ != nullptr) { ImmReleaseContext(window_, context_); } }
+    ~InputContext() {
+        if (context_ != nullptr) { ImmReleaseContext(window_, context_); }
+    }
     InputContext(const InputContext&) = delete;
     InputContext& operator=(const InputContext&) = delete;
     void Complete() const noexcept {
         if (context_ != nullptr) { ImmNotifyIME(context_, NI_COMPOSITIONSTR, CPS_COMPLETE, 0); }
     }
+
 private:
     HWND window_;
     HIMC context_;
@@ -47,7 +50,9 @@ struct TextInput::State {
         if (edit != nullptr) {
             const HWND closing = edit;
             edit = nullptr;
-            if (originalProcedure != nullptr) { SetWindowLongPtrW(closing, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(originalProcedure)); }
+            if (originalProcedure != nullptr) {
+                SetWindowLongPtrW(closing, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(originalProcedure));
+            }
             SetWindowLongPtrW(closing, GWLP_USERDATA, 0);
             DestroyWindow(closing);
         }
@@ -60,9 +65,7 @@ struct TextInput::State {
         font.Reset();
     }
 
-    void PostCommit() const noexcept {
-        PostMessageW(parent, commitMessage, editGeneration, 0);
-    }
+    void PostCommit() const noexcept { PostMessageW(parent, commitMessage, editGeneration, 0); }
 
     void SetBackground(RECT rectangle) {
         const auto pixels = renderer.Flatten(rectangle);
@@ -79,17 +82,17 @@ struct TextInput::State {
     void FitText() {
         const auto lineCount = SendMessageW(edit, EM_GETLINECOUNT, 0, 0);
         const auto desired = std::min<LRESULT>(maximumBounds.bottom - maximumBounds.top,
-            std::max<LRESULT>(2, lineCount + 1) * lineHeight);
+                                               std::max<LRESULT>(2, lineCount + 1) * lineHeight);
         if (desired == bounds.bottom - bounds.top) { return; }
         POINT oldOrigin{bounds.left, bounds.top};
         ScreenToClient(parent, &oldOrigin);
         const RECT oldClient{oldOrigin.x, oldOrigin.y, oldOrigin.x + bounds.right - bounds.left,
-            oldOrigin.y + bounds.bottom - bounds.top};
+                             oldOrigin.y + bounds.bottom - bounds.top};
         auto resized = bounds;
         resized.bottom = resized.top + static_cast<LONG>(desired);
         SetBackground(resized);
         SetWindowPos(edit, nullptr, 0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top,
-            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         RECT formatting{0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top};
         SendMessageW(edit, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&formatting));
         if (desired < maximumBounds.bottom - maximumBounds.top) {
@@ -102,7 +105,9 @@ struct TextInput::State {
 
     static LRESULT CALLBACK EditProcedure(HWND window, UINT message, WPARAM parameter, LPARAM data) noexcept {
         auto* state = reinterpret_cast<State*>(GetWindowLongPtrW(window, GWLP_USERDATA));
-        if (state == nullptr || state->originalProcedure == nullptr) { return DefWindowProcW(window, message, parameter, data); }
+        if (state == nullptr || state->originalProcedure == nullptr) {
+            return DefWindowProcW(window, message, parameter, data);
+        }
         if (message == WM_KEYDOWN && parameter == VK_ESCAPE) {
             state->PostCommit();
             return 0;
@@ -114,13 +119,17 @@ struct TextInput::State {
         if (message == WM_KILLFOCUS) { state->PostCommit(); }
         if (message == WM_IME_STARTCOMPOSITION || (message == WM_IME_COMPOSITION && (data & GCS_COMPSTR) != 0)) {
             state->composing = true;
-        } else if (message == WM_IME_ENDCOMPOSITION) { state->composing = false; }
+        } else if (message == WM_IME_ENDCOMPOSITION) {
+            state->composing = false;
+        }
         const LRESULT result = CallWindowProcW(state->originalProcedure, window, message, parameter, data);
         if (message == WM_IME_ENDCOMPOSITION && state->commitAfterComposition) { state->PostCommit(); }
         if (message == WM_CHAR || message == WM_PASTE || message == WM_CUT || message == WM_CLEAR ||
-            message == WM_SETTEXT || message == EM_REPLACESEL || message == WM_IME_COMPOSITION || message == WM_IME_CHAR || message == WM_UNDO) {
-            try { state->FitText(); }
-            catch (...) {
+            message == WM_SETTEXT || message == EM_REPLACESEL || message == WM_IME_COMPOSITION ||
+            message == WM_IME_CHAR || message == WM_UNDO) {
+            try {
+                state->FitText();
+            } catch (...) {
                 OutputDebugStringW(L"VisPick: native text input resize failed; committing existing text.\n");
                 state->PostCommit();
             }
@@ -155,8 +164,12 @@ TextInput::TextInput(AnnotationModel& model, EditorRenderer& renderer, HWND pare
 }
 
 TextInput::~TextInput() = default;
-bool TextInput::Active() const noexcept { return state_->edit != nullptr; }
-HWND TextInput::Handle() const noexcept { return state_->edit; }
+bool TextInput::Active() const noexcept {
+    return state_->edit != nullptr;
+}
+HWND TextInput::Handle() const noexcept {
+    return state_->edit;
+}
 
 void TextInput::Begin(POINT screenPoint, unsigned dpi) {
     if (Active()) {
@@ -189,9 +202,10 @@ void TextInput::Begin(POINT screenPoint, unsigned dpi) {
     state_->SetBackground({screenPoint.x, screenPoint.y, screenPoint.x + width, screenPoint.y + height});
     POINT client = screenPoint;
     if (!ScreenToClient(state_->parent, &client)) { TextError("Map text input origin"); }
-    state_->edit = CreateWindowExW(WS_EX_NOPARENTNOTIFY, L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_WANTRETURN | ES_NOHIDESEL | ES_AUTOVSCROLL,
-        client.x, client.y, width, height, state_->parent, nullptr, GetModuleHandleW(nullptr), nullptr);
+    state_->edit =
+        CreateWindowExW(WS_EX_NOPARENTNOTIFY, L"EDIT", L"",
+                        WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_WANTRETURN | ES_NOHIDESEL | ES_AUTOVSCROLL, client.x,
+                        client.y, width, height, state_->parent, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (state_->edit == nullptr) { TextError("Create native text input"); }
     SendMessageW(state_->edit, WM_SETFONT, reinterpret_cast<WPARAM>(state_->font.Get()), FALSE);
     SendMessageW(state_->edit, EM_SETLIMITTEXT, 65535, 0);
@@ -202,8 +216,8 @@ void TextInput::Begin(POINT screenPoint, unsigned dpi) {
     SendMessageW(state_->edit, EM_SETTABSTOPS, 1, reinterpret_cast<LPARAM>(&tabDialogUnits));
     SetWindowLongPtrW(state_->edit, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state_.get()));
     SetLastError(ERROR_SUCCESS);
-    state_->originalProcedure = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(state_->edit, GWLP_WNDPROC,
-        reinterpret_cast<LONG_PTR>(&State::EditProcedure)));
+    state_->originalProcedure = reinterpret_cast<WNDPROC>(
+        SetWindowLongPtrW(state_->edit, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&State::EditProcedure)));
     if (state_->originalProcedure == nullptr) {
         const DWORD error = GetLastError();
         state_->DestroyEdit();
@@ -248,7 +262,8 @@ RECT TextInput::Commit() {
             if (length < 0 || length > 65535) { throw std::length_error("Native text line exceeds limit"); }
             std::wstring text(static_cast<std::size_t>(length) + 1, L'\0');
             text[0] = static_cast<wchar_t>(std::max<LRESULT>(1, length));
-            const LRESULT copied = SendMessageW(edit, EM_GETLINE, static_cast<WPARAM>(line), reinterpret_cast<LPARAM>(text.data()));
+            const LRESULT copied =
+                SendMessageW(edit, EM_GETLINE, static_cast<WPARAM>(line), reinterpret_cast<LPARAM>(text.data()));
             text.resize(static_cast<std::size_t>(std::clamp<LRESULT>(copied, 0, length)));
             const LRESULT position = SendMessageW(edit, EM_POSFROMCHAR, static_cast<WPARAM>(character), 0);
             POINT offset{formatting.left, formatting.top + static_cast<LONG>(line) * metrics.tmHeight};
@@ -259,8 +274,8 @@ RECT TextInput::Commit() {
             std::vector<LONG> tabOffsets;
             for (std::size_t characterOffset = 0; characterOffset < text.size(); ++characterOffset) {
                 if (text[characterOffset] != L'\t') { continue; }
-                const auto afterTab = SendMessageW(edit, EM_POSFROMCHAR,
-                    static_cast<WPARAM>(character) + characterOffset + 1, 0);
+                const auto afterTab =
+                    SendMessageW(edit, EM_POSFROMCHAR, static_cast<WPARAM>(character) + characterOffset + 1, 0);
                 tabOffsets.push_back(afterTab == -1 ? offset.x : static_cast<short>(LOWORD(afterTab)));
             }
             lines.push_back({std::move(text), offset, std::move(tabOffsets)});
@@ -281,7 +296,9 @@ RECT TextInput::CommitRequested(WPARAM generation) {
     return generation != 0 && generation == state_->editGeneration ? Commit() : RECT{};
 }
 
-void TextInput::Cancel() noexcept { state_->DestroyEdit(); }
+void TextInput::Cancel() noexcept {
+    state_->DestroyEdit();
+}
 
 HBRUSH TextInput::ControlColor(HDC deviceContext, HWND child) noexcept {
     if (child != state_->edit || child == nullptr) { return nullptr; }

@@ -28,8 +28,7 @@ public:
 
     // Empty directories selects exe, APPDATA/VisPick, then TEMP/VisPick.
     // Explicit candidates provide the same ordered fallback policy for tests.
-    [[nodiscard]] LogStatus Configure(bool enabled,
-        std::span<const std::filesystem::path> directories = {});
+    [[nodiscard]] LogStatus Configure(bool enabled, std::span<const std::filesystem::path> directories = {});
     void Write(LogLevel level, std::wstring_view message) noexcept;
     void WriteUtf8(LogLevel level, std::string_view message) noexcept;
     [[nodiscard]] LogStatus Status() const;

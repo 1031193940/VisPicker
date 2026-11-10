@@ -8,12 +8,7 @@
 
 namespace vispick::gif {
 
-enum class DisposalMethod : std::uint8_t {
-    Unspecified = 0,
-    Keep = 1,
-    Background = 2,
-    Previous = 3
-};
+enum class DisposalMethod : std::uint8_t { Unspecified = 0, Keep = 1, Background = 2, Previous = 3 };
 
 struct GifFrameMetadata {
     unsigned int left = 0;

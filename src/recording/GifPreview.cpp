@@ -47,7 +47,7 @@ class PreparedGifCopy final {
 public:
     PreparedGifCopy(const std::filesystem::path& source, const std::optional<gif::GifTrimRange>& range,
                     const std::function<bool()>& cancelled)
-        : data_(StageFile(source, file_.path,range,cancelled)) {}
+        : data_(StageFile(source, file_.path, range, cancelled)) {}
 
     [[nodiscard]] GifClipboardFormats Publish(HWND owner) {
         const auto formats = data_.Publish(owner);
@@ -56,9 +56,10 @@ public:
         // pruned when old, while startup leaves the current paste source alone.
         try {
             recording::CleanOldFiles(file_.path.parent_path(),
-                std::filesystem::file_time_type::clock::now() - std::chrono::hours(24),
-                recording::TemporaryGifKind::Clipboard, file_.path);
-        } catch (...) { /* Best-effort cleanup must not change the copy result. */ }
+                                     std::filesystem::file_time_type::clock::now() - std::chrono::hours(24),
+                                     recording::TemporaryGifKind::Clipboard, file_.path);
+        } catch (...) { /* Best-effort cleanup must not change the copy result. */
+        }
         return formats;
     }
 
@@ -67,10 +68,11 @@ private:
                                                   const std::filesystem::path& destination,
                                                   const std::optional<gif::GifTrimRange>& range,
                                                   const std::function<bool()>& cancelled) {
-        if (range) { gif::TrimRecordedGif(source,destination,*range,cancelled); }
-        else {
+        if (range) {
+            gif::TrimRecordedGif(source, destination, *range, cancelled);
+        } else {
             std::filesystem::copy_file(ExtendedFilePath(source), ExtendedFilePath(destination),
-                std::filesystem::copy_options::overwrite_existing);
+                                       std::filesystem::copy_options::overwrite_existing);
         }
         return destination;
     }
@@ -82,10 +84,10 @@ private:
 std::wstring FormatTime(std::int64_t milliseconds) {
     const auto seconds = milliseconds / 1000;
     const auto minuteSeconds = seconds % 60;
-    return std::to_wstring(seconds / 60) + (minuteSeconds < 10 ? L":0" : L":") +
-        std::to_wstring(minuteSeconds) + L"." + std::to_wstring(milliseconds / 100 % 10);
+    return std::to_wstring(seconds / 60) + (minuteSeconds < 10 ? L":0" : L":") + std::to_wstring(minuteSeconds) + L"." +
+           std::to_wstring(milliseconds / 100 % 10);
 }
-}
+} // namespace
 
 struct GifPreview::Implementation final : Window {
     RecordingResult result;
@@ -144,7 +146,7 @@ struct GifPreview::Implementation final : Window {
         explicit BusyScope(Implementation& value) : preview(value), previous(value.modal) { preview.modal = true; }
         ~BusyScope() {
             preview.modal = previous;
-            PostMessageW(preview.owner,preview.closedMessage,0,0);
+            PostMessageW(preview.owner, preview.closedMessage, 0, 0);
         }
         BusyScope(const BusyScope&) = delete;
         BusyScope& operator=(const BusyScope&) = delete;
@@ -152,25 +154,32 @@ struct GifPreview::Implementation final : Window {
 
     Implementation(RecordingResult recording, const std::filesystem::path& temporary, HWND parent, UINT message,
                    GifSavePathCallback callback, bool englishLanguage)
-        : result(std::move(recording)), owner(parent), closedMessage(message), chooseSavePath(std::move(callback)), english(englishLanguage) {
+        : result(std::move(recording)), owner(parent), closedMessage(message), chooseSavePath(std::move(callback)),
+          english(englishLanguage) {
         result.path = temporary;
         if (result.path.empty() || result.cancelled || !result.error.empty() || !chooseSavePath || result.width <= 0 ||
             result.height <= 0 || result.frameCount == 0 || result.durationCentiseconds == 0 ||
             result.durationCentiseconds > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() / 10) ||
-            owner == nullptr || closedMessage < WM_APP || closedMessage > 0xBFFF) { throw std::invalid_argument("Invalid GIF preview result or callback"); }
+            owner == nullptr || closedMessage < WM_APP || closedMessage > 0xBFFF) {
+            throw std::invalid_argument("Invalid GIF preview result or callback");
+        }
         duration = static_cast<std::int64_t>(result.durationCentiseconds * 10);
         trimEnd = duration;
         durationText = FormatTime(duration);
         std::wostringstream description;
         description << result.width << L"×" << result.height << L" · " << std::fixed << std::setprecision(1)
-            << static_cast<double>(result.durationCentiseconds)/100.0 << (english ? L" s · " : L" 秒 · ") << result.frameCount << (english ? L" frames · " : L" 帧 · ")
-            << static_cast<double>(std::filesystem::file_size(result.path))/(1024.0*1024.0) << L" MB";
+                    << static_cast<double>(result.durationCentiseconds) / 100.0 << (english ? L" s · " : L" 秒 · ")
+                    << result.frameCount << (english ? L" frames · " : L" 帧 · ")
+                    << static_cast<double>(std::filesystem::file_size(result.path)) / (1024.0 * 1024.0) << L" MB";
         information = description.str();
     }
     ~Implementation() override {
         JoinWorker();
         Destroy(); // Before state read by the window procedure is destroyed.
-        if (ownsTemporary) { std::error_code ignored; std::filesystem::remove(result.path,ignored); }
+        if (ownsTemporary) {
+            std::error_code ignored;
+            std::filesystem::remove(result.path, ignored);
+        }
     }
 
     [[nodiscard]] bool Busy() const noexcept { return modal || saving || copying; }
@@ -201,36 +210,41 @@ struct GifPreview::Implementation final : Window {
             bool copy = false;
             {
                 std::unique_lock lock(workerMutex);
-                workerChanged.wait(lock,[&] { return stopWorker || saveDestination || copyRequested || seekRequest ||
-                    (!prefetchedTiming && (!decodingDone || activeSeek)); });
+                workerChanged.wait(lock, [&] {
+                    return stopWorker || saveDestination || copyRequested || seekRequest ||
+                           (!prefetchedTiming && (!decodingDone || activeSeek));
+                });
                 // A committed UI save request finishes even during shutdown.
                 if (stopWorker && !saveDestination) { return; }
-                destination = std::exchange(saveDestination,std::nullopt);
-                copy = std::exchange(copyRequested,false);
-                if (destination || copy) { trim = std::exchange(outputTrim,std::nullopt); }
-                if (seekRequest) { activeSeek = std::exchange(seekRequest,std::nullopt); }
+                destination = std::exchange(saveDestination, std::nullopt);
+                copy = std::exchange(copyRequested, false);
+                if (destination || copy) { trim = std::exchange(outputTrim, std::nullopt); }
+                if (seekRequest) { activeSeek = std::exchange(seekRequest, std::nullopt); }
             }
             if (destination) {
-                reader.reset(); // WIC may hold a non-delete-sharing file handle.
+                reader.reset();               // WIC may hold a non-delete-sharing file handle.
                 if (trim) { canvas.reset(); } // Reuse this memory for the export's composed canvas.
                 std::exception_ptr failure;
                 bool movedOriginal = false;
                 try {
                     if (trim) {
                         std::error_code error;
-                        if (std::filesystem::equivalent(result.path,*destination,error)) {
-                            throw std::invalid_argument("The output path must differ from the recording's temporary file");
+                        if (std::filesystem::equivalent(result.path, *destination, error)) {
+                            throw std::invalid_argument(
+                                "The output path must differ from the recording's temporary file");
                         }
                         recording::TemporaryGif staged(recording::TemporaryGifKind::Recording);
-                        gif::TrimRecordedGif(result.path,staged.path,*trim);
-                        recording::CommitFile(staged.path,*destination);
+                        gif::TrimRecordedGif(result.path, staged.path, *trim);
+                        recording::CommitFile(staged.path, *destination);
                     } else {
-                        recording::CommitFile(result.path,*destination);
+                        recording::CommitFile(result.path, *destination);
                         movedOriginal = true;
                     }
+                } catch (...) { failure = std::current_exception(); }
+                if (!failure) {
+                    decodingDone = true;
+                    activeSeek.reset();
                 }
-                catch (...) { failure = std::current_exception(); }
-                if (!failure) { decodingDone = true; activeSeek.reset(); }
                 {
                     const std::lock_guard lock(workerMutex);
                     saveFailure = failure;
@@ -240,14 +254,16 @@ struct GifPreview::Implementation final : Window {
             } else if (copy) {
                 std::unique_ptr<PreparedGifCopy> prepared;
                 std::exception_ptr failure;
-                if (trim) { reader.reset(); canvas.reset(); }
+                if (trim) {
+                    reader.reset();
+                    canvas.reset();
+                }
                 try {
-                    prepared = std::make_unique<PreparedGifCopy>(result.path,trim,[this] {
+                    prepared = std::make_unique<PreparedGifCopy>(result.path, trim, [this] {
                         const std::lock_guard lock(workerMutex);
                         return stopWorker;
                     });
-                }
-                catch (...) { failure = std::current_exception(); }
+                } catch (...) { failure = std::current_exception(); }
                 const std::lock_guard lock(workerMutex);
                 preparedCopy = std::move(prepared);
                 copyFailure = failure;
@@ -255,36 +271,48 @@ struct GifPreview::Implementation final : Window {
                 try {
                     if (!reader) { reader = std::make_unique<gif::GifReader>(result.path); }
                     const auto& document = reader->Metadata();
-                    if (document.width != static_cast<unsigned>(result.width) || document.height != static_cast<unsigned>(result.height) ||
-                        document.frameCount != result.frameCount) { throw std::runtime_error("Recorded GIF metadata does not match completion result"); }
+                    if (document.width != static_cast<unsigned>(result.width) ||
+                        document.height != static_cast<unsigned>(result.height) ||
+                        document.frameCount != result.frameCount) {
+                        throw std::runtime_error("Recorded GIF metadata does not match completion result");
+                    }
                     const auto indexFrame = [&](const gif::GifFrameMetadata& frame) {
                         const auto begin = timeline.empty() ? 0 : timeline.back().end;
                         const auto delay = static_cast<std::int64_t>(frame.delayCentiseconds) * 10;
-                        if (frame.delayCentiseconds < recording::MinimumFrameDelayCentiseconds || delay > duration - begin) {
+                        if (frame.delayCentiseconds < recording::MinimumFrameDelayCentiseconds ||
+                            delay > duration - begin) {
                             throw std::runtime_error("Recorded GIF contains an invalid frame delay");
                         }
                         const auto frameIndex = static_cast<unsigned>(timeline.size());
                         const bool restart = frame.left == 0 && frame.top == 0 && frame.width == document.width &&
-                            frame.height == document.height && frame.transparentColorIndex < 0 && frame.disposal != gif::DisposalMethod::Previous;
-                        timeline.push_back({begin + delay, restart || timeline.empty() ? frameIndex : timeline.back().restartFrame});
+                                             frame.height == document.height && frame.transparentColorIndex < 0 &&
+                                             frame.disposal != gif::DisposalMethod::Previous;
+                        timeline.push_back(
+                            {begin + delay, restart || timeline.empty() ? frameIndex : timeline.back().restartFrame});
                     };
                     unsigned targetFrame = nextFrame == document.frameCount ? 0 : nextFrame;
                     if (activeSeek) {
                         // Index the delays without decoding pixels. Partial and transparent frames
                         // still require composition from a known canvas or an opaque full frame.
                         const auto targetTime = std::min(*activeSeek, duration - 1);
-                        while (timeline.size() < document.frameCount && (timeline.empty() || timeline.back().end <= targetTime)) {
+                        while (timeline.size() < document.frameCount &&
+                               (timeline.empty() || timeline.back().end <= targetTime)) {
                             if (interrupted()) { break; }
                             indexFrame(reader->ReadFrameMetadata(static_cast<unsigned>(timeline.size())));
                         }
                         if (interrupted()) { continue; }
-                        const auto frame = std::upper_bound(timeline.begin(),timeline.end(),targetTime,
+                        const auto frame = std::upper_bound(
+                            timeline.begin(), timeline.end(), targetTime,
                             [](std::int64_t time, const TimelineEntry& entry) { return time < entry.end; });
-                        if (frame == timeline.end()) { throw std::runtime_error("Recorded GIF duration does not match completion result"); }
+                        if (frame == timeline.end()) {
+                            throw std::runtime_error("Recorded GIF duration does not match completion result");
+                        }
                         targetFrame = static_cast<unsigned>(frame - timeline.begin());
                     }
-                    const unsigned restartFrame = targetFrame < timeline.size() ? timeline[targetFrame].restartFrame : 0;
-                    if (!canvas || nextFrame > targetFrame + 1 || nextFrame < restartFrame || (!activeSeek && targetFrame == 0)) {
+                    const unsigned restartFrame =
+                        targetFrame < timeline.size() ? timeline[targetFrame].restartFrame : 0;
+                    if (!canvas || nextFrame > targetFrame + 1 || nextFrame < restartFrame ||
+                        (!activeSeek && targetFrame == 0)) {
                         canvas.emplace(document);
                         nextFrame = restartFrame;
                     }
@@ -301,7 +329,7 @@ struct GifPreview::Implementation final : Window {
                         throw std::runtime_error("Recorded GIF duration does not match completion result");
                     }
                     // With no published timing, the worker exclusively owns this buffer.
-                    prefetchedPixels.assign(canvas->Pixels().begin(),canvas->Pixels().end());
+                    prefetchedPixels.assign(canvas->Pixels().begin(), canvas->Pixels().end());
                     const std::lock_guard lock(workerMutex);
                     if (stopWorker || seekRequest || (activeSeek && (saveDestination || copyRequested))) { continue; }
                     prefetchedTiming = FrameTiming{targetFrame == 0 ? 0 : timeline[targetFrame - 1].end, end};
@@ -316,81 +344,103 @@ struct GifPreview::Implementation final : Window {
                     playbackFailure = std::current_exception();
                 }
             }
-            PostMessageW(window,WorkerUpdated,0,0);
+            PostMessageW(window, WorkerUpdated, 0, 0);
         }
     }
 
-    int Scale(int logical) const noexcept { return MulDiv(logical,dpi,96); }
+    int Scale(int logical) const noexcept { return MulDiv(logical, dpi, 96); }
     int FooterHeight() const noexcept { return Scale(100); }
     void UpdateDpi(UINT requested) {
         const auto version = GetWindowsVersion();
         const bool hasUiFont = version.major > 6 || (version.major == 6 && version.minor >= 2);
         const int targetDpi = static_cast<int>(requested);
         auto pen = CreateToolbarIconPen(targetDpi);
-        const auto font = CreateFontW(-MulDiv(14,targetDpi,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,
-            english ? L"Segoe UI" : (hasUiFont ? L"Microsoft YaHei UI" : L"Microsoft YaHei"));
+        const auto font =
+            CreateFontW(-MulDiv(14, targetDpi, 96), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH,
+                        english ? L"Segoe UI" : (hasUiFont ? L"Microsoft YaHei UI" : L"Microsoft YaHei"));
         if (!font) { throw std::runtime_error("Cannot create GIF preview font"); }
         interfaceFont.Reset(font);
         iconPen = std::move(pen);
         dpi = targetDpi;
     }
     SIZE OuterSize(int clientWidth, int clientHeight) const {
-        const auto bounds = AdjustWindowBoundsForDpi({0,0,clientWidth,clientHeight},WS_OVERLAPPEDWINDOW,0,static_cast<UINT>(dpi));
-        return {bounds.right-bounds.left,bounds.bottom-bounds.top};
+        const auto bounds =
+            AdjustWindowBoundsForDpi({0, 0, clientWidth, clientHeight}, WS_OVERLAPPEDWINDOW, 0, static_cast<UINT>(dpi));
+        return {bounds.right - bounds.left, bounds.bottom - bounds.top};
     }
-    struct ActionButtons { RECT clipboard; RECT trimStart; RECT trimEnd; RECT resetTrim; RECT save; RECT discard; };
+    struct ActionButtons {
+        RECT clipboard;
+        RECT trimStart;
+        RECT trimEnd;
+        RECT resetTrim;
+        RECT save;
+        RECT discard;
+    };
     ActionButtons LayoutActions() const noexcept {
-        RECT client{}; GetClientRect(Handle(),&client);
-        const LONG top = client.bottom-Scale(36);
-        const LONG bottom = client.bottom-Scale(6);
-        const LONG right = client.right-Scale(10);
-        const LONG discardLeft = right-Scale(78);
-        const LONG saveRight = discardLeft-Scale(8);
-        return {{Scale(10),top,Scale(54),bottom}, {Scale(62),top,Scale(94),bottom},
-            {Scale(102),top,Scale(134),bottom}, {Scale(142),top,Scale(174),bottom}, {saveRight-Scale(76),top,saveRight,bottom},
-            {discardLeft,top,right,bottom}};
+        RECT client{};
+        GetClientRect(Handle(), &client);
+        const LONG top = client.bottom - Scale(36);
+        const LONG bottom = client.bottom - Scale(6);
+        const LONG right = client.right - Scale(10);
+        const LONG discardLeft = right - Scale(78);
+        const LONG saveRight = discardLeft - Scale(8);
+        return {{Scale(10), top, Scale(54), bottom},
+                {Scale(62), top, Scale(94), bottom},
+                {Scale(102), top, Scale(134), bottom},
+                {Scale(142), top, Scale(174), bottom},
+                {saveRight - Scale(76), top, saveRight, bottom},
+                {discardLeft, top, right, bottom}};
     }
     PreviewAction ActionAt(POINT point) const noexcept {
         const auto actions = LayoutActions();
-        if (PtInRect(&actions.clipboard,point)) { return PreviewAction::Copy; }
-        if (PtInRect(&actions.trimStart,point)) { return PreviewAction::TrimStart; }
-        if (PtInRect(&actions.trimEnd,point)) { return PreviewAction::TrimEnd; }
-        if (PtInRect(&actions.resetTrim,point)) { return PreviewAction::ResetTrim; }
-        if (PtInRect(&actions.save,point)) { return PreviewAction::Save; }
-        if (PtInRect(&actions.discard,point)) { return PreviewAction::Discard; }
+        if (PtInRect(&actions.clipboard, point)) { return PreviewAction::Copy; }
+        if (PtInRect(&actions.trimStart, point)) { return PreviewAction::TrimStart; }
+        if (PtInRect(&actions.trimEnd, point)) { return PreviewAction::TrimEnd; }
+        if (PtInRect(&actions.resetTrim, point)) { return PreviewAction::ResetTrim; }
+        if (PtInRect(&actions.save, point)) { return PreviewAction::Save; }
+        if (PtInRect(&actions.discard, point)) { return PreviewAction::Discard; }
         return PreviewAction::None;
     }
     void SetHoveredAction(PreviewAction action) noexcept {
         if (hoveredAction == action) { return; }
         hoveredAction = action;
         RECT footer{};
-        GetClientRect(Handle(),&footer);
-        footer.top = std::max(0L,footer.bottom-FooterHeight());
-        InvalidateRect(Handle(),&footer,FALSE);
+        GetClientRect(Handle(), &footer);
+        footer.top = std::max(0L, footer.bottom - FooterHeight());
+        InvalidateRect(Handle(), &footer, FALSE);
     }
     void UpdateActionHover(POINT point) noexcept {
         const auto action = Busy() ? PreviewAction::None : ActionAt(point);
         if (action != PreviewAction::None && hoveredAction == PreviewAction::None) {
-            TRACKMOUSEEVENT tracking{sizeof(tracking),TME_LEAVE,Handle(),0};
+            TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, Handle(), 0};
             if (!TrackMouseEvent(&tracking)) { return; }
         }
         SetHoveredAction(action);
     }
     const wchar_t* ActionHint() const noexcept {
         switch (hoveredAction) {
-        case PreviewAction::Copy: return english ? L"Copy GIF to clipboard (Ctrl+C)" : L"复制 GIF 到剪贴板 (Ctrl+C)";
-        case PreviewAction::TrimStart: return english ? L"Start at this frame ([)" : L"从当前帧开始 ([)";
-        case PreviewAction::TrimEnd: return english ? L"End after this frame (])" : L"在当前帧结束 (])";
-        case PreviewAction::ResetTrim: return english ? L"Restore the full recording (Ctrl+R)" : L"恢复完整录制 (Ctrl+R)";
-        case PreviewAction::Save: return english ? L"Save GIF to file (Ctrl+S)" : L"保存 GIF 到文件 (Ctrl+S)";
-        case PreviewAction::Discard: return english ? L"Discard GIF (Esc)" : L"放弃 GIF (Esc)";
-        default: return nullptr;
+        case PreviewAction::Copy:
+            return english ? L"Copy GIF to clipboard (Ctrl+C)" : L"复制 GIF 到剪贴板 (Ctrl+C)";
+        case PreviewAction::TrimStart:
+            return english ? L"Start at this frame ([)" : L"从当前帧开始 ([)";
+        case PreviewAction::TrimEnd:
+            return english ? L"End after this frame (])" : L"在当前帧结束 (])";
+        case PreviewAction::ResetTrim:
+            return english ? L"Restore the full recording (Ctrl+R)" : L"恢复完整录制 (Ctrl+R)";
+        case PreviewAction::Save:
+            return english ? L"Save GIF to file (Ctrl+S)" : L"保存 GIF 到文件 (Ctrl+S)";
+        case PreviewAction::Discard:
+            return english ? L"Discard GIF (Esc)" : L"放弃 GIF (Esc)";
+        default:
+            return nullptr;
         }
     }
     RECT ProgressArea() const noexcept {
-        RECT client{}; GetClientRect(Handle(),&client);
-        return {Scale(12),client.bottom-FooterHeight()+Scale(4),client.right-Scale(12),client.bottom-FooterHeight()+Scale(30)};
+        RECT client{};
+        GetClientRect(Handle(), &client);
+        return {Scale(12), client.bottom - FooterHeight() + Scale(4), client.right - Scale(12),
+                client.bottom - FooterHeight() + Scale(30)};
     }
     RECT ProgressTrack() const noexcept {
         auto area = ProgressArea();
@@ -401,77 +451,100 @@ struct GifPreview::Implementation final : Window {
     void InvalidateProgress() noexcept {
         auto area = ProgressArea();
         area.bottom += Scale(29);
-        InvalidateRect(Handle(),&area,FALSE);
+        InvalidateRect(Handle(), &area, FALSE);
     }
     void Show() {
-        if (Handle()) { ShowWindow(Handle(),SW_SHOWNORMAL); return; }
+        if (Handle()) {
+            ShowWindow(Handle(), SW_SHOWNORMAL);
+            return;
+        }
         MONITORINFO monitor{sizeof(monitor)};
-        if (!GetMonitorInfoW(MonitorFromWindow(owner,MONITOR_DEFAULTTONEAREST),&monitor)) { throw std::runtime_error("Cannot locate GIF preview monitor"); }
+        if (!GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitor)) {
+            throw std::runtime_error("Cannot locate GIF preview monitor");
+        }
         UINT initialDpi = DpiForWindow(owner);
         for (const auto& display : EnumerateMonitors()) {
-            if (EqualRect(&display.bounds,&monitor.rcMonitor)) { initialDpi = display.dpiX; break; }
+            if (EqualRect(&display.bounds, &monitor.rcMonitor)) {
+                initialDpi = display.dpiX;
+                break;
+            }
         }
         UpdateDpi(initialDpi);
-        const int availableWidth = (monitor.rcWork.right-monitor.rcWork.left)*8/10;
-        const int availableHeight = (monitor.rcWork.bottom-monitor.rcWork.top)*8/10;
-        const double scale = std::min({1.0,static_cast<double>(availableWidth)/result.width,
-            static_cast<double>(std::max(1,availableHeight-FooterHeight()-Scale(24)))/result.height});
-        const int width = std::max(Scale(360),static_cast<int>(result.width*scale));
-        const int height = std::max(Scale(180),static_cast<int>(result.height*scale)+FooterHeight());
-        const auto outer = OuterSize(width,height);
-        const LONG left = monitor.rcWork.left+(monitor.rcWork.right-monitor.rcWork.left-outer.cx)/2;
-        const LONG top = monitor.rcWork.top+(monitor.rcWork.bottom-monitor.rcWork.top-outer.cy)/2;
-        Create({L"VisPick.GifPreview",0,IDC_ARROW},english ? L"GIF Preview – VisPick" : L"GIF 预览 – VisPick",WS_OVERLAPPEDWINDOW,0,
-            {left,top,left+outer.cx,top+outer.cy},WindowActivation::Interactive);
+        const int availableWidth = (monitor.rcWork.right - monitor.rcWork.left) * 8 / 10;
+        const int availableHeight = (monitor.rcWork.bottom - monitor.rcWork.top) * 8 / 10;
+        const double scale =
+            std::min({1.0, static_cast<double>(availableWidth) / result.width,
+                      static_cast<double>(std::max(1, availableHeight - FooterHeight() - Scale(24))) / result.height});
+        const int width = std::max(Scale(360), static_cast<int>(result.width * scale));
+        const int height = std::max(Scale(180), static_cast<int>(result.height * scale) + FooterHeight());
+        const auto outer = OuterSize(width, height);
+        const LONG left = monitor.rcWork.left + (monitor.rcWork.right - monitor.rcWork.left - outer.cx) / 2;
+        const LONG top = monitor.rcWork.top + (monitor.rcWork.bottom - monitor.rcWork.top - outer.cy) / 2;
+        Create({L"VisPick.GifPreview", 0, IDC_ARROW}, english ? L"GIF Preview – VisPick" : L"GIF 预览 – VisPick",
+               WS_OVERLAPPEDWINDOW, 0, {left, top, left + outer.cx, top + outer.cy}, WindowActivation::Interactive);
         // A normal unowned top-level window remains visible in the taskbar.
         worker = std::thread([this, window = Handle()] { PrepareFrames(window); });
         WakeWithin(50);
-        ShowWindow(Handle(),SW_SHOWNORMAL);
+        ShowWindow(Handle(), SW_SHOWNORMAL);
         // A tray process may have been launched with STARTF_USESHOWWINDOW /
         // SW_HIDE. An explicitly requested preview must still become visible.
-        if (!IsWindowVisible(Handle()) && !SetWindowPos(Handle(),HWND_TOP,0,0,0,0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)) {
+        if (!IsWindowVisible(Handle()) &&
+            !SetWindowPos(Handle(), HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)) {
             throw std::runtime_error("Cannot show GIF preview");
         }
     }
     void WakeWithin(UINT milliseconds) {
-        if (!SetTimer(Handle(),PlaybackTimer,milliseconds,nullptr)) { throw std::runtime_error("Cannot schedule GIF playback"); }
+        if (!SetTimer(Handle(), PlaybackTimer, milliseconds, nullptr)) {
+            throw std::runtime_error("Cannot schedule GIF playback");
+        }
     }
     [[nodiscard]] std::int64_t PlaybackPosition(PreviewClock::time_point now) const noexcept {
         if (paused || pendingSeek || displayedPixels.empty()) { return position; }
-        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now-playbackAnchor).count();
-        return position + std::clamp<std::int64_t>(elapsed,0,displayedTiming.end-position);
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - playbackAnchor).count();
+        return position + std::clamp<std::int64_t>(elapsed, 0, displayedTiming.end - position);
     }
     void Schedule() {
         if (closed || playbackUnavailable || scrubPosition || !Handle()) { return; }
-        if (displayedPixels.empty() || pendingSeek) { WakeWithin(50); }
-        else if (!paused) {
+        if (displayedPixels.empty() || pendingSeek) {
+            WakeWithin(50);
+        } else if (!paused) {
             const auto untilFrame = displayedTiming.end - PlaybackPosition(PreviewClock::now());
-            WakeWithin(untilFrame > 0 ? static_cast<UINT>(std::min<std::int64_t>(untilFrame,100)) : 20U);
+            WakeWithin(untilFrame > 0 ? static_cast<UINT>(std::min<std::int64_t>(untilFrame, 100)) : 20U);
         }
     }
     void Advance() {
         if (modal || closed) { return; }
-        KillTimer(Handle(),PlaybackTimer);
+        KillTimer(Handle(), PlaybackTimer);
         if (saving) {
             std::exception_ptr failure;
             bool complete = false;
             bool movedOriginal = false;
             {
                 const std::lock_guard lock(workerMutex);
-                complete = std::exchange(saveComplete,false);
-                if (complete) { failure = std::exchange(saveFailure,{}); movedOriginal = originalCommitted; }
+                complete = std::exchange(saveComplete, false);
+                if (complete) {
+                    failure = std::exchange(saveFailure, {});
+                    movedOriginal = originalCommitted;
+                }
             }
-            if (!complete) { WakeWithin(50); return; }
+            if (!complete) {
+                WakeWithin(50);
+                return;
+            }
             saving = false;
-            if (!failure) { ownsTemporary = !movedOriginal; Close(); return; }
-            try { std::rethrow_exception(failure); }
-            catch (const std::exception& error) {
+            if (!failure) {
+                ownsTemporary = !movedOriginal;
+                Close();
+                return;
+            }
+            try {
+                std::rethrow_exception(failure);
+            } catch (const std::exception& error) {
                 outputStatus = (english ? L"Save failed. " : L"保存失败。") + ExceptionMessage(error);
             } catch (...) { outputStatus = english ? L"Could not save the recording." : L"无法保存录制。"; }
             if (resumeAfterOutput) { SetPaused(false); }
-            InvalidateRect(Handle(),nullptr,FALSE);
-            PostMessageW(owner,closedMessage,0,0);
+            InvalidateRect(Handle(), nullptr, FALSE);
+            PostMessageW(owner, closedMessage, 0, 0);
             return;
         }
         if (copying) {
@@ -490,10 +563,12 @@ struct GifPreview::Implementation final : Window {
         std::exception_ptr failure;
         {
             const std::lock_guard lock(workerMutex);
-            failure = std::exchange(playbackFailure,{});
+            failure = std::exchange(playbackFailure, {});
             if (!failure && !scrubPosition && prefetchedTiming && (first || pendingSeek || frameDue)) {
                 displayedPixels.swap(prefetchedPixels);
-                playbackAnchor = (first || pendingSeek) ? now : playbackAnchor + std::chrono::milliseconds(displayedTiming.end-position);
+                playbackAnchor = (first || pendingSeek)
+                                     ? now
+                                     : playbackAnchor + std::chrono::milliseconds(displayedTiming.end - position);
                 displayedTiming = *prefetchedTiming;
                 position = pendingSeek.value_or(displayedTiming.begin);
                 pendingSeek.reset();
@@ -504,12 +579,12 @@ struct GifPreview::Implementation final : Window {
         if (failure) {
             playbackUnavailable = true;
             pendingSeek.reset();
-            InvalidateRect(Handle(),nullptr,FALSE);
+            InvalidateRect(Handle(), nullptr, FALSE);
             std::rethrow_exception(failure);
         }
         if (presented) {
             workerChanged.notify_one();
-            InvalidateRect(Handle(),nullptr,FALSE);
+            InvalidateRect(Handle(), nullptr, FALSE);
         } else if (!paused && !pendingSeek && !scrubPosition) {
             InvalidateProgress();
         }
@@ -518,8 +593,10 @@ struct GifPreview::Implementation final : Window {
     void SetPaused(bool pause) {
         if (pause == paused || closed) { return; }
         const auto now = PreviewClock::now();
-        if (pause) { position = PlaybackPosition(now); KillTimer(Handle(),PlaybackTimer); }
-        else {
+        if (pause) {
+            position = PlaybackPosition(now);
+            KillTimer(Handle(), PlaybackTimer);
+        } else {
             playbackAnchor = now;
             if (!pendingSeek && (position < trimBegin || position >= trimEnd)) { RequestSeek(trimBegin); }
         }
@@ -529,8 +606,8 @@ struct GifPreview::Implementation final : Window {
     }
     [[nodiscard]] std::int64_t SeekPosition(LONG x) const noexcept {
         const auto track = ProgressTrack();
-        const auto width = std::max(1L,track.right-track.left-1);
-        const auto offset = std::clamp(x-track.left,0L,width);
+        const auto width = std::max(1L, track.right - track.left - 1);
+        const auto offset = std::clamp(x - track.left, 0L, width);
         // Split the multiply so even a large valid duration fits in int64_t.
         return (duration / width) * offset + (duration % width) * offset / width;
     }
@@ -545,28 +622,35 @@ struct GifPreview::Implementation final : Window {
     }
     [[nodiscard]] std::optional<gif::GifTrimRange> SelectedTrim() const noexcept {
         if (trimBegin == 0 && trimEnd == duration) { return std::nullopt; }
-        return gif::GifTrimRange{static_cast<std::uint64_t>(trimBegin/10),static_cast<std::uint64_t>(trimEnd/10)};
+        return gif::GifTrimRange{static_cast<std::uint64_t>(trimBegin / 10), static_cast<std::uint64_t>(trimEnd / 10)};
     }
     void Trim(PreviewAction action) {
-        if (Busy() || closed || scrubPosition || pendingSeek || displayedPixels.empty() || playbackUnavailable) { return; }
+        if (Busy() || closed || scrubPosition || pendingSeek || displayedPixels.empty() || playbackUnavailable) {
+            return;
+        }
         SetPaused(true);
         if (action == PreviewAction::TrimStart) {
-            if (displayedTiming.begin >= trimEnd) { throw std::invalid_argument("The start frame must precede the end frame"); }
+            if (displayedTiming.begin >= trimEnd) {
+                throw std::invalid_argument("The start frame must precede the end frame");
+            }
             trimBegin = displayedTiming.begin;
         } else if (action == PreviewAction::TrimEnd) {
-            if (displayedTiming.end <= trimBegin) { throw std::invalid_argument("The end frame must follow the start frame"); }
+            if (displayedTiming.end <= trimBegin) {
+                throw std::invalid_argument("The end frame must follow the start frame");
+            }
             trimEnd = displayedTiming.end;
-        } else { trimBegin = 0; trimEnd = duration; }
+        } else {
+            trimBegin = 0;
+            trimEnd = duration;
+        }
         outputStatus.clear();
         InvalidateProgress();
     }
     void FinishScrub(bool seek) {
         if (!scrubPosition) { return; }
-        const auto target = *std::exchange(scrubPosition,std::nullopt);
+        const auto target = *std::exchange(scrubPosition, std::nullopt);
         if (GetCapture() == Handle()) { ReleaseCapture(); }
-        if (seek && !playbackUnavailable) {
-            RequestSeek(target);
-        }
+        if (seek && !playbackUnavailable) { RequestSeek(target); }
         if (resumeAfterScrub && (!seek || target != duration)) { SetPaused(false); }
         Schedule();
         InvalidateProgress();
@@ -574,10 +658,10 @@ struct GifPreview::Implementation final : Window {
     void Close() {
         if (closed) { return; }
         closed = true;
-        KillTimer(Handle(),PlaybackTimer);
+        KillTimer(Handle(), PlaybackTimer);
         JoinWorker();
         Destroy();
-        PostMessageW(owner,closedMessage,0,0);
+        PostMessageW(owner, closedMessage, 0, 0);
     }
     void Discard(bool closePins = false) {
         if (Busy() || closed) { return; }
@@ -586,16 +670,21 @@ struct GifPreview::Implementation final : Window {
         const bool resume = !paused;
         SetPaused(true);
         const BusyScope busy(*this);
-        const auto question = closePins
-            ? (english ? L"Discard this GIF recording, delete its temporary file, and close all pinned images?" : L"放弃这段 GIF 录制、删除临时文件，并关闭所有参考图？")
-            : (english ? L"Discard this GIF recording and delete its temporary file?" : L"放弃这段 GIF 录制并删除临时文件？");
-        const int answer = MessageBoxW(Handle(),question,L"VisPick",MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+        const auto question =
+            closePins
+                ? (english ? L"Discard this GIF recording, delete its temporary file, and close all pinned images?"
+                           : L"放弃这段 GIF 录制、删除临时文件，并关闭所有参考图？")
+                : (english ? L"Discard this GIF recording and delete its temporary file?"
+                           : L"放弃这段 GIF 录制并删除临时文件？");
+        const int answer = MessageBoxW(Handle(), question, L"VisPick", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
         if (answer == IDYES) {
             Close();
             // The decoder is closed. A locked file is cleaned on a later startup.
             std::error_code ignored;
-            if (std::filesystem::remove(result.path,ignored)) { ownsTemporary = false; }
-        } else if (resume) { SetPaused(false); }
+            if (std::filesystem::remove(result.path, ignored)) { ownsTemporary = false; }
+        } else if (resume) {
+            SetPaused(false);
+        }
     }
     void Save() {
         if (Busy() || closed) { return; }
@@ -605,9 +694,16 @@ struct GifPreview::Implementation final : Window {
         SetPaused(true);
         const BusyScope busy(*this);
         std::optional<std::filesystem::path> destination;
-        try { destination = chooseSavePath(Handle(),result.width,result.height); }
-        catch (...) { if (resume) { SetPaused(false); } throw; }
-        if (!destination) { if (resume) { SetPaused(false); } return; }
+        try {
+            destination = chooseSavePath(Handle(), result.width, result.height);
+        } catch (...) {
+            if (resume) { SetPaused(false); }
+            throw;
+        }
+        if (!destination) {
+            if (resume) { SetPaused(false); }
+            return;
+        }
         WakeWithin(50); // Also recover if the worker's window message cannot be queued.
         outputStatus.clear();
         resumeAfterOutput = resume;
@@ -618,7 +714,7 @@ struct GifPreview::Implementation final : Window {
             outputTrim = SelectedTrim();
         }
         workerChanged.notify_one();
-        InvalidateRect(Handle(),nullptr,FALSE);
+        InvalidateRect(Handle(), nullptr, FALSE);
     }
     void Copy() {
         if (Busy() || closed) { return; }
@@ -643,9 +739,12 @@ struct GifPreview::Implementation final : Window {
         {
             const std::lock_guard lock(workerMutex);
             prepared = std::move(preparedCopy);
-            failure = std::exchange(copyFailure,{});
+            failure = std::exchange(copyFailure, {});
         }
-        if (!prepared && !failure) { WakeWithin(50); return; }
+        if (!prepared && !failure) {
+            WakeWithin(50);
+            return;
+        }
         try {
             if (failure) { std::rethrow_exception(failure); }
             static_cast<void>(prepared->Publish(Handle()));
@@ -656,69 +755,75 @@ struct GifPreview::Implementation final : Window {
         if (resumeAfterOutput) { SetPaused(false); }
         Schedule();
         InvalidateProgress();
-        PostMessageW(owner,closedMessage,0,0);
+        PostMessageW(owner, closedMessage, 0, 0);
     }
     void PaintProgress(HDC context) {
         const auto area = ProgressArea();
         const auto track = ProgressTrack();
         const auto shownPosition = scrubPosition.value_or(pendingSeek.value_or(PlaybackPosition(PreviewClock::now())));
-        const auto width = std::max(1L,track.right-track.left-1);
-        const auto marker = track.left+static_cast<LONG>(static_cast<double>(shownPosition) / static_cast<double>(duration) * width);
-        const LONG centerY = (track.top+track.bottom)/2;
+        const auto width = std::max(1L, track.right - track.left - 1);
+        const auto marker =
+            track.left + static_cast<LONG>(static_cast<double>(shownPosition) / static_cast<double>(duration) * width);
+        const LONG centerY = (track.top + track.bottom) / 2;
         const auto brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
-        const RECT rail{track.left,centerY-Scale(2),track.right,centerY+Scale(2)};
-        SetDCBrushColor(context,RGB(72,76,86));
-        FillRect(context,&rail,brush);
-        const RECT filled{rail.left,rail.top,marker,rail.bottom};
-        SetDCBrushColor(context,RGB(99,164,255));
-        FillRect(context,&filled,brush);
+        const RECT rail{track.left, centerY - Scale(2), track.right, centerY + Scale(2)};
+        SetDCBrushColor(context, RGB(72, 76, 86));
+        FillRect(context, &rail, brush);
+        const RECT filled{rail.left, rail.top, marker, rail.bottom};
+        SetDCBrushColor(context, RGB(99, 164, 255));
+        FillRect(context, &filled, brush);
         if (SelectedTrim()) {
-            const auto atTime = [&](std::int64_t time) { return track.left+static_cast<LONG>(static_cast<double>(time)/static_cast<double>(duration)*width); };
+            const auto atTime = [&](std::int64_t time) {
+                return track.left +
+                       static_cast<LONG>(static_cast<double>(time) / static_cast<double>(duration) * width);
+            };
             const LONG start = atTime(trimBegin);
             const LONG end = atTime(trimEnd);
-            SetDCBrushColor(context,RGB(46,48,55));
-            const RECT excludedStart{rail.left,rail.top,start,rail.bottom};
-            const RECT excludedEnd{end,rail.top,rail.right,rail.bottom};
-            FillRect(context,&excludedStart,brush);
-            FillRect(context,&excludedEnd,brush);
-            SetDCBrushColor(context,RGB(255,194,86));
-            const RECT startMark{start-Scale(1),centerY-Scale(9),start+Scale(2),centerY+Scale(9)};
-            const RECT endMark{end-Scale(1),centerY-Scale(9),end+Scale(2),centerY+Scale(9)};
-            FillRect(context,&startMark,brush);
-            FillRect(context,&endMark,brush);
+            SetDCBrushColor(context, RGB(46, 48, 55));
+            const RECT excludedStart{rail.left, rail.top, start, rail.bottom};
+            const RECT excludedEnd{end, rail.top, rail.right, rail.bottom};
+            FillRect(context, &excludedStart, brush);
+            FillRect(context, &excludedEnd, brush);
+            SetDCBrushColor(context, RGB(255, 194, 86));
+            const RECT startMark{start - Scale(1), centerY - Scale(9), start + Scale(2), centerY + Scale(9)};
+            const RECT endMark{end - Scale(1), centerY - Scale(9), end + Scale(2), centerY + Scale(9)};
+            FillRect(context, &startMark, brush);
+            FillRect(context, &endMark, brush);
         }
         if (!playbackUnavailable) {
-            const RECT thumb{marker-Scale(3),centerY-Scale(7),marker+Scale(4),centerY+Scale(7)};
-            SetDCBrushColor(context,RGB(226,238,255));
-            FillRect(context,&thumb,brush);
+            const RECT thumb{marker - Scale(3), centerY - Scale(7), marker + Scale(4), centerY + Scale(7)};
+            SetDCBrushColor(context, RGB(226, 238, 255));
+            FillRect(context, &thumb, brush);
         }
-        RECT timeArea{track.right+Scale(8),area.top,area.right,area.bottom};
+        RECT timeArea{track.right + Scale(8), area.top, area.right, area.bottom};
         const auto time = FormatTime(shownPosition) + L" / " + durationText;
-        DrawTextW(context,time.c_str(),-1,&timeArea,DT_SINGLELINE | DT_RIGHT | DT_VCENTER | DT_NOPREFIX);
+        DrawTextW(context, time.c_str(), -1, &timeArea, DT_SINGLELINE | DT_RIGHT | DT_VCENTER | DT_NOPREFIX);
     }
     void DrawClient(HDC context, const RECT& client, const RECT& dirty) {
-        SetDCBrushColor(context,RGB(28,30,35));
+        SetDCBrushColor(context, RGB(28, 30, 35));
         const auto brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
         const auto fillBackground = [&](const RECT& bounds) {
             RECT clipped{};
-            if (IntersectRect(&clipped,&dirty,&bounds)) { FillRect(context,&clipped,brush); }
+            if (IntersectRect(&clipped, &dirty, &bounds)) { FillRect(context, &clipped, brush); }
         };
-        const int imageHeight = std::max(1,static_cast<int>(client.bottom)-FooterHeight());
+        const int imageHeight = std::max(1, static_cast<int>(client.bottom) - FooterHeight());
         RECT intersection{};
-        if (displayedPixels.empty()) { fillBackground(client); }
-        else {
-            const double scale = std::min(static_cast<double>(std::max(1L,client.right))/result.width,static_cast<double>(imageHeight)/result.height);
-            const int shownWidth = std::max(1,static_cast<int>(result.width*scale));
-            const int shownHeight = std::max(1,static_cast<int>(result.height*scale));
-            const int left = (client.right-shownWidth)/2;
-            const int top = (imageHeight-shownHeight)/2;
-            const RECT frame{left,top,left+shownWidth,top+shownHeight};
+        if (displayedPixels.empty()) {
+            fillBackground(client);
+        } else {
+            const double scale = std::min(static_cast<double>(std::max(1L, client.right)) / result.width,
+                                          static_cast<double>(imageHeight) / result.height);
+            const int shownWidth = std::max(1, static_cast<int>(result.width * scale));
+            const int shownHeight = std::max(1, static_cast<int>(result.height * scale));
+            const int left = (client.right - shownWidth) / 2;
+            const int top = (imageHeight - shownHeight) / 2;
+            const RECT frame{left, top, left + shownWidth, top + shownHeight};
             // Even in the low-memory drawing path, leave the previous image visible until its replacement is ready.
-            fillBackground({0,0,client.right,frame.top});
-            fillBackground({0,frame.bottom,client.right,client.bottom});
-            fillBackground({0,frame.top,frame.left,frame.bottom});
-            fillBackground({frame.right,frame.top,client.right,frame.bottom});
-            if (IntersectRect(&intersection,&dirty,&frame)) {
+            fillBackground({0, 0, client.right, frame.top});
+            fillBackground({0, frame.bottom, client.right, client.bottom});
+            fillBackground({0, frame.top, frame.left, frame.bottom});
+            fillBackground({frame.right, frame.top, client.right, frame.bottom});
+            if (IntersectRect(&intersection, &dirty, &frame)) {
                 BITMAPINFO bitmap{};
                 bitmap.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
                 bitmap.bmiHeader.biWidth = result.width;
@@ -726,122 +831,171 @@ struct GifPreview::Implementation final : Window {
                 bitmap.bmiHeader.biPlanes = 1;
                 bitmap.bmiHeader.biBitCount = 32;
                 bitmap.bmiHeader.biCompression = BI_RGB;
-                SetStretchBltMode(context,COLORONCOLOR);
-                StretchDIBits(context,left,top,shownWidth,shownHeight,0,0,result.width,result.height,
-                    displayedPixels.data(),&bitmap,DIB_RGB_COLORS,SRCCOPY);
+                SetStretchBltMode(context, COLORONCOLOR);
+                StretchDIBits(context, left, top, shownWidth, shownHeight, 0, 0, result.width, result.height,
+                              displayedPixels.data(), &bitmap, DIB_RGB_COLORS, SRCCOPY);
             }
         }
-        const SelectObjectGuard font(context,interfaceFont.Get());
-        SetBkMode(context,TRANSPARENT);
-        SetTextColor(context,RGB(235,235,240));
+        const SelectObjectGuard font(context, interfaceFont.Get());
+        SetBkMode(context, TRANSPARENT);
+        SetTextColor(context, RGB(235, 235, 240));
         const auto progress = ProgressArea();
-        if (IntersectRect(&intersection,&dirty,&progress)) { PaintProgress(context); }
-        RECT informationArea{Scale(12),imageHeight+Scale(35),client.right-Scale(12),imageHeight+Scale(58)};
+        if (IntersectRect(&intersection, &dirty, &progress)) { PaintProgress(context); }
+        RECT informationArea{Scale(12), imageHeight + Scale(35), client.right - Scale(12), imageHeight + Scale(58)};
         const wchar_t* status = information.c_str();
         const auto selection = (english ? L"Keep " : L"保留 ") + FormatTime(trimBegin) + L" – " + FormatTime(trimEnd) +
-            L" · " + FormatTime(trimEnd-trimBegin) + (english ? L" · Space: play/pause" : L" · 空格：播放/暂停");
+                               L" · " + FormatTime(trimEnd - trimBegin) +
+                               (english ? L" · Space: play/pause" : L" · 空格：播放/暂停");
         if (SelectedTrim()) { status = selection.c_str(); }
-        if (saving) { status = english ? L"Saving…" : L"正在保存…"; }
-        else if (copying) { status = english ? L"Copying GIF…" : L"正在复制 GIF…"; }
-        else if (pendingSeek) { status = english ? L"Seeking…" : L"正在跳转…"; }
-        else if (const auto hint = ActionHint()) { status = hint; }
-        else if (!outputStatus.empty()) { status = outputStatus.c_str(); }
-        else if (playbackUnavailable) { status = english ? L"Preview unavailable" : L"无法预览"; }
-        DrawTextW(context,status,-1,&informationArea,
-            DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+        if (saving) {
+            status = english ? L"Saving…" : L"正在保存…";
+        } else if (copying) {
+            status = english ? L"Copying GIF…" : L"正在复制 GIF…";
+        } else if (pendingSeek) {
+            status = english ? L"Seeking…" : L"正在跳转…";
+        } else if (const auto hint = ActionHint()) {
+            status = hint;
+        } else if (!outputStatus.empty()) {
+            status = outputStatus.c_str();
+        } else if (playbackUnavailable) {
+            status = english ? L"Preview unavailable" : L"无法预览";
+        }
+        DrawTextW(context, status, -1, &informationArea,
+                  DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
         const auto actions = LayoutActions();
         const auto drawAction = [&](const RECT& bounds, ToolbarIcon icon, COLORREF color) {
-            if (!IntersectRect(&intersection,&dirty,&bounds)) { return; }
-            SetDCBrushColor(context,color);
-            FillRect(context,&bounds,brush);
-            DrawToolbarIcon(context,bounds,icon,dpi,iconPen.Get());
+            if (!IntersectRect(&intersection, &dirty, &bounds)) { return; }
+            SetDCBrushColor(context, color);
+            FillRect(context, &bounds, brush);
+            DrawToolbarIcon(context, bounds, icon, dpi, iconPen.Get());
         };
-        const auto neutral = [&](PreviewAction action) { return hoveredAction == action ? RGB(75,78,85) : RGB(60,65,75); };
-        drawAction(actions.clipboard,ToolbarIcon::Copy,hoveredAction == PreviewAction::Copy ? RGB(43,109,199) : RGB(33,90,173));
-        drawAction(actions.trimStart,ToolbarIcon::TrimStart,neutral(PreviewAction::TrimStart));
-        drawAction(actions.trimEnd,ToolbarIcon::TrimEnd,neutral(PreviewAction::TrimEnd));
-        drawAction(actions.resetTrim,ToolbarIcon::Reset,neutral(PreviewAction::ResetTrim));
-        drawAction(actions.save,ToolbarIcon::Save,neutral(PreviewAction::Save));
-        drawAction(actions.discard,ToolbarIcon::Cancel,neutral(PreviewAction::Discard));
+        const auto neutral = [&](PreviewAction action) {
+            return hoveredAction == action ? RGB(75, 78, 85) : RGB(60, 65, 75);
+        };
+        drawAction(actions.clipboard, ToolbarIcon::Copy,
+                   hoveredAction == PreviewAction::Copy ? RGB(43, 109, 199) : RGB(33, 90, 173));
+        drawAction(actions.trimStart, ToolbarIcon::TrimStart, neutral(PreviewAction::TrimStart));
+        drawAction(actions.trimEnd, ToolbarIcon::TrimEnd, neutral(PreviewAction::TrimEnd));
+        drawAction(actions.resetTrim, ToolbarIcon::Reset, neutral(PreviewAction::ResetTrim));
+        drawAction(actions.save, ToolbarIcon::Save, neutral(PreviewAction::Save));
+        drawAction(actions.discard, ToolbarIcon::Cancel, neutral(PreviewAction::Discard));
     }
     void Paint(HDC context, const RECT* update = nullptr) {
         RECT client{};
-        GetClientRect(Handle(),&client);
+        GetClientRect(Handle(), &client);
         RECT dirty{};
-        if (!IntersectRect(&dirty,&client,update ? update : &client)) { return; }
-        if (!update) { DrawClient(context,client,dirty); return; } // WM_PRINTCLIENT supplies its own surface.
+        if (!IntersectRect(&dirty, &client, update ? update : &client)) { return; }
+        if (!update) {
+            DrawClient(context, client, dirty);
+            return;
+        } // WM_PRINTCLIENT supplies its own surface.
 
         constexpr std::int64_t maximumBufferPixels = 64 * 1024 * 1024 / sizeof(std::uint32_t);
-        if (static_cast<std::int64_t>(client.right)*client.bottom > maximumBufferPixels) {
+        if (static_cast<std::int64_t>(client.right) * client.bottom > maximumBufferPixels) {
             paintBuffer.reset();
-            DrawClient(context,client,dirty);
+            DrawClient(context, client, dirty);
             return;
         }
         if (!paintBuffer || paintBuffer->Width() != client.right || paintBuffer->Height() != client.bottom) {
-            try { paintBuffer.emplace(client.right,client.bottom); }
-            catch (const std::exception&) { DrawClient(context,client,dirty); return; }
+            try {
+                paintBuffer.emplace(client.right, client.bottom);
+            } catch (const std::exception&) {
+                DrawClient(context, client, dirty);
+                return;
+            }
         }
         // Fill and scale off-screen so intermediate draws cannot flash on the window.
         const auto bufferedContext = paintBuffer->DeviceContext();
-        DrawClient(bufferedContext,client,dirty);
-        if (!BitBlt(context,dirty.left,dirty.top,dirty.right-dirty.left,dirty.bottom-dirty.top,
-                    bufferedContext,dirty.left,dirty.top,SRCCOPY)) {
+        DrawClient(bufferedContext, client, dirty);
+        if (!BitBlt(context, dirty.left, dirty.top, dirty.right - dirty.left, dirty.bottom - dirty.top, bufferedContext,
+                    dirty.left, dirty.top, SRCCOPY)) {
             throw std::runtime_error("Present GIF preview failed");
         }
     }
     LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override {
         try {
             switch (message) {
-            case WM_ERASEBKGND: return 1;
+            case WM_ERASEBKGND:
+                return 1;
             case WM_PAINT: {
                 PAINTSTRUCT paint{};
-                const auto context = BeginPaint(Handle(),&paint);
-                try { Paint(context,&paint.rcPaint); }
-                catch (...) { EndPaint(Handle(),&paint); throw; }
-                EndPaint(Handle(),&paint);
+                const auto context = BeginPaint(Handle(), &paint);
+                try {
+                    Paint(context, &paint.rcPaint);
+                } catch (...) {
+                    EndPaint(Handle(), &paint);
+                    throw;
+                }
+                EndPaint(Handle(), &paint);
                 return 0;
             }
-            case WM_PRINTCLIENT: Paint(reinterpret_cast<HDC>(parameter)); return 0;
+            case WM_PRINTCLIENT:
+                Paint(reinterpret_cast<HDC>(parameter));
+                return 0;
             case WM_TIMER:
-            case WorkerUpdated: Advance(); return 0;
+            case WorkerUpdated:
+                Advance();
+                return 0;
             case WM_SIZE:
                 SetHoveredAction(PreviewAction::None);
-                InvalidateRect(Handle(),nullptr,FALSE);
+                InvalidateRect(Handle(), nullptr, FALSE);
                 return 0;
             case WM_GETMINMAXINFO: {
-                const auto minimum = OuterSize(Scale(360),Scale(180));
+                const auto minimum = OuterSize(Scale(360), Scale(180));
                 auto& sizes = *reinterpret_cast<MINMAXINFO*>(data);
-                sizes.ptMinTrackSize.x = std::max(sizes.ptMinTrackSize.x,minimum.cx);
-                sizes.ptMinTrackSize.y = std::max(sizes.ptMinTrackSize.y,minimum.cy);
+                sizes.ptMinTrackSize.x = std::max(sizes.ptMinTrackSize.x, minimum.cx);
+                sizes.ptMinTrackSize.y = std::max(sizes.ptMinTrackSize.y, minimum.cy);
                 return 0;
             }
             case WM_DPICHANGED: {
                 SetHoveredAction(PreviewAction::None);
                 UpdateDpi(HIWORD(parameter));
                 const auto& suggested = *reinterpret_cast<const RECT*>(data);
-                if (!SetWindowPos(Handle(),nullptr,suggested.left,suggested.top,suggested.right-suggested.left,
-                    suggested.bottom-suggested.top,SWP_NOZORDER | SWP_NOACTIVATE)) { throw std::runtime_error("Cannot resize GIF preview for its DPI"); }
-                InvalidateRect(Handle(),nullptr,FALSE);
+                if (!SetWindowPos(Handle(), nullptr, suggested.left, suggested.top, suggested.right - suggested.left,
+                                  suggested.bottom - suggested.top, SWP_NOZORDER | SWP_NOACTIVATE)) {
+                    throw std::runtime_error("Cannot resize GIF preview for its DPI");
+                }
+                InvalidateRect(Handle(), nullptr, FALSE);
                 return 0;
             }
-            case WM_CLOSE: Discard(); return 0;
+            case WM_CLOSE:
+                Discard();
+                return 0;
             case WM_KEYDOWN:
-                if (parameter == VK_SPACE) { if (!Busy() && !scrubPosition) { SetPaused(!paused); } return 0; }
-                if (parameter == VK_ESCAPE) { Discard(); return 0; }
-                if (parameter == VK_OEM_4) { Trim(PreviewAction::TrimStart); return 0; }
-                if (parameter == VK_OEM_6) { Trim(PreviewAction::TrimEnd); return 0; }
-                if (parameter == 'R' && (GetKeyState(VK_CONTROL)&0x8000) != 0) { Trim(PreviewAction::ResetTrim); return 0; }
-                if (parameter == 'S' && (GetKeyState(VK_CONTROL)&0x8000) != 0) { Save(); return 0; }
-                if (parameter == 'C' && (GetKeyState(VK_CONTROL)&0x8000) != 0) {
+                if (parameter == VK_SPACE) {
+                    if (!Busy() && !scrubPosition) { SetPaused(!paused); }
+                    return 0;
+                }
+                if (parameter == VK_ESCAPE) {
+                    Discard();
+                    return 0;
+                }
+                if (parameter == VK_OEM_4) {
+                    Trim(PreviewAction::TrimStart);
+                    return 0;
+                }
+                if (parameter == VK_OEM_6) {
+                    Trim(PreviewAction::TrimEnd);
+                    return 0;
+                }
+                if (parameter == 'R' && (GetKeyState(VK_CONTROL) & 0x8000) != 0) {
+                    Trim(PreviewAction::ResetTrim);
+                    return 0;
+                }
+                if (parameter == 'S' && (GetKeyState(VK_CONTROL) & 0x8000) != 0) {
+                    Save();
+                    return 0;
+                }
+                if (parameter == 'C' && (GetKeyState(VK_CONTROL) & 0x8000) != 0) {
                     constexpr LPARAM wasAlreadyDown = 1L << 30;
                     if ((data & wasAlreadyDown) == 0) { Copy(); }
                     return 0;
                 }
                 break;
             case WM_LBUTTONDOWN: {
-                const POINT point{GET_X_LPARAM(data),GET_Y_LPARAM(data)};
+                const POINT point{GET_X_LPARAM(data), GET_Y_LPARAM(data)};
                 const auto track = ProgressTrack();
-                if (!Busy() && !closed && !playbackUnavailable && PtInRect(&track,point)) {
+                if (!Busy() && !closed && !playbackUnavailable && PtInRect(&track, point)) {
                     SetHoveredAction(PreviewAction::None);
                     resumeAfterScrub = !paused;
                     SetPaused(true);
@@ -853,8 +1007,12 @@ struct GifPreview::Implementation final : Window {
                 return 0;
             }
             case WM_MOUSEMOVE:
-                if (scrubPosition) { scrubPosition = SeekPosition(GET_X_LPARAM(data)); InvalidateProgress(); }
-                else { UpdateActionHover({GET_X_LPARAM(data),GET_Y_LPARAM(data)}); }
+                if (scrubPosition) {
+                    scrubPosition = SeekPosition(GET_X_LPARAM(data));
+                    InvalidateProgress();
+                } else {
+                    UpdateActionHover({GET_X_LPARAM(data), GET_Y_LPARAM(data)});
+                }
                 return 0;
             case WM_MOUSELEAVE:
                 SetHoveredAction(PreviewAction::None);
@@ -865,16 +1023,29 @@ struct GifPreview::Implementation final : Window {
                 SetHoveredAction(PreviewAction::None);
                 break;
             case WM_LBUTTONUP: {
-                const POINT point{GET_X_LPARAM(data),GET_Y_LPARAM(data)};
-                if (scrubPosition) { scrubPosition = SeekPosition(point.x); FinishScrub(true); return 0; }
+                const POINT point{GET_X_LPARAM(data), GET_Y_LPARAM(data)};
+                if (scrubPosition) {
+                    scrubPosition = SeekPosition(point.x);
+                    FinishScrub(true);
+                    return 0;
+                }
                 switch (ActionAt(point)) {
-                case PreviewAction::Copy: Copy(); break;
+                case PreviewAction::Copy:
+                    Copy();
+                    break;
                 case PreviewAction::TrimStart:
                 case PreviewAction::TrimEnd:
-                case PreviewAction::ResetTrim: Trim(ActionAt(point)); break;
-                case PreviewAction::Save: Save(); break;
-                case PreviewAction::Discard: Discard(); break;
-                default: break;
+                case PreviewAction::ResetTrim:
+                    Trim(ActionAt(point));
+                    break;
+                case PreviewAction::Save:
+                    Save();
+                    break;
+                case PreviewAction::Discard:
+                    Discard();
+                    break;
+                default:
+                    break;
                 }
                 return 0;
             }
@@ -883,31 +1054,46 @@ struct GifPreview::Implementation final : Window {
             SetPaused(true);
             outputStatus = ExceptionMessage(error);
             // A persistent paint failure must not schedule an endless repaint loop.
-            if (message != WM_PAINT && message != WM_PRINTCLIENT) { InvalidateRect(Handle(),nullptr,FALSE); }
+            if (message != WM_PAINT && message != WM_PRINTCLIENT) { InvalidateRect(Handle(), nullptr, FALSE); }
             return 0;
         }
-        return Window::OnMessage(message,parameter,data);
+        return Window::OnMessage(message, parameter, data);
     }
 };
 
-GifPreview::GifPreview(RecordingResult result, Config::Save, HWND owner,
-                       UINT closedMessage, GifSavePathCallback chooseSavePath, bool english)
-{
+GifPreview::GifPreview(RecordingResult result, Config::Save, HWND owner, UINT closedMessage,
+                       GifSavePathCallback chooseSavePath, bool english) {
     auto temporary = std::move(result.path);
-    try { implementation_ = std::make_unique<Implementation>(std::move(result),temporary,owner,closedMessage,std::move(chooseSavePath),english); }
-    catch (...) { std::error_code ignored; std::filesystem::remove(temporary,ignored); throw; }
+    try {
+        implementation_ = std::make_unique<Implementation>(std::move(result), temporary, owner, closedMessage,
+                                                           std::move(chooseSavePath), english);
+    } catch (...) {
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        throw;
+    }
 }
 GifPreview::~GifPreview() = default;
-void GifPreview::Show() { implementation_->Show(); }
-void GifPreview::RequestDiscard(bool closePins) { implementation_->Discard(closePins); }
+void GifPreview::Show() {
+    implementation_->Show();
+}
+void GifPreview::RequestDiscard(bool closePins) {
+    implementation_->Discard(closePins);
+}
 void GifPreview::PreserveTemporaryForSessionEnd() noexcept {
     implementation_->JoinWorker();
     implementation_->ownsTemporary = false;
     implementation_->paused = true;
-    if (implementation_->Handle()) { KillTimer(implementation_->Handle(),PlaybackTimer); }
+    if (implementation_->Handle()) { KillTimer(implementation_->Handle(), PlaybackTimer); }
 }
-HWND GifPreview::Handle() const noexcept { return implementation_->Handle(); }
-bool GifPreview::Closed() const noexcept { return implementation_->closed; }
-bool GifPreview::Busy() const noexcept { return implementation_->Busy(); }
+HWND GifPreview::Handle() const noexcept {
+    return implementation_->Handle();
+}
+bool GifPreview::Closed() const noexcept {
+    return implementation_->closed;
+}
+bool GifPreview::Busy() const noexcept {
+    return implementation_->Busy();
+}
 
 } // namespace vispick

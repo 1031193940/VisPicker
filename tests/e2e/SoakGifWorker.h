@@ -52,7 +52,9 @@ public:
         if (!size) { GifWorkerError("Size GIF worker handle list"); }
         storage_.resize(size);
         list_ = reinterpret_cast<PPROC_THREAD_ATTRIBUTE_LIST>(storage_.data());
-        if (!InitializeProcThreadAttributeList(list_, 1, 0, &size)) { GifWorkerError("Initialize GIF worker handle list"); }
+        if (!InitializeProcThreadAttributeList(list_, 1, 0, &size)) {
+            GifWorkerError("Initialize GIF worker handle list");
+        }
         if (!UpdateProcThreadAttribute(list_, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles.data(), sizeof(handles),
                                        nullptr, nullptr)) {
             const DWORD error = GetLastError();
@@ -81,7 +83,8 @@ inline HANDLE StartGifWorker(std::array<HANDLE, 5>& handles) {
     startup.lpAttributeList = attributes.Get();
     PROCESS_INFORMATION created{};
     if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, TRUE,
-                        CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr, &startup.StartupInfo, &created)) {
+                        CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr, &startup.StartupInfo,
+                        &created)) {
         GifWorkerError("Start persistent GIF validation worker");
     }
     CloseHandle(created.hThread);
@@ -120,8 +123,9 @@ class GifValidationWorker {
 public:
     GifValidationWorker() {
         SECURITY_ATTRIBUTES inheritable{sizeof(inheritable), nullptr, TRUE};
-        const detail::GifWorkerHandle mapping(CreateFileMappingW(INVALID_HANDLE_VALUE, &inheritable, PAGE_READWRITE,
-            0, static_cast<DWORD>(sizeof(detail::GifWorkerRequest)), nullptr));
+        const detail::GifWorkerHandle mapping(CreateFileMappingW(INVALID_HANDLE_VALUE, &inheritable, PAGE_READWRITE, 0,
+                                                                 static_cast<DWORD>(sizeof(detail::GifWorkerRequest)),
+                                                                 nullptr));
         const detail::GifWorkerHandle parent(OpenProcess(SYNCHRONIZE, TRUE, GetCurrentProcessId()));
         requestEvent_.reset(CreateEventW(&inheritable, FALSE, FALSE, nullptr));
         responseEvent_.reset(CreateEventW(&inheritable, FALSE, FALSE, nullptr));
@@ -129,11 +133,12 @@ public:
         if (!mapping || !parent || !requestEvent_ || !responseEvent_ || !shutdownEvent_) {
             throw std::runtime_error("Create persistent GIF validation IPC handles failed");
         }
-        request_.reset(static_cast<detail::GifWorkerRequest*>(MapViewOfFile(mapping.get(), FILE_MAP_WRITE, 0, 0,
-            sizeof(detail::GifWorkerRequest))));
+        request_.reset(static_cast<detail::GifWorkerRequest*>(
+            MapViewOfFile(mapping.get(), FILE_MAP_WRITE, 0, 0, sizeof(detail::GifWorkerRequest))));
         if (!request_) { detail::GifWorkerError("Map GIF validation request"); }
         std::construct_at(request_.get());
-        std::array handles{mapping.get(), requestEvent_.get(), responseEvent_.get(), shutdownEvent_.get(), parent.get()};
+        std::array handles{mapping.get(), requestEvent_.get(), responseEvent_.get(), shutdownEvent_.get(),
+                           parent.get()};
         child_.reset(detail::StartGifWorker(handles));
         const HANDLE readyOrExit[] = {responseEvent_.get(), child_.get()};
         if (WaitForMultipleObjects(2, readyOrExit, FALSE, 10000) != WAIT_OBJECT_0) {
@@ -149,7 +154,10 @@ public:
     bool Validate(const std::filesystem::path& path, unsigned frameCount, std::uint64_t durationCentiseconds,
                   HANDLE stop) {
         const DWORD stopState = WaitForSingleObject(stop, 0);
-        if (stopState == WAIT_OBJECT_0) { RequireStopped(); return false; }
+        if (stopState == WAIT_OBJECT_0) {
+            RequireStopped();
+            return false;
+        }
         if (stopState == WAIT_FAILED) { detail::GifWorkerError("Check GIF validation stop event"); }
         if (!child_) { throw std::logic_error("Persistent GIF validation worker is stopped"); }
         const auto& filename = path.native();
@@ -175,9 +183,15 @@ public:
         const DWORD waitError = result == WAIT_FAILED ? GetLastError() : ERROR_INVALID_DATA;
         RequireStopped();
         if (result == WAIT_OBJECT_0) { return false; }
-        if (result == WAIT_OBJECT_0 + 1) { throw std::runtime_error(std::string("GIF validation worker failed: ") + request_->error); }
-        if (result == WAIT_OBJECT_0 + 2) { throw std::runtime_error("Persistent GIF validation worker exited during a request"); }
-        if (result == WAIT_TIMEOUT) { throw std::runtime_error("GIF validation worker timed out after fifteen seconds"); }
+        if (result == WAIT_OBJECT_0 + 1) {
+            throw std::runtime_error(std::string("GIF validation worker failed: ") + request_->error);
+        }
+        if (result == WAIT_OBJECT_0 + 2) {
+            throw std::runtime_error("Persistent GIF validation worker exited during a request");
+        }
+        if (result == WAIT_TIMEOUT) {
+            throw std::runtime_error("GIF validation worker timed out after fifteen seconds");
+        }
         detail::GifWorkerError("Wait for GIF validation worker", waitError);
     }
 
@@ -211,8 +225,8 @@ inline int ServeGifValidationRequests(int count, wchar_t** arguments, const auto
     const auto responseEvent = detail::ParseGifWorkerHandle(arguments[4]);
     const auto shutdownEvent = detail::ParseGifWorkerHandle(arguments[5]);
     const auto parent = detail::ParseGifWorkerHandle(arguments[6]);
-    const detail::GifWorkerView request(static_cast<detail::GifWorkerRequest*>(MapViewOfFile(mapping.get(), FILE_MAP_WRITE,
-        0, 0, sizeof(detail::GifWorkerRequest))));
+    const detail::GifWorkerView request(static_cast<detail::GifWorkerRequest*>(
+        MapViewOfFile(mapping.get(), FILE_MAP_WRITE, 0, 0, sizeof(detail::GifWorkerRequest))));
     if (!request) { detail::GifWorkerError("Map GIF worker request"); }
     HANDLE watchdog = nullptr;
     if (!RegisterWaitForSingleObject(&watchdog, parent.get(), detail::StopOrphanedGifWorker, nullptr, INFINITE,
@@ -225,13 +239,14 @@ inline int ServeGifValidationRequests(int count, wchar_t** arguments, const auto
         const HANDLE pending[] = {shutdownEvent.get(), requestEvent.get()};
         for (;;) {
             const DWORD ready = WaitForMultipleObjects(2, pending, FALSE, INFINITE);
-            if (ready != WAIT_OBJECT_0 + 1) { status = ready == WAIT_OBJECT_0 ? 0 : 1; break; }
+            if (ready != WAIT_OBJECT_0 + 1) {
+                status = ready == WAIT_OBJECT_0 ? 0 : 1;
+                break;
+            }
             try {
                 validateGif(std::filesystem::path(request->path), request->frameCount, request->durationCentiseconds);
                 request->validated = true;
-            } catch (const std::exception& error) {
-                detail::SaveGifWorkerError(*request, error.what());
-            } catch (...) {
+            } catch (const std::exception& error) { detail::SaveGifWorkerError(*request, error.what()); } catch (...) {
                 detail::SaveGifWorkerError(*request, "Unexpected WIC error");
             }
             if (!SetEvent(responseEvent.get())) { break; }

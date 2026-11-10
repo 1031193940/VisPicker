@@ -36,6 +36,7 @@ class ActiveTimeline final {
 public:
     void Pause(std::int64_t elapsedNanoseconds, bool paused);
     [[nodiscard]] std::int64_t Elapsed(std::int64_t elapsedNanoseconds) const;
+
 private:
     std::int64_t pausedNanoseconds_ = 0;
     std::int64_t pauseBegan_ = 0;
@@ -44,10 +45,10 @@ private:
 };
 
 [[nodiscard]] MemoryPlan PlanMemory(int sourceWidth, int sourceHeight, int outputWidth, int outputHeight,
-    unsigned processorCount, unsigned pointerBits = sizeof(void*) * 8);
+                                    unsigned processorCount, unsigned pointerBits = sizeof(void*) * 8);
 // Keep the requested scale when it fits. Otherwise try smaller percentages without cropping the source.
 [[nodiscard]] RecordingPlan PlanRecording(int sourceWidth, int sourceHeight, int requestedScale,
-    unsigned processorCount, unsigned pointerBits = sizeof(void*) * 8);
+                                          unsigned processorCount, unsigned pointerBits = sizeof(void*) * 8);
 [[nodiscard]] std::optional<RECT> ChangedRectangle(BitmapView current, BitmapView previous);
 void CopyRectangle(BitmapView source, RECT rectangle, std::vector<std::uint32_t>& destination);
 
@@ -60,8 +61,9 @@ struct EncodedRegion {
 // an empty previous span means the first, completely opaque logical frame.
 class RegionEncoder final {
 public:
-    [[nodiscard]] EncodedRegion Encode(std::span<const std::uint32_t> current,
-        std::span<const std::uint32_t> previous, int width, bool dither);
+    [[nodiscard]] EncodedRegion Encode(std::span<const std::uint32_t> current, std::span<const std::uint32_t> previous,
+                                       int width, bool dither);
+
 private:
     gif::Quantizer quantizer_{{false, 0}}; // Scheduling must not change palettes.
     gif::FrameEncoder encoder_;

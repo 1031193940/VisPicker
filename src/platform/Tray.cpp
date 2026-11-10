@@ -13,8 +13,7 @@ namespace {
 constexpr UINT IconId = 1;
 constexpr UINT FirstMenuId = 1000;
 
-template <std::size_t Size>
-void CopyText(wchar_t (&destination)[Size], const std::wstring_view text) noexcept {
+template <std::size_t Size> void CopyText(wchar_t (&destination)[Size], const std::wstring_view text) noexcept {
     static_assert(Size >= 2);
     std::size_t count = std::min(text.size(), Size - 1);
     const bool truncated = count < text.size();
@@ -38,20 +37,23 @@ public:
     MenuOwner() : menu_(CreatePopupMenu()) {
         if (!menu_) { throw std::runtime_error("CreatePopupMenu failed"); }
     }
-    ~MenuOwner() { if (menu_) { DestroyMenu(menu_); } }
+    ~MenuOwner() {
+        if (menu_) { DestroyMenu(menu_); }
+    }
     MenuOwner(const MenuOwner&) = delete;
     MenuOwner& operator=(const MenuOwner&) = delete;
     [[nodiscard]] HMENU Get() const noexcept { return menu_; }
     void Relinquish() noexcept { menu_ = nullptr; }
+
 private:
     HMENU menu_;
 };
 
-void AddCommand(const HMENU menu, const AppCommand command, const wchar_t* chinese,
-                const wchar_t* english, const bool useEnglish, const bool checked = false, const Hotkey hotkey = {}) {
+void AddCommand(const HMENU menu, const AppCommand command, const wchar_t* chinese, const wchar_t* english,
+                const bool useEnglish, const bool checked = false, const Hotkey hotkey = {}) {
     const auto label = Tray::ShortcutLabel(useEnglish ? english : chinese, hotkey);
-    if (!AppendMenuW(menu, MF_STRING | (checked ? MF_CHECKED : MF_UNCHECKED),
-        FirstMenuId + static_cast<UINT>(command), label.c_str())) {
+    if (!AppendMenuW(menu, MF_STRING | (checked ? MF_CHECKED : MF_UNCHECKED), FirstMenuId + static_cast<UINT>(command),
+                     label.c_str())) {
         throw std::runtime_error("AppendMenuW failed");
     }
 }
@@ -66,18 +68,22 @@ AppCommand ShowMenu(const HWND owner, POINT position, const bool autostart, cons
     AddCommand(menu.Get(), AppCommand::Screenshot, L"截图", L"Screenshot", english, false, hotkeys.screenshot);
     AddCommand(menu.Get(), AppCommand::Gif, L"录制 GIF", L"Record GIF", english, false, hotkeys.gif);
     AddCommand(menu.Get(), AppCommand::Pin, L"截取参考图", L"Capture reference", english);
-    AddCommand(menu.Get(), AppCommand::PinClipboard, L"从剪贴板贴图", L"Pin clipboard image", english, false, hotkeys.pinClipboard);
+    AddCommand(menu.Get(), AppCommand::PinClipboard, L"从剪贴板贴图", L"Pin clipboard image", english, false,
+               hotkeys.pinClipboard);
     MenuOwner pins;
-    AddCommand(pins.Get(), AppCommand::TogglePins, L"显示 / 隐藏全部", L"Show / hide all", english, false, hotkeys.togglePins);
+    AddCommand(pins.Get(), AppCommand::TogglePins, L"显示 / 隐藏全部", L"Show / hide all", english, false,
+               hotkeys.togglePins);
     AddCommand(pins.Get(), AppCommand::ShowPins, L"显示全部", L"Show all", english);
     AddCommand(pins.Get(), AppCommand::HidePins, L"隐藏全部", L"Hide all", english);
     AddCommand(pins.Get(), AppCommand::ClosePins, L"关闭全部", L"Close all", english);
-    AddCommand(pins.Get(), AppCommand::ResetPinPassthrough, L"取消全部鼠标穿透", L"Disable click-through for all", english);
+    AddCommand(pins.Get(), AppCommand::ResetPinPassthrough, L"取消全部鼠标穿透", L"Disable click-through for all",
+               english);
     AddCommand(pins.Get(), AppCommand::RestorePin, L"恢复最近关闭", L"Restore last closed", english);
     Separator(pins.Get());
     AddCommand(pins.Get(), AppCommand::TogglePinsAcrossDesktops, L"参考图跨桌面",
-        L"Show reference images on all desktops", english, pinsAcrossDesktops);
-    if (!AppendMenuW(menu.Get(), MF_POPUP, reinterpret_cast<UINT_PTR>(pins.Get()), english ? L"Reference images" : L"参考图")) {
+               L"Show reference images on all desktops", english, pinsAcrossDesktops);
+    if (!AppendMenuW(menu.Get(), MF_POPUP, reinterpret_cast<UINT_PTR>(pins.Get()),
+                     english ? L"Reference images" : L"参考图")) {
         throw std::runtime_error("Append reference submenu failed");
     }
     pins.Relinquish(); // Parent menu now owns the submenu and all its children.
@@ -92,8 +98,8 @@ AppCommand ShowMenu(const HWND owner, POINT position, const bool autostart, cons
     SetForegroundWindow(owner);
     // All mutable state was copied before this modal call. No Tray/App reference
     // is retained while nested window messages run.
-    const UINT selected = TrackPopupMenu(menu.Get(), TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
-        position.x, position.y, 0, owner, nullptr);
+    const UINT selected = TrackPopupMenu(menu.Get(), TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, position.x,
+                                         position.y, 0, owner, nullptr);
     PostMessageW(owner, WM_NULL, 0, 0);
     auto notification = NotificationData(owner);
     Shell_NotifyIconW(NIM_SETFOCUS, &notification);
@@ -109,14 +115,17 @@ Tray::Tray(const HWND owner, const UINT callbackMessage, const HICON sharedIcon)
     }
 }
 
-Tray::~Tray() { Remove(); }
+Tray::~Tray() {
+    Remove();
+}
 
 bool Tray::Restore() noexcept {
     auto data = NotificationData(owner_);
     data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
     data.uCallbackMessage = callbackMessage_;
     data.hIcon = icon_;
-    CopyText(data.szTip, english_ ? L"VisPick — Screenshot · GIF · Reference images" : L"VisPick — 截图 · GIF · 参考图");
+    CopyText(data.szTip,
+             english_ ? L"VisPick — Screenshot · GIF · Reference images" : L"VisPick — 截图 · GIF · 参考图");
     added_ = Shell_NotifyIconW(NIM_ADD, &data) != FALSE;
     if (!added_) { added_ = Shell_NotifyIconW(NIM_MODIFY, &data) != FALSE; }
     if (added_) {
@@ -134,9 +143,13 @@ void Tray::Remove() noexcept {
     }
 }
 
-void Tray::SetLeftClickCommand(const AppCommand command) noexcept { leftClickCommand_ = command; }
+void Tray::SetLeftClickCommand(const AppCommand command) noexcept {
+    leftClickCommand_ = command;
+}
 
-void Tray::SetHotkeys(const Config::Hotkeys& hotkeys) noexcept { hotkeys_ = hotkeys; }
+void Tray::SetHotkeys(const Config::Hotkeys& hotkeys) noexcept {
+    hotkeys_ = hotkeys;
+}
 
 std::wstring Tray::ShortcutLabel(const std::wstring_view label, const Hotkey hotkey) {
     return hotkey.Enabled() ? std::wstring(label) + L"\t" + FormatHotkey(hotkey) : std::wstring(label);
@@ -147,13 +160,14 @@ void Tray::SetLanguage(const bool english) noexcept {
     if (added_) {
         auto data = NotificationData(owner_);
         data.uFlags = NIF_TIP | NIF_SHOWTIP;
-        CopyText(data.szTip, english_ ? L"VisPick — Screenshot · GIF · Reference images" : L"VisPick — 截图 · GIF · 参考图");
+        CopyText(data.szTip,
+                 english_ ? L"VisPick — Screenshot · GIF · Reference images" : L"VisPick — 截图 · GIF · 参考图");
         Shell_NotifyIconW(NIM_MODIFY, &data);
     }
 }
 
 AppCommand Tray::HandleCallback(const WPARAM parameter, const LPARAM data, const bool autostartEnabled,
-                               const bool pinsAcrossDesktops) {
+                                const bool pinsAcrossDesktops) {
     const UINT identifier = version4_ ? HIWORD(data) : static_cast<UINT>(parameter);
     if (identifier != IconId) { return AppCommand::None; }
     const UINT event = LOWORD(data);
@@ -188,7 +202,9 @@ AppCommand Tray::CommandFromMenuId(const UINT identifier) noexcept {
     if (identifier == FirstMenuId + static_cast<UINT>(AppCommand::TogglePinsAcrossDesktops)) {
         return AppCommand::TogglePinsAcrossDesktops;
     }
-    if (identifier <= FirstMenuId || identifier > FirstMenuId + static_cast<UINT>(AppCommand::Exit)) { return AppCommand::None; }
+    if (identifier <= FirstMenuId || identifier > FirstMenuId + static_cast<UINT>(AppCommand::Exit)) {
+        return AppCommand::None;
+    }
     const auto command = static_cast<AppCommand>(identifier - FirstMenuId);
     return command == AppCommand::PinFile ? AppCommand::None : command;
 }

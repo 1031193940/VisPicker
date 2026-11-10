@@ -16,4 +16,3 @@ void WriteReports(const std::filesystem::path& directory, std::span<const SpikeR
 [[nodiscard]] bool AcceptancePassed(std::span<const SpikeResult> results, const TestEnvironment& environment);
 
 } // namespace vispick
-

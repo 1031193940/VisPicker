@@ -25,6 +25,7 @@ public:
     // Call on readyMessage. Stale results are discarded; encoding/publication
     // errors propagate while the already-published DIB formats remain usable.
     void PublishReady();
+
 private:
     struct Implementation;
     std::unique_ptr<Implementation> implementation_;
@@ -44,6 +45,7 @@ public:
     GifClipboardData(const GifClipboardData&) = delete;
     GifClipboardData& operator=(const GifClipboardData&) = delete;
     [[nodiscard]] GifClipboardFormats Publish(HWND owner);
+
 private:
     struct Implementation;
     std::unique_ptr<Implementation> implementation_;
@@ -53,4 +55,4 @@ private:
 // are straight BGRA; BI_RGB's reserved high byte is never treated as alpha.
 [[nodiscard]] Bitmap DecodeDib(std::span<const std::uint8_t> bytes);
 [[nodiscard]] std::vector<std::uint8_t> EncodeDib(BitmapView image);
-}
+} // namespace vispick

@@ -21,10 +21,11 @@ public:
     void SetHotkeys(const Config::Hotkeys& hotkeys) noexcept;
     [[nodiscard]] static std::wstring ShortcutLabel(std::wstring_view label, Hotkey hotkey);
     [[nodiscard]] AppCommand HandleCallback(WPARAM parameter, LPARAM data, bool autostartEnabled,
-                                          bool pinsAcrossDesktops = false);
+                                            bool pinsAcrossDesktops = false);
     [[nodiscard]] bool Notify(std::wstring_view title, std::wstring_view text, bool warning = false) noexcept;
     [[nodiscard]] static UINT TaskbarCreatedMessage();
     [[nodiscard]] static AppCommand CommandFromMenuId(UINT identifier) noexcept;
+
 private:
     HWND owner_;
     UINT callbackMessage_;

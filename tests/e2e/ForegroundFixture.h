@@ -49,12 +49,15 @@ public:
     void Activate() {
         if (!window_) {
             RECT work{};
-            if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0)) { throw std::runtime_error("Cannot read desktop test work area"); }
+            if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0)) {
+                throw std::runtime_error("Cannot read desktop test work area");
+            }
             window_ = CreateWindowExW(WS_EX_TOOLWINDOW, L"STATIC", L"VisPick desktop test", WS_POPUP | WS_CAPTION,
-                work.right - 218, work.bottom - 60, 210, 52, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+                                      work.right - 218, work.bottom - 60, 210, 52, nullptr, nullptr,
+                                      GetModuleHandleW(nullptr), nullptr);
             if (!window_) { throw std::runtime_error("Cannot create foreground test fixture"); }
             if (!SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
+                              SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
                 throw std::runtime_error("Cannot show foreground test fixture");
             }
         }
@@ -62,7 +65,9 @@ public:
     }
 
     void GrantTo(DWORD childProcess) {
-        if (childProcess == 0 || childProcess == ASFW_ANY) { throw std::invalid_argument("Foreground grant requires the owned child PID"); }
+        if (childProcess == 0 || childProcess == ASFW_ANY) {
+            throw std::invalid_argument("Foreground grant requires the owned child PID");
+        }
         Activate();
         // Starting from the foreground can already make a child eligible.
         // The following visibility/focus assertions are the actual gate.

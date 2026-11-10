@@ -16,7 +16,7 @@ struct OverlayResult {
     CaptureMode mode = CaptureMode::Screenshot;
     OverlayAction action = OverlayAction::Cancel;
     RECT selection{}; // Physical screen coordinates, right/bottom exclusive.
-    Bitmap image; // Opaque crop; empty for Record/Cancel or an accepted saveRequested.
+    Bitmap image;     // Opaque crop; empty for Record/Cancel or an accepted saveRequested.
     double appearanceMilliseconds = 0;
     int gifFramesPerSecond = 30; // Selected rate for Record.
 };
@@ -32,8 +32,10 @@ public:
     void SwitchMode(CaptureMode mode);
     void Cancel();
     [[nodiscard]] bool Active() const noexcept;
+
 protected:
     LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override;
+
 private:
     struct State;
     std::unique_ptr<State> state_;

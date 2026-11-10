@@ -20,6 +20,7 @@ public:
     void Cancel() noexcept;
     // Forward parent's WM_CTLCOLOREDIT / WM_CTLCOLORSTATIC here; null means not our control.
     [[nodiscard]] HBRUSH ControlColor(HDC deviceContext, HWND child) noexcept;
+
 private:
     struct State;
     std::unique_ptr<State> state_;

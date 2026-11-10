@@ -35,11 +35,15 @@ class TemporaryGif {
 public:
     explicit TemporaryGif(std::filesystem::path path) : path_(std::move(path)) {}
     ~TemporaryGif() {
-        if (!keep_) { std::error_code ignored; std::filesystem::remove(path_, ignored); }
+        if (!keep_) {
+            std::error_code ignored;
+            std::filesystem::remove(path_, ignored);
+        }
     }
     TemporaryGif(const TemporaryGif&) = delete;
     TemporaryGif& operator=(const TemporaryGif&) = delete;
     void Keep() noexcept { keep_ = true; }
+
 private:
     std::filesystem::path path_;
     bool keep_ = false;
@@ -133,7 +137,10 @@ private:
             std::optional<std::uint32_t> previousSourceId;
             std::uint64_t pendingHash = 0;
             const auto writePending = [&](const std::uint64_t delay) {
-                if (delay == 0) { ++statistics_.zeroDelayCoalesced; return; }
+                if (delay == 0) {
+                    ++statistics_.zeroDelayCoalesced;
+                    return;
+                }
                 if (delay > UINT16_MAX) { throw std::runtime_error("GIF frame delay exceeds format limit"); }
                 const auto begin = Clock::now();
                 writer.WriteFrame(*pending, static_cast<std::uint16_t>(delay));
@@ -155,10 +162,10 @@ private:
                 const auto frameId = ValidateGifPattern(slot.image.Pixels());
                 const auto& before = slot.sourceBefore;
                 const auto& after = slot.sourceAfter;
-                if (!before.valid || !after.valid) { ++statistics_.unavailableBrackets; }
-                else if (before.frameNumber != after.frameNumber ||
-                         before.updateBeginQpc != after.updateBeginQpc ||
-                         before.updateEndQpc != after.updateEndQpc) {
+                if (!before.valid || !after.valid) {
+                    ++statistics_.unavailableBrackets;
+                } else if (before.frameNumber != after.frameNumber || before.updateBeginQpc != after.updateBeginQpc ||
+                           before.updateEndQpc != after.updateEndQpc) {
                     ++statistics_.changedSnapshotBrackets;
                 }
                 if (!frameId) {
@@ -167,12 +174,16 @@ private:
                     // Metadata cannot distinguish those causes, so report rejection only.
                 } else {
                     ++statistics_.validatedFrames;
-                    if (before.valid && after.valid && (*frameId < before.frameNumber || *frameId > after.frameNumber)) {
+                    if (before.valid && after.valid &&
+                        (*frameId < before.frameNumber || *frameId > after.frameNumber)) {
                         ++statistics_.outsideSourceBracket;
                     }
                     if (previousSourceId) {
-                        if (*frameId == *previousSourceId) { ++statistics_.duplicateSourceFrames; }
-                        else if (*frameId > *previousSourceId + 1U) { statistics_.skippedSourceIds += *frameId - *previousSourceId - 1U; }
+                        if (*frameId == *previousSourceId) {
+                            ++statistics_.duplicateSourceFrames;
+                        } else if (*frameId > *previousSourceId + 1U) {
+                            statistics_.skippedSourceIds += *frameId - *previousSourceId - 1U;
+                        }
                     }
                     previousSourceId = frameId;
                     const auto hash = gif::PixelHash(slot.image.Pixels());
@@ -180,7 +191,9 @@ private:
                     if (!delays) {
                         delays.emplace(slot.completionNanoseconds);
                         statistics_.firstCompletionNanoseconds = slot.completionNanoseconds;
-                    } else { writePending(delays->AdvanceTo(slot.completionNanoseconds)); }
+                    } else {
+                        writePending(delays->AdvanceTo(slot.completionNanoseconds));
+                    }
                     const auto encodingStart = Clock::now();
                     pending = encoder.Encode(slot.image.Pixels());
                     statistics_.encodeTimes.push_back(Milliseconds(Clock::now() - encodingStart));
@@ -192,7 +205,9 @@ private:
                     --busySlots_;
                 }
             }
-            if (!pending || !delays || stopNanoseconds_ == 0) { throw std::runtime_error("GIF pipeline has no completed verified recording"); }
+            if (!pending || !delays || stopNanoseconds_ == 0) {
+                throw std::runtime_error("GIF pipeline has no completed verified recording");
+            }
             statistics_.finalStopNanoseconds = stopNanoseconds_;
             writePending(delays->AdvanceTo(stopNanoseconds_));
             writer.Finish();
@@ -219,15 +234,20 @@ private:
 void AddTiming(SpikeResult& result, const std::string& prefix, std::vector<double> values) {
     if (values.empty()) { return; }
     std::sort(values.begin(), values.end());
-    result.measurements.push_back({prefix + "_mean", std::accumulate(values.begin(), values.end(), 0.0) / static_cast<double>(values.size()), "ms"});
-    result.measurements.push_back({prefix + "_p95", values[static_cast<std::size_t>(0.95 * static_cast<double>(values.size() - 1))], "ms"});
+    result.measurements.push_back(
+        {prefix + "_mean", std::accumulate(values.begin(), values.end(), 0.0) / static_cast<double>(values.size()),
+         "ms"});
+    result.measurements.push_back(
+        {prefix + "_p95", values[static_cast<std::size_t>(0.95 * static_cast<double>(values.size() - 1))], "ms"});
     result.measurements.push_back({prefix + "_max", values.back(), "ms"});
 }
 
 } // namespace
 
 SpikeResult RunGifPipelineSpike(const SpikeOptions& options) {
-    if (options.seconds < 1 || options.seconds > 60) { throw std::invalid_argument("GIF pipeline duration must be 1..60 seconds"); }
+    if (options.seconds < 1 || options.seconds > 60) {
+        throw std::invalid_argument("GIF pipeline duration must be 1..60 seconds");
+    }
     SpikeResult result{"gif-pipeline", false, {}, {}};
     const auto monitors = EnumerateMonitors();
     const auto monitor = std::find_if(monitors.begin(), monitors.end(), [](const MonitorInfo& information) {
@@ -260,20 +280,31 @@ SpikeResult RunGifPipelineSpike(const SpikeOptions& options) {
     std::vector<double> copyTimes;
     std::vector<double> latenessTimes;
     while (tick < plannedTicks) {
-        const auto deadline = start + std::chrono::nanoseconds(static_cast<std::int64_t>(tick) * 1000000000LL / FramesPerSecond);
-        if (!timer.WaitUntil(deadline)) {
-            throw std::runtime_error("GIF pipeline cancelled during sampling");
-        }
+        const auto deadline =
+            start + std::chrono::nanoseconds(static_cast<std::int64_t>(tick) * 1000000000LL / FramesPerSecond);
+        if (!timer.WaitUntil(deadline)) { throw std::runtime_error("GIF pipeline cancelled during sampling"); }
         if (!pattern.Running()) { throw std::runtime_error("Independent pattern process exited during recording"); }
         const auto wake = Clock::now();
-        if (wake >= finish) { scheduleSkipped += plannedTicks - tick; break; }
+        if (wake >= finish) {
+            scheduleSkipped += plannedTicks - tick;
+            break;
+        }
         const auto elapsedNanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(wake - start).count();
-        const int currentTick = std::min(plannedTicks - 1, static_cast<int>(elapsedNanoseconds * FramesPerSecond / 1000000000LL));
-        if (currentTick > tick) { scheduleSkipped += currentTick - tick; tick = currentTick; }
-        const auto actualDeadline = start + std::chrono::nanoseconds(static_cast<std::int64_t>(tick) * 1000000000LL / FramesPerSecond);
+        const int currentTick =
+            std::min(plannedTicks - 1, static_cast<int>(elapsedNanoseconds * FramesPerSecond / 1000000000LL));
+        if (currentTick > tick) {
+            scheduleSkipped += currentTick - tick;
+            tick = currentTick;
+        }
+        const auto actualDeadline =
+            start + std::chrono::nanoseconds(static_cast<std::int64_t>(tick) * 1000000000LL / FramesPerSecond);
         latenessTimes.push_back(Milliseconds(wake - actualDeadline));
         const auto slotIndex = encoder.Acquire();
-        if (!slotIndex) { ++queueSkipped; ++tick; continue; }
+        if (!slotIndex) {
+            ++queueSkipped;
+            ++tick;
+            continue;
+        }
         auto& slot = encoder.Slot(*slotIndex);
         slot.sourceBefore = pattern.Snapshot();
         slot.captureBeginQpc = QpcNow();
@@ -300,13 +331,17 @@ SpikeResult RunGifPipelineSpike(const SpikeOptions& options) {
     const auto& statistics = encoder.Finish(stopNanoseconds);
     const double drainMilliseconds = Milliseconds(Clock::now() - drainBegin);
     const auto inspection = gif::InspectGif(output, statistics.writtenHashes);
-    const double timelineSeconds = static_cast<double>(statistics.finalStopNanoseconds - statistics.firstCompletionNanoseconds) / 1000000000.0;
+    const double timelineSeconds =
+        static_cast<double>(statistics.finalStopNanoseconds - statistics.firstCompletionNanoseconds) / 1000000000.0;
     const double gifSeconds = static_cast<double>(inspection.durationCentiseconds) / 100.0;
-    const double durationError = timelineSeconds > 0 ? std::abs(gifSeconds - timelineSeconds) / timelineSeconds * 100.0 : 100.0;
+    const double durationError =
+        timelineSeconds > 0 ? std::abs(gifSeconds - timelineSeconds) / timelineSeconds * 100.0 : 100.0;
     artifact.Keep();
     result.measurements = {
-        {"width", GifPatternWidth, "px"}, {"height", GifPatternHeight, "px"},
-        {"target_fps", FramesPerSecond, "fps"}, {"planned_ticks", static_cast<double>(plannedTicks), "ticks"},
+        {"width", GifPatternWidth, "px"},
+        {"height", GifPatternHeight, "px"},
+        {"target_fps", FramesPerSecond, "fps"},
+        {"planned_ticks", static_cast<double>(plannedTicks), "ticks"},
         {"captured_frames", static_cast<double>(capturedFrames), "frames"},
         {"schedule_skipped_ticks", static_cast<double>(scheduleSkipped), "ticks"},
         {"queue_full_skipped_ticks", static_cast<double>(queueSkipped), "ticks"},
@@ -320,27 +355,45 @@ SpikeResult RunGifPipelineSpike(const SpikeOptions& options) {
         {"zero_delay_coalesced_frames", static_cast<double>(statistics.zeroDelayCoalesced), "frames"},
         {"decoded_frames", static_cast<double>(inspection.frameCount), "frames"},
         {"decoded_mismatched_frames", static_cast<double>(inspection.mismatchedFrames), "frames"},
-        {"wall_duration", wallSeconds, "s"}, {"captured_timeline_duration", timelineSeconds, "s"},
-        {"gif_duration", gifSeconds, "s"}, {"duration_error", durationError, "%"},
+        {"wall_duration", wallSeconds, "s"},
+        {"captured_timeline_duration", timelineSeconds, "s"},
+        {"gif_duration", gifSeconds, "s"},
+        {"duration_error", durationError, "%"},
         {"queue_capacity", QueueCapacity, "frames"},
         {"maximum_busy_frame_slots", static_cast<double>(statistics.maximumBusySlots), "frames"},
         {"reserved_raw_queue_bytes", QueueCapacity * GifPatternWidth * GifPatternHeight * 4.0, "bytes"},
         {"encoder_drain", drainMilliseconds, "ms"},
-        {"file_size", static_cast<double>(std::filesystem::file_size(output)), "bytes"}
-    };
+        {"file_size", static_cast<double>(std::filesystem::file_size(output)), "bytes"}};
     AddTiming(result, "capture", std::move(captureTimes));
     AddTiming(result, "raw_queue_copy", std::move(copyTimes));
     AddTiming(result, "scheduler_lateness", std::move(latenessTimes));
     AddTiming(result, "source_verification_worker", statistics.verificationTimes);
     AddTiming(result, "encoding_worker", statistics.encodeTimes);
     AddTiming(result, "writing_worker", statistics.writeTimes);
-    result.notes.emplace_back("Independent pattern process animates at 30fps. Acquisition only waits for its own timer, BitBlts actual desktop RGB, timestamps completion, and transfers ownership through eight preallocated raw frame slots to one encoding worker. No per-frame DwmFlush, pattern generation or pixel validation runs on the acquisition thread.");
-    result.notes.emplace_back("Worker decodes the source frame ID from captured pixels and verifies every RGB pixel against that known pattern BEFORE writing. Unknown/torn/occluded frames are rejected without persisting their pixels. WIC validation runs offline after recording; no synthetic frames replace captures.");
-    result.notes.emplace_back("Source QPC intervals describe GDI submission, not DWM presentation. source_snapshot_bracket_changed counts differences between the snapshots read before and after capture. Changed/unavailable brackets, duplicate IDs and IDs outside brackets report correlation ambiguity only: they cannot establish which source update was presented during capture, measure compositor latency, or identify an occlusion cause.");
-    result.notes.emplace_back("GIF delays use actual capture-completion timestamps with carried 10ms remainder, from first verified completion through recording stop. Zero-delay samples are coalesced; rejected or queue-skipped intervals extend the previous verified frame. Leading acquisition latency is excluded from the captured timeline.");
-    result.notes.emplace_back("This bounded one-worker prototype measures capture/encode separation. P5 still requires differential frames, worker-pool scheduling, cursor and recording UI. Performance acceptance additionally requires a local physical-display environment, enforced centrally by the report runner.");
+    result.notes.emplace_back("Independent pattern process animates at 30fps. Acquisition only waits for its own "
+                              "timer, BitBlts actual desktop RGB, timestamps completion, and transfers ownership "
+                              "through eight preallocated raw frame slots to one encoding worker. No per-frame "
+                              "DwmFlush, pattern generation or pixel validation runs on the acquisition thread.");
+    result.notes.emplace_back(
+        "Worker decodes the source frame ID from captured pixels and verifies every RGB pixel against that known "
+        "pattern BEFORE writing. Unknown/torn/occluded frames are rejected without persisting their pixels. WIC "
+        "validation runs offline after recording; no synthetic frames replace captures.");
+    result.notes.emplace_back(
+        "Source QPC intervals describe GDI submission, not DWM presentation. source_snapshot_bracket_changed counts "
+        "differences between the snapshots read before and after capture. Changed/unavailable brackets, duplicate IDs "
+        "and IDs outside brackets report correlation ambiguity only: they cannot establish which source update was "
+        "presented during capture, measure compositor latency, or identify an occlusion cause.");
+    result.notes.emplace_back(
+        "GIF delays use actual capture-completion timestamps with carried 10ms remainder, from first verified "
+        "completion through recording stop. Zero-delay samples are coalesced; rejected or queue-skipped intervals "
+        "extend the previous verified frame. Leading acquisition latency is excluded from the captured timeline.");
+    result.notes.emplace_back(
+        "This bounded one-worker prototype measures capture/encode separation. P5 still requires differential frames, "
+        "worker-pool scheduling, cursor and recording UI. Performance acceptance additionally requires a local "
+        "physical-display environment, enforced centrally by the report runner.");
     result.passed = scheduleSkipped == 0 && queueSkipped == 0 && statistics.rejectedFrames == 0 &&
-        inspection.mismatchedFrames == 0 && inspection.frameCount == statistics.writtenHashes.size() && durationError < 1.0;
+                    inspection.mismatchedFrames == 0 && inspection.frameCount == statistics.writtenHashes.size() &&
+                    durationError < 1.0;
     return result;
 }
 

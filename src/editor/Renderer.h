@@ -17,6 +17,7 @@ public:
     void Draw(HDC destination, POINT destinationScreenOrigin, RECT screenClip, bool preview = true);
     [[nodiscard]] Bitmap Flatten(RECT screenSelection);
     [[nodiscard]] std::uint64_t CacheBuildCount() const noexcept;
+
 private:
     struct State;
     std::unique_ptr<State> state_;

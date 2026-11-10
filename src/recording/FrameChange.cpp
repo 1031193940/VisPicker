@@ -11,15 +11,18 @@ std::uint16_t RecordedFrameDelay(std::uint64_t centiseconds) noexcept {
     static_assert(Config::Gif::MaximumSeconds * 100 <= std::numeric_limits<std::uint16_t>::max());
     // All active timestamps are bounded by the recording limit. The
     // upper clamp also prevents a narrowing wrap if the caller violates it.
-    return static_cast<std::uint16_t>(std::clamp<std::uint64_t>(centiseconds,
-        MinimumFrameDelayCentiseconds, std::numeric_limits<std::uint16_t>::max()));
+    return static_cast<std::uint16_t>(std::clamp<std::uint64_t>(centiseconds, MinimumFrameDelayCentiseconds,
+                                                                std::numeric_limits<std::uint16_t>::max()));
 }
 
 void ActiveTimeline::Pause(std::int64_t elapsedNanoseconds, bool paused) {
     static_cast<void>(Elapsed(elapsedNanoseconds));
     if (paused == paused_) { return; }
-    if (paused) { pauseBegan_ = elapsedNanoseconds; }
-    else { pausedNanoseconds_ += elapsedNanoseconds - pauseBegan_; }
+    if (paused) {
+        pauseBegan_ = elapsedNanoseconds;
+    } else {
+        pausedNanoseconds_ += elapsedNanoseconds - pauseBegan_;
+    }
     lastTransition_ = elapsedNanoseconds;
     paused_ = paused;
 }
@@ -50,7 +53,7 @@ std::optional<MemoryPlan> TryPlanMemory(std::uint64_t sourcePixels, std::uint64_
     const auto perSlot = pixels * 10 + 4096;
     const unsigned preferredWorkers = std::clamp(processorCount > 2 ? processorCount - 2 : 1U, 1U, 6U);
     for (unsigned workers = preferredWorkers; workers != 0; --workers) {
-        for (unsigned slots = std::min(workers + 2, 8U); slots >= std::max(2U,workers); --slots) {
+        for (unsigned slots = std::min(workers + 2, 8U); slots >= std::max(2U, workers); --slots) {
             const auto bound = persistent + perWorker * workers + perSlot * slots;
             if (bound <= plan.memoryLimit) {
                 plan.workerCount = workers;
@@ -64,10 +67,11 @@ std::optional<MemoryPlan> TryPlanMemory(std::uint64_t sourcePixels, std::uint64_
 }
 } // namespace
 
-MemoryPlan PlanMemory(int sourceWidth, int sourceHeight, int outputWidth, int outputHeight,
-                      unsigned processorCount, unsigned pointerBits) {
+MemoryPlan PlanMemory(int sourceWidth, int sourceHeight, int outputWidth, int outputHeight, unsigned processorCount,
+                      unsigned pointerBits) {
     if (sourceWidth < 1 || sourceHeight < 1 || outputWidth < 1 || outputHeight < 1 ||
-        outputWidth > MaximumGifDimension || outputHeight > MaximumGifDimension || (pointerBits != 32 && pointerBits != 64)) {
+        outputWidth > MaximumGifDimension || outputHeight > MaximumGifDimension ||
+        (pointerBits != 32 && pointerBits != 64)) {
         throw std::invalid_argument("Invalid recording dimensions or architecture");
     }
     const auto memoryLimit = RecordingMemoryLimit(pointerBits);
@@ -76,14 +80,17 @@ MemoryPlan PlanMemory(int sourceWidth, int sourceHeight, int outputWidth, int ou
     if (sourcePixels > memoryLimit / 4 || pixels > memoryLimit / 10) {
         throw std::length_error("Recording dimensions exceed the memory budget");
     }
-    if (const auto plan = TryPlanMemory(sourcePixels,pixels,outputWidth,processorCount,memoryLimit)) { return *plan; }
+    if (const auto plan = TryPlanMemory(sourcePixels, pixels, outputWidth, processorCount, memoryLimit)) {
+        return *plan;
+    }
     throw std::length_error("Recording region exceeds the bounded pipeline memory budget; reduce region or scale");
 }
 
-RecordingPlan PlanRecording(int sourceWidth, int sourceHeight, int requestedScale,
-                            unsigned processorCount, unsigned pointerBits) {
-    if (sourceWidth < 1 || sourceHeight < 1 || sourceWidth > MaximumGifDimension || sourceHeight > MaximumGifDimension ||
-        requestedScale < 1 || requestedScale > 100 || (pointerBits != 32 && pointerBits != 64)) {
+RecordingPlan PlanRecording(int sourceWidth, int sourceHeight, int requestedScale, unsigned processorCount,
+                            unsigned pointerBits) {
+    if (sourceWidth < 1 || sourceHeight < 1 || sourceWidth > MaximumGifDimension ||
+        sourceHeight > MaximumGifDimension || requestedScale < 1 || requestedScale > 100 ||
+        (pointerBits != 32 && pointerBits != 64)) {
         throw std::invalid_argument("Invalid recording dimensions, scale or architecture");
     }
     const auto memoryLimit = RecordingMemoryLimit(pointerBits);
@@ -94,12 +101,13 @@ RecordingPlan PlanRecording(int sourceWidth, int sourceHeight, int requestedScal
             const int height = std::max(1, sourceHeight * scale / 100);
             const auto pixels = static_cast<std::uint64_t>(width) * height;
             if (pixels > memoryLimit / 10) { continue; }
-            if (const auto plan = TryPlanMemory(sourcePixels,pixels,width,processorCount,memoryLimit)) {
-                return {width,height,*plan};
+            if (const auto plan = TryPlanMemory(sourcePixels, pixels, width, processorCount, memoryLimit)) {
+                return {width, height, *plan};
             }
         }
     }
-    throw std::length_error("Recording region exceeds the memory budget even at the minimum scale; choose a smaller region");
+    throw std::length_error(
+        "Recording region exceeds the memory budget even at the minimum scale; choose a smaller region");
 }
 
 std::optional<RECT> ChangedRectangle(BitmapView current, BitmapView previous) {
@@ -124,25 +132,33 @@ std::optional<RECT> ChangedRectangle(BitmapView current, BitmapView previous) {
 }
 
 void CopyRectangle(BitmapView source, RECT rectangle, std::vector<std::uint32_t>& destination) {
-    if (rectangle.left < 0 || rectangle.top < 0 || rectangle.right > source.Width() || rectangle.bottom > source.Height() ||
-        rectangle.right <= rectangle.left || rectangle.bottom <= rectangle.top) { throw std::invalid_argument("Invalid recording crop"); }
+    if (rectangle.left < 0 || rectangle.top < 0 || rectangle.right > source.Width() ||
+        rectangle.bottom > source.Height() || rectangle.right <= rectangle.left || rectangle.bottom <= rectangle.top) {
+        throw std::invalid_argument("Invalid recording crop");
+    }
     const auto width = static_cast<std::size_t>(rectangle.right - rectangle.left);
     destination.resize(width * static_cast<std::size_t>(rectangle.bottom - rectangle.top));
     for (LONG row = rectangle.top; row < rectangle.bottom; ++row) {
         const auto offset = static_cast<std::size_t>(row - rectangle.top) * width;
         const auto* sourceRow = source.Row(row) + rectangle.left;
-        for (std::size_t column = 0; column < width; ++column) { destination[offset + column] = sourceRow[column] | 0xFF000000U; }
+        for (std::size_t column = 0; column < width; ++column) {
+            destination[offset + column] = sourceRow[column] | 0xFF000000U;
+        }
     }
 }
 
-EncodedRegion RegionEncoder::Encode(std::span<const std::uint32_t> current,
-                                    std::span<const std::uint32_t> previous, int width, bool dither) {
+EncodedRegion RegionEncoder::Encode(std::span<const std::uint32_t> current, std::span<const std::uint32_t> previous,
+                                    int width, bool dither) {
     if (width < 1 || current.empty() || current.size() % static_cast<std::size_t>(width) != 0 ||
-        (!previous.empty() && previous.size() != current.size())) { throw std::invalid_argument("Invalid changed-frame input"); }
+        (!previous.empty() && previous.size() != current.size())) {
+        throw std::invalid_argument("Invalid changed-frame input");
+    }
     opaque_.clear();
     opaque_.reserve(current.size());
     for (std::size_t pixel = 0; pixel < current.size(); ++pixel) {
-        if (previous.empty() || ((current[pixel] ^ previous[pixel]) & 0x00FFFFFFU) != 0) { opaque_.push_back(current[pixel]); }
+        if (previous.empty() || ((current[pixel] ^ previous[pixel]) & 0x00FFFFFFU) != 0) {
+            opaque_.push_back(current[pixel]);
+        }
     }
     if (opaque_.empty()) { throw std::invalid_argument("Unchanged frames must extend duration without encoding"); }
     quantizer_.QuantizeTo(opaque_, quantized_);
@@ -159,7 +175,9 @@ EncodedRegion RegionEncoder::Encode(std::span<const std::uint32_t> current,
     for (std::size_t pixel = 0; pixel < current.size(); ++pixel) {
         if (!previous.empty() && ((current[pixel] ^ previous[pixel]) & 0x00FFFFFFU) == 0) {
             expanded_.pixels[pixel] = static_cast<std::uint8_t>(transparentIndex);
-        } else { expanded_.pixels[pixel] = quantized_.pixels[opaqueIndex++]; }
+        } else {
+            expanded_.pixels[pixel] = quantized_.pixels[opaqueIndex++];
+        }
     }
     if (dither && !expanded_.exact) { gif::DitherFloydSteinberg(current, width, expanded_, transparentIndex); }
     return {encoder_.EncodeIndexed(expanded_), transparentIndex};

@@ -23,6 +23,7 @@ public:
     // Console handles receive UTF-16; redirected files and pipes receive UTF-8.
     [[nodiscard]] bool Write(std::wstring_view text, bool error = false) const;
     void Show(std::wstring_view text, bool error = false) const;
+
 private:
     HANDLE originalOutput_ = nullptr;
     HANDLE originalError_ = nullptr;

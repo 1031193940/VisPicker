@@ -23,12 +23,17 @@ struct ClipboardScope {
     explicit ClipboardScope(HWND owner, bool required = true) {
         const int attempts = required ? 10 : 1;
         for (int attempt = 0; attempt < attempts; ++attempt) {
-            if (OpenClipboard(owner)) { opened = true; return; }
+            if (OpenClipboard(owner)) {
+                opened = true;
+                return;
+            }
             if (attempt + 1 < attempts) { std::this_thread::sleep_for(std::chrono::milliseconds(20)); }
         }
         if (required) { throw std::runtime_error("Clipboard is busy; please try again"); }
     }
-    ~ClipboardScope() { if (opened) { CloseClipboard(); } }
+    ~ClipboardScope() {
+        if (opened) { CloseClipboard(); }
+    }
 };
 struct Memory {
     HGLOBAL handle = nullptr;
@@ -37,7 +42,9 @@ struct Memory {
         if (!handle) { throw std::bad_alloc(); }
     }
     explicit Memory(HGLOBAL encoded) noexcept : handle(encoded) {}
-    ~Memory() { if (handle) { GlobalFree(handle); } }
+    ~Memory() {
+        if (handle) { GlobalFree(handle); }
+    }
     Memory(const Memory&) = delete;
     Memory& operator=(const Memory&) = delete;
     [[nodiscard]] bool Publish(UINT format) noexcept {
@@ -64,15 +71,20 @@ std::vector<std::uint8_t> ReadBytes(UINT format) {
     const LockedMemory locked(memory);
     return {locked.data, locked.data + size};
 }
-template<typename T> T Read(std::span<const std::uint8_t> bytes, std::size_t offset) {
-    if (offset > bytes.size() || sizeof(T) > bytes.size() - offset) { throw std::invalid_argument("Truncated DIB header or palette"); }
+template <typename T> T Read(std::span<const std::uint8_t> bytes, std::size_t offset) {
+    if (offset > bytes.size() || sizeof(T) > bytes.size() - offset) {
+        throw std::invalid_argument("Truncated DIB header or palette");
+    }
     T value{};
     std::memcpy(&value, bytes.data() + offset, sizeof(T));
     return value;
 }
 unsigned Channel(std::uint32_t pixel, std::uint32_t mask) {
     if (!mask) { return 0; }
-    while (!(mask & 1U)) { mask >>= 1; pixel >>= 1; }
+    while (!(mask & 1U)) {
+        mask >>= 1;
+        pixel >>= 1;
+    }
     return static_cast<unsigned>((static_cast<std::uint64_t>(pixel & mask) * 255 + mask / 2) / mask);
 }
 bool Contiguous(std::uint32_t mask) {
@@ -104,8 +116,8 @@ void WriteDib(std::uint8_t* bytes, BitmapView image) {
         const auto alpha = pixel >> 24;
         if (alpha != 255) {
             pixel = 0xFF000000U | (((pixel & 255) * alpha + 255 * (255 - alpha) + 127) / 255) |
-                (((((pixel >> 8) & 255) * alpha + 255 * (255 - alpha) + 127) / 255) << 8) |
-                (((((pixel >> 16) & 255) * alpha + 255 * (255 - alpha) + 127) / 255) << 16);
+                    (((((pixel >> 8) & 255) * alpha + 255 * (255 - alpha) + 127) / 255) << 8) |
+                    (((((pixel >> 16) & 255) * alpha + 255 * (255 - alpha) + 127) / 255) << 16);
         }
         std::memcpy(destination, &pixel, sizeof(pixel));
         destination += sizeof(pixel);
@@ -116,8 +128,7 @@ struct PreparedImage {
     Memory dibV5;
     Memory dib;
 
-    explicit PreparedImage(BitmapView image)
-        : dibV5(DibSize(image, sizeof(BITMAPV5HEADER))), dib(DibSize(image)) {
+    explicit PreparedImage(BitmapView image) : dibV5(DibSize(image, sizeof(BITMAPV5HEADER))), dib(DibSize(image)) {
         {
             const LockedMemory bytes(dibV5.handle);
             BITMAPV5HEADER header{};
@@ -159,7 +170,7 @@ struct PreparedImage {
         return GetClipboardOwner() == owner ? sequence : 0;
     }
 };
-}
+} // namespace
 
 struct ImageClipboard::Implementation {
     struct Request {
@@ -186,8 +197,8 @@ struct ImageClipboard::Implementation {
 
     Implementation(HWND ownerWindow, UINT message)
         : owner(ownerWindow), readyMessage(message), pngFormat(RegisterClipboardFormatW(L"PNG")) {
-        if (!owner || GetWindowThreadProcessId(owner, nullptr) != GetCurrentThreadId() ||
-            message < WM_APP || message > 0xBFFF) {
+        if (!owner || GetWindowThreadProcessId(owner, nullptr) != GetCurrentThreadId() || message < WM_APP ||
+            message > 0xBFFF) {
             throw std::invalid_argument("Invalid image clipboard owner or callback message");
         }
         worker = std::thread([this] { Run(); });
@@ -261,8 +272,9 @@ void ImageClipboard::PublishReady() {
     if (!result) { return; }
     // PNG is an optional addition; do not delay the UI if another app is pasting.
     const ClipboardScope clipboard(state.owner, false);
-    if (!clipboard.opened || GetClipboardOwner() != state.owner ||
-        GetClipboardSequenceNumber() != result->sequence) { return; }
+    if (!clipboard.opened || GetClipboardOwner() != state.owner || GetClipboardSequenceNumber() != result->sequence) {
+        return;
+    }
     if (result->error) { std::rethrow_exception(result->error); }
     if (!result->png->Publish(state.pngFormat)) {
         throw std::runtime_error("Image copied, but adding its PNG clipboard format failed");
@@ -304,8 +316,9 @@ struct GifClipboardData::Implementation {
         if (size > MaximumNativeGifBytes) { return; }
         nativeFormat = RegisterClipboardFormatW(L"image/gif");
         if (nativeFormat == 0) { return; }
-        try { animation.emplace(static_cast<std::size_t>(size), GHND); }
-        catch (const std::bad_alloc&) { return; }
+        try {
+            animation.emplace(static_cast<std::size_t>(size), GHND);
+        } catch (const std::bad_alloc&) { return; }
         std::ifstream input(extended, std::ios::binary);
         const LockedMemory bytes(animation->handle);
         if (!input.read(reinterpret_cast<char*>(bytes.data), static_cast<std::streamsize>(size))) {
@@ -342,7 +355,8 @@ std::vector<std::uint8_t> EncodeDib(BitmapView image) {
 
 Bitmap DecodeDib(std::span<const std::uint8_t> bytes) {
     const auto header = Read<BITMAPINFOHEADER>(bytes, 0);
-    if ((header.biSize != 40 && header.biSize != 52 && header.biSize != 56 && header.biSize != 108 && header.biSize != 124) ||
+    if ((header.biSize != 40 && header.biSize != 52 && header.biSize != 56 && header.biSize != 108 &&
+         header.biSize != 124) ||
         header.biSize > bytes.size() || header.biPlanes != 1 || header.biWidth <= 0 || header.biHeight == 0 ||
         header.biHeight == (std::numeric_limits<LONG>::min)() ||
         (header.biCompression != BI_RGB && header.biCompression != BI_BITFIELDS)) {
@@ -354,14 +368,20 @@ Bitmap DecodeDib(std::span<const std::uint8_t> bytes) {
     }
     const auto height = static_cast<unsigned>(header.biHeight < 0 ? -header.biHeight : header.biHeight);
     constexpr std::uint64_t maximumPixels = sizeof(void*) == 8 ? 64ULL * 1024 * 1024 : 32ULL * 1024 * 1024;
-    if (static_cast<std::uint64_t>(header.biWidth) * height > maximumPixels) { throw std::length_error("Clipboard DIB exceeds memory limit"); }
+    if (static_cast<std::uint64_t>(header.biWidth) * height > maximumPixels) {
+        throw std::length_error("Clipboard DIB exceeds memory limit");
+    }
     std::size_t offset = header.biSize;
-    std::array<std::uint32_t, 4> masks{bits == 16 ? 0x7C00U : 0xFF0000U, bits == 16 ? 0x3E0U : 0xFF00U, bits == 16 ? 0x1FU : 0xFFU, 0};
+    std::array<std::uint32_t, 4> masks{bits == 16 ? 0x7C00U : 0xFF0000U, bits == 16 ? 0x3E0U : 0xFF00U,
+                                       bits == 16 ? 0x1FU : 0xFFU, 0};
     if (header.biCompression == BI_BITFIELDS) {
         if (bits != 16 && bits != 32) { throw std::invalid_argument("Invalid DIB bitfields depth"); }
         for (std::size_t channel = 0; channel < 3; ++channel) { masks[channel] = Read<DWORD>(bytes, 40 + channel * 4); }
-        if (header.biSize == 40) { offset += 12; }
-        else if (header.biSize >= 56) { masks[3] = Read<DWORD>(bytes, 52); }
+        if (header.biSize == 40) {
+            offset += 12;
+        } else if (header.biSize >= 56) {
+            masks[3] = Read<DWORD>(bytes, 52);
+        }
         std::uint32_t used = 0;
         for (std::size_t channel = 0; channel < 4; ++channel) {
             const auto mask = masks[channel];
@@ -372,11 +392,15 @@ Bitmap DecodeDib(std::span<const std::uint8_t> bytes) {
         }
     }
     const auto paletteCount = bits <= 8 ? (header.biClrUsed ? header.biClrUsed : 1U << bits) : header.biClrUsed;
-    if (paletteCount > 256 || (bits <= 8 && paletteCount > (1U << bits))) { throw std::invalid_argument("Invalid DIB palette size"); }
+    if (paletteCount > 256 || (bits <= 8 && paletteCount > (1U << bits))) {
+        throw std::invalid_argument("Invalid DIB palette size");
+    }
     const auto paletteOffset = offset;
     offset += static_cast<std::size_t>(paletteCount) * sizeof(RGBQUAD);
     const auto stride = ((static_cast<std::uint64_t>(header.biWidth) * bits + 31) / 32) * 4;
-    if (offset > bytes.size() || stride * height > bytes.size() - offset) { throw std::invalid_argument("Truncated DIB pixels"); }
+    if (offset > bytes.size() || stride * height > bytes.size() - offset) {
+        throw std::invalid_argument("Truncated DIB pixels");
+    }
     // In a packed clipboard DIB, a profile follows the pixels. Do not mistake
     // its bytes for the first rows, and never dereference linked profile paths.
     if (header.biSize == 124) {
@@ -384,7 +408,8 @@ Bitmap DecodeDib(std::span<const std::uint8_t> bytes) {
         const auto profileBytes = Read<DWORD>(bytes, 116);
         const auto colorSpace = Read<DWORD>(bytes, 56);
         if (profileBytes && (colorSpace == PROFILE_LINKED || colorSpace == PROFILE_EMBEDDED)) {
-            if (profileStart < offset + stride * height || profileStart > bytes.size() || profileBytes > bytes.size() - profileStart) {
+            if (profileStart < offset + stride * height || profileStart > bytes.size() ||
+                profileBytes > bytes.size() - profileStart) {
                 throw std::invalid_argument("Invalid clipboard DIB color profile");
             }
         }
@@ -395,7 +420,10 @@ Bitmap DecodeDib(std::span<const std::uint8_t> bytes) {
             const auto firstAlpha = offset + 3;
             const auto pixelEnd = offset + static_cast<std::size_t>(stride * height);
             for (auto alpha = firstAlpha; alpha < pixelEnd; alpha += 4) {
-                if (bytes[alpha] != 0) { masks[3] = 0xFF000000U; break; }
+                if (bytes[alpha] != 0) {
+                    masks[3] = 0xFF000000U;
+                    break;
+                }
             }
         }
     }
@@ -413,12 +441,13 @@ Bitmap DecodeDib(std::span<const std::uint8_t> bytes) {
                 color = Read<DWORD>(bytes, paletteOffset + paletteIndex * 4) | 0xFF000000;
             } else if (bits == 24) {
                 const auto* pixel = source + static_cast<std::size_t>(column) * 3;
-                color = 0xFF000000U | pixel[0] | (static_cast<DWORD>(pixel[1]) << 8) | (static_cast<DWORD>(pixel[2]) << 16);
+                color =
+                    0xFF000000U | pixel[0] | (static_cast<DWORD>(pixel[1]) << 8) | (static_cast<DWORD>(pixel[2]) << 16);
             } else {
                 std::uint32_t pixel = 0;
                 std::memcpy(&pixel, source + static_cast<std::size_t>(column) * (bits / 8), bits / 8);
-                color = (masks[3] ? Channel(pixel, masks[3]) : 255U) << 24 |
-                    Channel(pixel, masks[0]) << 16 | Channel(pixel, masks[1]) << 8 | Channel(pixel, masks[2]);
+                color = (masks[3] ? Channel(pixel, masks[3]) : 255U) << 24 | Channel(pixel, masks[0]) << 16 |
+                        Channel(pixel, masks[1]) << 8 | Channel(pixel, masks[2]);
             }
             destination[column] = color;
         }
@@ -434,8 +463,10 @@ void CopyImage(HWND owner, BitmapView image) {
     PreparedImage formats(image);
     std::optional<Memory> png;
     if (pngFormat) {
-        try { png.emplace(EncodeClipboardPng(image)); }
-        catch (const std::exception&) { /* DIB remains available when PNG preparation fails. */ }
+        try {
+            png.emplace(EncodeClipboardPng(image));
+        } catch (const std::exception&) { /* DIB remains available when PNG preparation fails. */
+        }
     }
     static_cast<void>(formats.Publish(owner, png ? &*png : nullptr, pngFormat));
 }
@@ -473,14 +504,17 @@ std::optional<Bitmap> ReadClipboardImage(HWND owner) {
             checkSequence();
             try {
                 if (IsClipboardFormatAvailable(format)) { encoded = ReadBytes(format); }
-            } catch (const std::bad_alloc&) { throw; }
-            catch (const std::exception&) { if (!formatFailure) { formatFailure = std::current_exception(); } }
+            } catch (const std::bad_alloc&) { throw; } catch (const std::exception&) {
+                if (!formatFailure) { formatFailure = std::current_exception(); }
+            }
             sequence = GetClipboardSequenceNumber();
         }
         if (encoded.empty()) { continue; }
-        try { return format == png ? DecodeImage(encoded) : DecodeDib(encoded); }
-        catch (const std::bad_alloc&) { throw; }
-        catch (const std::exception&) { if (!formatFailure) { formatFailure = std::current_exception(); } }
+        try {
+            return format == png ? DecodeImage(encoded) : DecodeDib(encoded);
+        } catch (const std::bad_alloc&) { throw; } catch (const std::exception&) {
+            if (!formatFailure) { formatFailure = std::current_exception(); }
+        }
     }
     std::filesystem::path file;
     {
@@ -491,7 +525,10 @@ std::optional<Bitmap> ReadClipboardImage(HWND owner) {
             const auto length = drop ? DragQueryFileW(drop, 0, nullptr, 0) : 0;
             if (length && length < 32768) {
                 std::wstring path(length + 1, L'\0');
-                if (DragQueryFileW(drop, 0, path.data(), length + 1) == length) { path.resize(length); file = path; }
+                if (DragQueryFileW(drop, 0, path.data(), length + 1) == length) {
+                    path.resize(length);
+                    file = path;
+                }
             }
         }
     }

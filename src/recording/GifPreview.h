@@ -12,8 +12,8 @@ using GifSavePathCallback = std::function<std::optional<std::filesystem::path>(H
 // of a modal operation; destroy only when Closed() && !Busy(), after dispatch.
 class GifPreview final {
 public:
-    GifPreview(RecordingResult result, Config::Save saveOptions, HWND owner,
-               UINT closedMessage, GifSavePathCallback chooseSavePath, bool english = false);
+    GifPreview(RecordingResult result, Config::Save saveOptions, HWND owner, UINT closedMessage,
+               GifSavePathCallback chooseSavePath, bool english = false);
     ~GifPreview();
     GifPreview(const GifPreview&) = delete;
     GifPreview& operator=(const GifPreview&) = delete;
@@ -23,6 +23,7 @@ public:
     [[nodiscard]] HWND Handle() const noexcept;
     [[nodiscard]] bool Closed() const noexcept;
     [[nodiscard]] bool Busy() const noexcept;
+
 private:
     struct Implementation;
     std::unique_ptr<Implementation> implementation_;

@@ -33,7 +33,9 @@ TEST_CASE("Pin scale clamps ten to eight hundred percent and obeys rendering pix
 
 TEST_CASE("Pin scale validates malformed dimensions floating point and impossible minimum") {
     CHECK_THROWS_AS(static_cast<void>(vispick::LimitPinScale({0, 100}, 1, 10000)), std::invalid_argument);
-    CHECK_THROWS_AS(static_cast<void>(vispick::LimitPinScale({100, 100}, std::numeric_limits<double>::quiet_NaN(), 10000)), std::invalid_argument);
+    CHECK_THROWS_AS(
+        static_cast<void>(vispick::LimitPinScale({100, 100}, std::numeric_limits<double>::quiet_NaN(), 10000)),
+        std::invalid_argument);
     CHECK_THROWS_AS(static_cast<void>(vispick::LimitPinScale({100, 100}, 1, 0)), std::invalid_argument);
     CHECK_THROWS_AS(static_cast<void>(vispick::LimitPinScale({10000, 10000}, 1, 100)), std::length_error);
     CHECK_THROWS_AS(static_cast<void>(vispick::ScaledPinSize({10000, 10000}, 4)), std::invalid_argument);
@@ -56,8 +58,10 @@ TEST_CASE("Pin cursor anchored zoom keeps the selected image point within half a
 
 TEST_CASE("Pin zoom rejects zero nonfinite and overflowing coordinate calculations") {
     CHECK_THROWS_AS(static_cast<void>(vispick::ZoomPinOrigin({}, {}, 0, 1)), std::invalid_argument);
-    CHECK_THROWS_AS(static_cast<void>(vispick::ZoomPinOrigin({}, {}, 1, std::numeric_limits<double>::infinity())), std::invalid_argument);
-    CHECK_THROWS_AS(static_cast<void>(vispick::ZoomPinOrigin({-1000000000, 0}, {1000000000, 0}, 0.1, 8)), std::overflow_error);
+    CHECK_THROWS_AS(static_cast<void>(vispick::ZoomPinOrigin({}, {}, 1, std::numeric_limits<double>::infinity())),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::ZoomPinOrigin({-1000000000, 0}, {1000000000, 0}, 0.1, 8)),
+                    std::overflow_error);
 }
 
 TEST_CASE("Pin compact and restore preserve double click anchor after arbitrary dragging") {
@@ -117,17 +121,21 @@ TEST_CASE("Pin display changes keep a usable portion in the nearest monitor") {
 TEST_CASE("Pin rotate and flip operate at original resolution and preserve alpha") {
     vispick::Bitmap image(2, 3);
     for (std::uint32_t index = 0; index < 6; ++index) { image.Pixels()[index] = ((index * 40) << 24U) | (index + 1); }
-    const std::array<std::array<unsigned, 6>, 4> orders{{{{0, 1, 2, 3, 4, 5}}, {{4, 2, 0, 5, 3, 1}},
-        {{5, 4, 3, 2, 1, 0}}, {{1, 3, 5, 0, 2, 4}}}};
+    const std::array<std::array<unsigned, 6>, 4> orders{
+        {{{0, 1, 2, 3, 4, 5}}, {{4, 2, 0, 5, 3, 1}}, {{5, 4, 3, 2, 1, 0}}, {{1, 3, 5, 0, 2, 4}}}};
     for (unsigned rotation = 0; rotation < 4; ++rotation) {
         const auto output = vispick::TransformPin(image.View(), rotation, false, false);
         CHECK(output.Width() == ((rotation % 2) != 0 ? 3 : 2));
         CHECK(output.Height() == ((rotation % 2) != 0 ? 2 : 3));
-        for (unsigned index = 0; index < 6; ++index) { CHECK(output.Pixels()[index] == image.Pixels()[orders[rotation][index]]); }
+        for (unsigned index = 0; index < 6; ++index) {
+            CHECK(output.Pixels()[index] == image.Pixels()[orders[rotation][index]]);
+        }
     }
     const auto horizontal = vispick::TransformPin(image.View(), 1, true, false);
     const std::array<unsigned, 6> horizontalOrder{0, 2, 4, 1, 3, 5};
-    for (unsigned index = 0; index < 6; ++index) { CHECK(horizontal.Pixels()[index] == image.Pixels()[horizontalOrder[index]]); }
+    for (unsigned index = 0; index < 6; ++index) {
+        CHECK(horizontal.Pixels()[index] == image.Pixels()[horizontalOrder[index]]);
+    }
     const auto both = vispick::TransformPin(image.View(), 0, true, true);
     for (unsigned index = 0; index < 6; ++index) { CHECK(both.Pixels()[index] == image.Pixels()[5 - index]); }
 }
@@ -171,7 +179,8 @@ TEST_CASE("Opaque pin sources store BGR24 with exact odd-width pixel roundtrip")
 
 TEST_CASE("Pin source retains full straight BGRA when even one pixel has alpha") {
     vispick::Bitmap image(3, 2);
-    constexpr std::array<std::uint32_t, 6> expected{0xFFFFFFFFU, 0xFF123456U, 0x00123456U, 0x807F3F01U, 0x01112233U, 0xFF000000U};
+    constexpr std::array<std::uint32_t, 6> expected{0xFFFFFFFFU, 0xFF123456U, 0x00123456U,
+                                                    0x807F3F01U, 0x01112233U, 0xFF000000U};
     std::copy(expected.begin(), expected.end(), image.Pixels().begin());
     const vispick::PinSource source(std::move(image));
     CHECK_FALSE(source.PackedOpaque());

@@ -15,9 +15,8 @@ std::uint64_t TimestampDelayAccumulator::AdvanceTo(std::int64_t nextTimestampNan
     // Unsigned subtraction also handles intervals crossing the signed epoch
     // without signed overflow. Split quotient/remainder before adding carry.
     const auto elapsed = static_cast<std::uint64_t>(nextTimestampNanoseconds) -
-        static_cast<std::uint64_t>(previousTimestampNanoseconds_);
-    const auto fraction = elapsed % nanosecondsPerCentisecond +
-        static_cast<std::uint64_t>(remainderNanoseconds_);
+                         static_cast<std::uint64_t>(previousTimestampNanoseconds_);
+    const auto fraction = elapsed % nanosecondsPerCentisecond + static_cast<std::uint64_t>(remainderNanoseconds_);
     const auto delay = elapsed / nanosecondsPerCentisecond + fraction / nanosecondsPerCentisecond;
     remainderNanoseconds_ = static_cast<std::int64_t>(fraction % nanosecondsPerCentisecond);
     totalCentiseconds_ += delay;

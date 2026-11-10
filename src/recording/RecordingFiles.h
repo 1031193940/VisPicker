@@ -20,7 +20,6 @@ public:
 // saves commit a flushed sibling stage so a failed copy preserves both files.
 void CommitFile(const std::filesystem::path& temporary, const std::filesystem::path& destination);
 void CleanOldFiles(const std::filesystem::path& directory, std::filesystem::file_time_type cutoff,
-                   TemporaryGifKind kind = TemporaryGifKind::Recording,
-                   const std::filesystem::path& preserved = {});
+                   TemporaryGifKind kind = TemporaryGifKind::Recording, const std::filesystem::path& preserved = {});
 
 } // namespace vispick::recording

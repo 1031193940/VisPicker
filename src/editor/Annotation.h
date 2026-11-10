@@ -15,7 +15,7 @@ enum class AnnotationTool { None, Rectangle, Ellipse, Arrow, Pen, Text, Mosaic }
 
 struct AnnotationStyle {
     std::uint32_t color = 0xFF3B30; // 0xRRGGBB.
-    int strokeWidth = 4;           // Logical pixels; converted once when the gesture starts.
+    int strokeWidth = 4;            // Logical pixels; converted once when the gesture starts.
     int fontSize = 20;
     std::wstring fontName = L"Microsoft YaHei";
     int mosaicSize = 10;
@@ -23,7 +23,7 @@ struct AnnotationStyle {
 
 struct AnnotationTextLine {
     std::wstring text;
-    POINT offset{}; // Relative to the text box, from the native EDIT's actual layout.
+    POINT offset{};               // Relative to the text box, from the native EDIT's actual layout.
     std::vector<LONG> tabOffsets; // Native x position after each tab; EDIT uses dialog font units.
 };
 
@@ -33,7 +33,7 @@ struct Annotation {
     int strokePixels = 1;
     int mosaicPixels = 1;
     std::vector<POINT> points; // Screen physical coordinates, independent of selection changes.
-    RECT bounds{};            // Conservative paint bounds; text/mosaic also use this as their clip.
+    RECT bounds{};             // Conservative paint bounds; text/mosaic also use this as their clip.
     LOGFONTW font{};
     std::vector<AnnotationTextLine> textLines;
     std::shared_ptr<const Bitmap> mosaic;
@@ -66,7 +66,7 @@ public:
     RECT Undo() noexcept;
     RECT Redo() noexcept;
     RECT AddText(RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
-        std::vector<AnnotationTextLine> lines);
+                 std::vector<AnnotationTextLine> lines);
 
 private:
     void Commit(Annotation annotation);

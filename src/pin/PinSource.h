@@ -18,8 +18,12 @@ public:
     explicit PinSource(Bitmap image) : width_(image.Width()), height_(image.Height()) {
         if (image.Empty()) { throw std::invalid_argument("Cannot retain an empty pin source"); }
         const auto pixels = image.Pixels();
-        const bool opaque = std::all_of(pixels.begin(), pixels.end(), [](const std::uint32_t pixel) { return (pixel >> 24U) == 255U; });
-        if (!opaque) { bgra_ = std::move(image); return; }
+        const bool opaque =
+            std::all_of(pixels.begin(), pixels.end(), [](const std::uint32_t pixel) { return (pixel >> 24U) == 255U; });
+        if (!opaque) {
+            bgra_ = std::move(image);
+            return;
+        }
         bgr_.resize(pixels.size() * 3);
         for (std::size_t index = 0; index < pixels.size(); ++index) {
             const auto pixel = pixels[index];
@@ -36,7 +40,9 @@ public:
     [[nodiscard]] int Height() const noexcept { return height_; }
     [[nodiscard]] bool Empty() const noexcept { return bgr_.empty() && bgra_.Empty(); }
     [[nodiscard]] bool PackedOpaque() const noexcept { return !bgr_.empty(); }
-    [[nodiscard]] std::uint64_t LogicalBytes() const noexcept { return static_cast<std::uint64_t>(width_) * height_ * 4; }
+    [[nodiscard]] std::uint64_t LogicalBytes() const noexcept {
+        return static_cast<std::uint64_t>(width_) * height_ * 4;
+    }
     [[nodiscard]] std::uint64_t StorageBytes() const noexcept { return bgr_.capacity() + bgra_.Pixels().size_bytes(); }
     [[nodiscard]] BitmapView NativeBgra() const { return bgra_.Empty() ? BitmapView{} : bgra_.View(); }
     // Coordinates are already clipped by the pin compositor.
@@ -45,7 +51,7 @@ public:
         if (bgr_.empty()) { return bgra_.Pixels()[index]; }
         const auto offset = index * 3;
         return 0xFF000000U | (static_cast<std::uint32_t>(bgr_[offset + 2]) << 16U) |
-            (static_cast<std::uint32_t>(bgr_[offset + 1]) << 8U) | bgr_[offset];
+               (static_cast<std::uint32_t>(bgr_[offset + 1]) << 8U) | bgr_[offset];
     }
     [[nodiscard]] Bitmap Decode() const {
         if (Empty()) { throw std::logic_error("Cannot decode an empty pin source"); }
@@ -56,6 +62,7 @@ public:
         }
         return output;
     }
+
 private:
     int width_ = 0;
     int height_ = 0;

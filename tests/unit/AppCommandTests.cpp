@@ -10,7 +10,7 @@ vispick::LaunchOptions Parse(std::initializer_list<const wchar_t*> values) {
     for (const auto* value : values) { arguments.emplace_back(value); }
     return vispick::ParseLaunchOptions(arguments);
 }
-}
+} // namespace
 
 TEST_CASE("No arguments selects resident startup without an action") {
     const auto options = Parse({});
@@ -32,7 +32,8 @@ TEST_CASE("Product actions parse independently of developer spike commands") {
 }
 
 TEST_CASE("Product arguments preserve Unicode and spaces in paths") {
-    const auto options = Parse({L"--config", L"D:\\配置 空间\\设置.ini", L"--pin-file", L"D:\\参考图\\图片 🖼.png", L"--perf"});
+    const auto options =
+        Parse({L"--config", L"D:\\配置 空间\\设置.ini", L"--pin-file", L"D:\\参考图\\图片 🖼.png", L"--perf"});
     CHECK(options.command == vispick::AppCommand::PinFile);
     CHECK(options.configPath.native() == L"D:\\配置 空间\\设置.ini");
     CHECK(options.pinFile.native() == L"D:\\参考图\\图片 🖼.png");

@@ -17,7 +17,7 @@ __declspec(noinline) unsigned OverflowStack(unsigned depth) {
     if (depth == 65535) { return page[0]; }
     return OverflowStack(depth + 1) + page[depth % sizeof(page)];
 }
-}
+} // namespace
 
 int wmain(int argumentCount, wchar_t** arguments) {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
@@ -28,13 +28,18 @@ int wmain(int argumentCount, wchar_t** arguments) {
     const std::wstring_view mode(arguments[1]);
     if (mode != L"--install-only" && mode != L"--crash" && mode != L"--terminate" && mode != L"--abort" &&
         mode != L"--worker-exception" && mode != L"--invalid-parameter" && mode != L"--purecall" &&
-        mode != L"--concurrent" && mode != L"--stack-overflow") { return 2; }
+        mode != L"--concurrent" && mode != L"--stack-overflow") {
+        return 2;
+    }
     std::vector<std::filesystem::path> candidates;
     if (argumentCount == 4) { candidates.emplace_back(arguments[3]); }
     candidates.emplace_back(arguments[2]);
     vispick::CrashDump handler;
     const auto status = handler.Install(candidates);
-    if (!status.installed) { std::cerr << "Install failed: " << status.error << '\n'; return 3; }
+    if (!status.installed) {
+        std::cerr << "Install failed: " << status.error << '\n';
+        return 3;
+    }
     if (mode == L"--install-only") {
         if (GetModuleHandleW(L"dbghelp.dll") != nullptr) { return 4; }
         return 0;
@@ -57,7 +62,8 @@ int wmain(int argumentCount, wchar_t** arguments) {
         };
         std::thread first(fault), second(fault);
         SetEvent(start);
-        first.join(); second.join();
+        first.join();
+        second.join();
         CloseHandle(start);
     }
     // A named, noncontinuable SEH exception makes the dump independently

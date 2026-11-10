@@ -28,9 +28,8 @@ public:
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
 
-    void Create(const WindowClassOptions& windowClass, const wchar_t* title,
-                DWORD style, DWORD extendedStyle, const RECT& bounds,
-                WindowActivation activation, HWND owner = nullptr);
+    void Create(const WindowClassOptions& windowClass, const wchar_t* title, DWORD style, DWORD extendedStyle,
+                const RECT& bounds, WindowActivation activation, HWND owner = nullptr);
     void Destroy() noexcept;
     [[nodiscard]] HWND Handle() const noexcept { return window_; }
     static void SetExceptionCallback(WindowExceptionCallback callback) noexcept;

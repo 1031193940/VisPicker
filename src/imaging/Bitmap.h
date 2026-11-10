@@ -23,6 +23,7 @@ public:
     [[nodiscard]] const std::uint32_t* Row(int row) const;
     // Explicit output boundary: allocate only the crop and normalize its alpha.
     [[nodiscard]] Bitmap CropOpaque(int left, int top, int width, int height) const;
+
 private:
     int width_ = 0;
     int height_ = 0;

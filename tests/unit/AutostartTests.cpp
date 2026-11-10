@@ -3,7 +3,7 @@
 
 // See Autostart.cpp for the SDK's RegOpenKeyExW SAL annotation defect.
 #pragma warning(push)
-#pragma warning(disable: 6553)
+#pragma warning(disable : 6553)
 #include <windows.h>
 #pragma warning(pop)
 #include <shellapi.h>
@@ -17,7 +17,8 @@ class TestRegistry {
 public:
     TestRegistry() {
         static unsigned sequence = 0;
-        path = L"Software\\VisPick.UnitTests." + std::to_wstring(GetCurrentProcessId()) + L"." + std::to_wstring(++sequence);
+        path = L"Software\\VisPick.UnitTests." + std::to_wstring(GetCurrentProcessId()) + L"." +
+               std::to_wstring(++sequence);
     }
     ~TestRegistry() { RegDeleteKeyExW(HKEY_CURRENT_USER, path.c_str(), KEY_WOW64_64KEY, 0); }
     TestRegistry(const TestRegistry&) = delete;
@@ -26,7 +27,7 @@ public:
     void Write(const DWORD type, const void* data, const DWORD bytes) const {
         HKEY key = nullptr;
         REQUIRE(RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
-            KEY_SET_VALUE | KEY_WOW64_64KEY, nullptr, &key, nullptr) == ERROR_SUCCESS);
+                                KEY_SET_VALUE | KEY_WOW64_64KEY, nullptr, &key, nullptr) == ERROR_SUCCESS);
         const auto status = RegSetValueExW(key, L"VisPick", 0, type, static_cast<const BYTE*>(data), bytes);
         RegCloseKey(key);
         REQUIRE(status == ERROR_SUCCESS);
@@ -34,7 +35,7 @@ public:
     [[nodiscard]] DWORD StoredBytes() const {
         HKEY key = nullptr;
         REQUIRE(RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
-            KEY_QUERY_VALUE | KEY_WOW64_64KEY, nullptr, &key, nullptr) == ERROR_SUCCESS);
+                                KEY_QUERY_VALUE | KEY_WOW64_64KEY, nullptr, &key, nullptr) == ERROR_SUCCESS);
         DWORD bytes = 0;
         const auto status = RegQueryValueExW(key, L"VisPick", nullptr, nullptr, nullptr, &bytes);
         RegCloseKey(key);
@@ -79,7 +80,8 @@ TEST_CASE("Autostart enable and disable affect only the configured value") {
     unrelated.SetEnabled(true, L"C:\\Other.exe");
     autostart.SetEnabled(true, L"C:\\Program Files\\VisPick\\VisPick.exe", L"C:\\配置\\user.ini");
     CHECK(autostart.Enabled());
-    CHECK(autostart.Command() == vispick::Autostart::BuildCommand(L"C:\\Program Files\\VisPick\\VisPick.exe", L"C:\\配置\\user.ini"));
+    CHECK(autostart.Command() ==
+          vispick::Autostart::BuildCommand(L"C:\\Program Files\\VisPick\\VisPick.exe", L"C:\\配置\\user.ini"));
     autostart.SetEnabled(false, {});
     CHECK_FALSE(autostart.Enabled());
     CHECK_FALSE(autostart.Command());
@@ -104,7 +106,9 @@ TEST_CASE("Autostart repair leaves a working installation intact") {
     // Use the running test executable to avoid depending on an optional OS app.
     std::wstring executable(32768, L'\0');
     const auto length = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
-    REQUIRE(length > 0); REQUIRE(length < executable.size()); executable.resize(length);
+    REQUIRE(length > 0);
+    REQUIRE(length < executable.size());
+    executable.resize(length);
     const auto oldPath = std::filesystem::path(executable);
     autostart.SetEnabled(true, oldPath);
     const auto previous = autostart.Command();
@@ -125,8 +129,9 @@ TEST_CASE("Autostart treats an existing empty registry string as disabled") {
 
 TEST_CASE("Autostart quotes unicode whitespace and backslashes with Windows argv semantics") {
     const std::filesystem::path executable = L"C:\\Program Files\\截图工具\\VisPick.exe";
-    for (const std::filesystem::path config : {std::filesystem::path(L"C:\\config folder\\user.ini"),
-         std::filesystem::path(L"C:\\trailing slash\\"), std::filesystem::path(L"C:\\a\"b\\user.ini")}) {
+    for (const std::filesystem::path config :
+         {std::filesystem::path(L"C:\\config folder\\user.ini"), std::filesystem::path(L"C:\\trailing slash\\"),
+          std::filesystem::path(L"C:\\a\"b\\user.ini")}) {
         const auto arguments = ParseCommand(vispick::Autostart::BuildCommand(executable, config));
         REQUIRE(arguments.size() == 3);
         CHECK(arguments[0] == executable.native());
@@ -196,8 +201,10 @@ TEST_CASE("Autostart preserves registry commands with environment expansion") {
 
 TEST_CASE("Autostart rejects empty executable and embedded null arguments") {
     CHECK_THROWS_AS(static_cast<void>(vispick::Autostart::BuildCommand({})), std::invalid_argument);
-    CHECK_THROWS_AS(static_cast<void>(vispick::Autostart::BuildCommand(std::wstring(L"a\0b", 3))), std::invalid_argument);
-    CHECK_THROWS_AS(static_cast<void>(vispick::Autostart::BuildCommand(L"C:\\VisPick.exe", std::wstring(L"a\0b", 3))), std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::Autostart::BuildCommand(std::wstring(L"a\0b", 3))),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::Autostart::BuildCommand(L"C:\\VisPick.exe", std::wstring(L"a\0b", 3))),
+                    std::invalid_argument);
     CHECK_THROWS_AS(static_cast<void>(vispick::Autostart(L"")), std::invalid_argument);
     CHECK_THROWS_AS(static_cast<void>(vispick::Autostart(L"Software\\Tests", L"")), std::invalid_argument);
 }

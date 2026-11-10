@@ -26,10 +26,9 @@ using Clock = std::chrono::steady_clock;
 std::vector<std::uint32_t> MakePattern(int width, int height, int colorCount) {
     std::vector<std::uint32_t> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height));
     for (std::size_t pixelIndex = 0; pixelIndex < pixels.size(); ++pixelIndex) {
-        const auto colorIndex = (pixelIndex * 37 + pixelIndex / static_cast<std::size_t>(width) / 7) %
-            static_cast<std::size_t>(colorCount);
-        pixels[pixelIndex] = 0xFF000000U |
-            ((static_cast<std::uint32_t>(colorIndex) * 2654435761U) & 0x00FFFFFFU);
+        const auto colorIndex =
+            (pixelIndex * 37 + pixelIndex / static_cast<std::size_t>(width) / 7) % static_cast<std::size_t>(colorCount);
+        pixels[pixelIndex] = 0xFF000000U | ((static_cast<std::uint32_t>(colorIndex) * 2654435761U) & 0x00FFFFFFU);
     }
     return pixels;
 }
@@ -37,10 +36,11 @@ std::vector<std::uint32_t> MakePattern(int width, int height, int colorCount) {
 void AddSamples(SpikeResult& result, const std::string& prefix, std::vector<double> samples) {
     std::sort(samples.begin(), samples.end());
     result.measurements.push_back({prefix + "_median", samples[samples.size() / 2], "ms"});
-    result.measurements.push_back({prefix + "_p95", samples[static_cast<std::size_t>(
-        0.95 * static_cast<double>(samples.size() - 1))], "ms"});
-    result.measurements.push_back({prefix + "_mean", std::accumulate(samples.begin(), samples.end(), 0.0) /
-        static_cast<double>(samples.size()), "ms"});
+    result.measurements.push_back(
+        {prefix + "_p95", samples[static_cast<std::size_t>(0.95 * static_cast<double>(samples.size() - 1))], "ms"});
+    result.measurements.push_back(
+        {prefix + "_mean", std::accumulate(samples.begin(), samples.end(), 0.0) / static_cast<double>(samples.size()),
+         "ms"});
 }
 
 double ElapsedMilliseconds(Clock::time_point start) {
@@ -54,11 +54,16 @@ void CheckWic(HRESULT status, const char* operation) {
 class QualityComScope {
 public:
     QualityComScope() : status_(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {
-        if (FAILED(status_) && status_ != RPC_E_CHANGED_MODE) { throw std::runtime_error("Quality input COM initialization failed"); }
+        if (FAILED(status_) && status_ != RPC_E_CHANGED_MODE) {
+            throw std::runtime_error("Quality input COM initialization failed");
+        }
     }
-    ~QualityComScope() { if (SUCCEEDED(status_)) { CoUninitialize(); } }
+    ~QualityComScope() {
+        if (SUCCEEDED(status_)) { CoUninitialize(); }
+    }
     QualityComScope(const QualityComScope&) = delete;
     QualityComScope& operator=(const QualityComScope&) = delete;
+
 private:
     HRESULT status_;
 };
@@ -73,8 +78,9 @@ struct QualityImage {
 
 QualityImage LoadQualityImage(IWICImagingFactory* factory, const std::filesystem::path& path) {
     Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-    CheckWic(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
-        WICDecodeMetadataCacheOnDemand, decoder.GetAddressOf()), "Cannot decode quality image");
+    CheckWic(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand,
+                                                decoder.GetAddressOf()),
+             "Cannot decode quality image");
     Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
     CheckWic(decoder->GetFrame(0, frame.GetAddressOf()), "Cannot read quality image frame");
     QualityImage image;
@@ -91,29 +97,31 @@ QualityImage LoadQualityImage(IWICImagingFactory* factory, const std::filesystem
     if (image.width != image.sourceWidth || image.height != image.sourceHeight) {
         CheckWic(factory->CreateBitmapScaler(scaler.GetAddressOf()), "Cannot create quality image scaler");
         CheckWic(scaler->Initialize(frame.Get(), image.width, image.height, WICBitmapInterpolationModeFant),
-            "Cannot scale quality image");
+                 "Cannot scale quality image");
         source = scaler;
     }
     Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
     CheckWic(factory->CreateFormatConverter(converter.GetAddressOf()), "Cannot create quality image converter");
-    CheckWic(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppBGRA,
-        WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom), "Cannot convert quality image to BGRA");
+    CheckWic(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                   WICBitmapPaletteTypeCustom),
+             "Cannot convert quality image to BGRA");
     image.pixels.resize(static_cast<std::size_t>(image.width) * image.height);
     CheckWic(converter->CopyPixels(nullptr, image.width * 4, static_cast<UINT>(image.pixels.size() * 4),
-        reinterpret_cast<BYTE*>(image.pixels.data())), "Cannot read quality pixels");
+                                   reinterpret_cast<BYTE*>(image.pixels.data())),
+             "Cannot read quality pixels");
     return image;
 }
 
-void AddQualityError(SpikeResult& result, const std::string& prefix,
-                     std::span<const std::uint32_t> source, const gif::IndexedImage& quantized) {
+void AddQualityError(SpikeResult& result, const std::string& prefix, std::span<const std::uint32_t> source,
+                     const gif::IndexedImage& quantized) {
     std::array<double, 3> squaredErrors{};
     std::array<int, 3> maximumErrors{};
     for (std::size_t pixelIndex = 0; pixelIndex < source.size(); ++pixelIndex) {
         const auto mapped = quantized.palette[quantized.pixels[pixelIndex]];
         for (std::size_t channel = 0; channel < 3; ++channel) {
             const unsigned shift = static_cast<unsigned>(channel) * 8;
-            const int error = static_cast<int>((source[pixelIndex] >> shift) & 255) -
-                static_cast<int>((mapped >> shift) & 255);
+            const int error =
+                static_cast<int>((source[pixelIndex] >> shift) & 255) - static_cast<int>((mapped >> shift) & 255);
             maximumErrors[channel] = std::max(maximumErrors[channel], std::abs(error));
             squaredErrors[channel] += error * error;
         }
@@ -122,7 +130,8 @@ void AddQualityError(SpikeResult& result, const std::string& prefix,
     double totalSquaredError = 0;
     for (std::size_t channel = 0; channel < 3; ++channel) {
         const double rmse = std::sqrt(squaredErrors[channel] / static_cast<double>(source.size()));
-        result.measurements.push_back({prefix + "_" + names[channel] + "_max_error", static_cast<double>(maximumErrors[channel]), "levels"});
+        result.measurements.push_back(
+            {prefix + "_" + names[channel] + "_max_error", static_cast<double>(maximumErrors[channel]), "levels"});
         result.measurements.push_back({prefix + "_" + names[channel] + "_rmse", rmse, "levels"});
         totalSquaredError += squaredErrors[channel];
     }
@@ -130,7 +139,8 @@ void AddQualityError(SpikeResult& result, const std::string& prefix,
     result.measurements.push_back({prefix + "_rgb_rmse", std::sqrt(meanSquaredError), "levels"});
     result.measurements.push_back({prefix + "_rgb_lossless", meanSquaredError == 0 ? 1.0 : 0.0, "boolean"});
     if (meanSquaredError > 0) {
-        result.measurements.push_back({prefix + "_rgb_psnr", 10.0 * std::log10(255.0 * 255.0 / meanSquaredError), "dB"});
+        result.measurements.push_back(
+            {prefix + "_rgb_psnr", 10.0 * std::log10(255.0 * 255.0 / meanSquaredError), "dB"});
     }
 }
 
@@ -140,7 +150,9 @@ void RunRealQualityInputs(SpikeResult& result, const SpikeOptions& options) {
     if (environmentSize != 0) {
         std::vector<wchar_t> value(environmentSize);
         const DWORD written = GetEnvironmentVariableW(L"VISPICK_QUALITY_INPUT", value.data(), environmentSize);
-        if (written == 0 || written >= environmentSize) { throw std::runtime_error("Cannot read VISPICK_QUALITY_INPUT"); }
+        if (written == 0 || written >= environmentSize) {
+            throw std::runtime_error("Cannot read VISPICK_QUALITY_INPUT");
+        }
         inputDirectory = std::wstring(value.data(), written);
     }
     std::vector<std::filesystem::path> files;
@@ -149,7 +161,7 @@ void RunRealQualityInputs(SpikeResult& result, const SpikeOptions& options) {
             if (!entry.is_regular_file()) { continue; }
             auto extension = entry.path().extension().wstring();
             std::transform(extension.begin(), extension.end(), extension.begin(),
-                [](wchar_t character) { return static_cast<wchar_t>(std::towlower(character)); });
+                           [](wchar_t character) { return static_cast<wchar_t>(std::towlower(character)); });
             if (extension == L".png" || extension == L".jpg" || extension == L".jpeg" || extension == L".bmp") {
                 files.push_back(entry.path());
             }
@@ -161,14 +173,16 @@ void RunRealQualityInputs(SpikeResult& result, const SpikeOptions& options) {
     std::sort(files.begin(), files.end());
     result.measurements.push_back({"real_input_files", static_cast<double>(files.size()), "files"});
     if (files.empty()) {
-        result.notes.push_back("No PNG/JPG/BMP quality inputs found. Real photograph/video quality remains unvalidated; "
+        result.notes.push_back(
+            "No PNG/JPG/BMP quality inputs found. Real photograph/video quality remains unvalidated; "
             "place inputs in docs/reports/data/quality-input or set VISPICK_QUALITY_INPUT.");
         return;
     }
     QualityComScope com;
     Microsoft::WRL::ComPtr<IWICImagingFactory> factory;
-    CheckWic(CoCreateInstance(CLSID_WICImagingFactory1, nullptr, CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(factory.GetAddressOf())), "Cannot create quality input WIC factory");
+    CheckWic(
+        CoCreateInstance(CLSID_WICImagingFactory1, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(factory.GetAddressOf())),
+        "Cannot create quality input WIC factory");
     gif::Quantizer temporal;
     gif::FrameEncoder encoder;
     std::unique_ptr<gif::GifWriter> sequence;
@@ -179,7 +193,8 @@ void RunRealQualityInputs(SpikeResult& result, const SpikeOptions& options) {
         const auto image = LoadQualityImage(factory.Get(), files[fileIndex]);
         const std::string prefix = "real_" + std::to_string(fileIndex);
         const auto name = files[fileIndex].filename().u8string();
-        result.notes.push_back(prefix + " input=" + std::string(reinterpret_cast<const char*>(name.data()), name.size()));
+        result.notes.push_back(prefix +
+                               " input=" + std::string(reinterpret_cast<const char*>(name.data()), name.size()));
         result.measurements.push_back({prefix + "_source_width", static_cast<double>(image.sourceWidth), "px"});
         result.measurements.push_back({prefix + "_source_height", static_cast<double>(image.sourceHeight), "px"});
         result.measurements.push_back({prefix + "_width", static_cast<double>(image.width), "px"});
@@ -195,7 +210,8 @@ void RunRealQualityInputs(SpikeResult& result, const SpikeOptions& options) {
         std::sort(samples.begin(), samples.end());
         result.measurements.push_back({prefix + "_wu_path", independentlyQuantized.exact ? 0.0 : 1.0, "boolean"});
         result.measurements.push_back({prefix + "_quantize_median", samples[1], "ms"});
-        result.measurements.push_back({prefix + "_quantize_throughput", static_cast<double>(image.pixels.size()) / (samples[1] * 1000.0), "MPixels/s"});
+        result.measurements.push_back({prefix + "_quantize_throughput",
+                                       static_cast<double>(image.pixels.size()) / (samples[1] * 1000.0), "MPixels/s"});
         AddQualityError(result, prefix + "_fresh", image.pixels, independentlyQuantized);
         const auto temporalStart = Clock::now();
         const auto quantized = temporal.Quantize(image.pixels);
@@ -209,7 +225,8 @@ void RunRealQualityInputs(SpikeResult& result, const SpikeOptions& options) {
             changedIndices += quantized.pixels[pixelIndex] != repeated.pixels[pixelIndex] ? 1 : 0;
         }
         result.measurements.push_back({prefix + "_static_palette_changed", stablePalette ? 0.0 : 1.0, "boolean"});
-        result.measurements.push_back({prefix + "_static_changed_indices", static_cast<double>(changedIndices), "pixels"});
+        result.measurements.push_back(
+            {prefix + "_static_changed_indices", static_cast<double>(changedIndices), "pixels"});
         result.passed = result.passed && stablePalette && changedIndices == 0;
         const auto encoded = encoder.EncodeIndexed(quantized);
         const auto gifPath = options.outputDirectory / (prefix + "_quantized.gif");
@@ -224,26 +241,31 @@ void RunRealQualityInputs(SpikeResult& result, const SpikeOptions& options) {
         }
         const std::array<std::uint64_t, 1> expected{gif::PixelHash(mapped)};
         const auto decoded = gif::InspectGif(gifPath, expected);
-        result.measurements.push_back({prefix + "_wic_mismatched_frames", static_cast<double>(decoded.mismatchedFrames), "frames"});
+        result.measurements.push_back(
+            {prefix + "_wic_mismatched_frames", static_cast<double>(decoded.mismatchedFrames), "frames"});
         result.passed = result.passed && decoded.mismatchedFrames == 0;
         if (!sequence || image.width != sequenceWidth || image.height != sequenceHeight) {
             if (sequence) { sequence->Finish(); }
             sequenceWidth = image.width;
             sequenceHeight = image.height;
-            sequence = std::make_unique<gif::GifWriter>(options.outputDirectory /
-                ("quality_ordered_inputs_" + std::to_string(sequenceNumber++) + ".gif"),
+            sequence = std::make_unique<gif::GifWriter>(
+                options.outputDirectory / ("quality_ordered_inputs_" + std::to_string(sequenceNumber++) + ".gif"),
                 static_cast<int>(image.width), static_cast<int>(image.height));
         }
         sequence->WriteFrame(encoded, 10); // Deliberate 10fps comparison playback, not source cadence.
     }
     if (sequence) { sequence->Finish(); }
-    result.notes.push_back("Real inputs are decoded by Windows WIC, aspect-preserving Fant-scaled only when exceeding 1920x1080. "
-        "Metrics compare decoded 8-bit RGB code values, without ICC conversion, EXIF orientation handling, linear-light conversion or dithering. "
+    result.notes.push_back(
+        "Real inputs are decoded by Windows WIC, aspect-preserving Fant-scaled only when exceeding 1920x1080. "
+        "Metrics compare decoded 8-bit RGB code values, without ICC conversion, EXIF orientation handling, "
+        "linear-light conversion or dithering. "
         "Source decoding, GIF encoding and error measurement are excluded from quantization timings.");
-    result.notes.push_back("Per-file GIFs and ordered-input GIFs are saved for visual review. Ordered inputs are filename-sorted; "
+    result.notes.push_back(
+        "Per-file GIFs and ordered-input GIFs are saved for visual review. Ordered inputs are filename-sorted; "
         "equal-size contiguous groups play at 10fps solely for comparison, not the original video timing. "
         "Input provenance determines whether a sequence is real video; arbitrary photographs are not labelled video. "
-        "PSNR is omitted for lossless RGB (mathematically infinite). Numeric success does not certify subjective banding/flicker quality.");
+        "PSNR is omitted for lossless RGB (mathematically infinite). Numeric success does not certify subjective "
+        "banding/flicker quality.");
 }
 
 } // namespace
@@ -287,7 +309,8 @@ SpikeResult RunQuantizerBenchmark(const SpikeOptions& options) {
         result.passed = result.passed && identical;
         result.measurements.push_back({prefix + "_baseline_mapping_equal", identical ? 1.0 : 0.0, "boolean"});
         result.measurements.push_back({prefix + "_exact", after.exact ? 1.0 : 0.0, "boolean"});
-        result.measurements.push_back({prefix + "_maximum_channel_error", static_cast<double>(after.maximumChannelError), "levels"});
+        result.measurements.push_back(
+            {prefix + "_maximum_channel_error", static_cast<double>(after.maximumChannelError), "levels"});
         AddSamples(result, prefix + "_before", std::move(beforeSamples));
         AddSamples(result, prefix + "_after", std::move(afterSamples));
     }
@@ -320,7 +343,8 @@ SpikeResult RunQuantizerBenchmark(const SpikeOptions& options) {
         result.passed = result.passed && decodedCorrectly && (colorCount > 3 || compactBytes < legacyBytes);
         result.measurements.push_back({prefix + "_before_bytes", static_cast<double>(legacyBytes), "bytes"});
         result.measurements.push_back({prefix + "_after_bytes", static_cast<double>(compactBytes), "bytes"});
-        result.measurements.push_back({prefix + "_minimum_lzw_bits", static_cast<double>(compact.minimumCodeSize), "bits"});
+        result.measurements.push_back(
+            {prefix + "_minimum_lzw_bits", static_cast<double>(compact.minimumCodeSize), "bits"});
         result.measurements.push_back({prefix + "_wic_bit_exact", decodedCorrectly ? 1.0 : 0.0, "boolean"});
     }
 
@@ -340,15 +364,24 @@ SpikeResult RunQuantizerBenchmark(const SpikeOptions& options) {
     result.measurements.push_back({"synthetic_static_palette_reused", second.paletteReused ? 1.0 : 0.0, "boolean"});
     result.measurements.push_back({"synthetic_static_mapping_unchanged", staticStable ? 1.0 : 0.0, "boolean"});
     result.measurements.push_back({"synthetic_static_reuse", reuseMilliseconds, "ms"});
-    result.measurements.push_back({"synthetic_static_maximum_channel_error", static_cast<double>(second.maximumChannelError), "levels"});
-    result.notes.push_back("Before = exact reviewed Quantizer.cpp from Git commit 70faa85, including unordered_map and Wu. "
-        "After = reused open-address workspace and indexed buffer, temporal palette reuse disabled for the four throughput cases. "
-        "Input is a deterministic synthetic low-run-locality pattern; run order alternates. No absolute speedup is assumed.");
-    result.notes.push_back("300-color input exercises Wu plus its measured error accounting; it is not a real photograph/video workload. "
-        "Compact-size baselines reproduce the prior 256-entry local table and minimum LZW code size 8; both outputs are independently decoded through WIC.");
-    result.notes.push_back("Temporal reuse never approximates <=255-color UI input. For higher-color inputs, every accepted reused RGB channel "
+    result.measurements.push_back(
+        {"synthetic_static_maximum_channel_error", static_cast<double>(second.maximumChannelError), "levels"});
+    result.notes.push_back(
+        "Before = exact reviewed Quantizer.cpp from Git commit 70faa85, including unordered_map and Wu. "
+        "After = reused open-address workspace and indexed buffer, temporal palette reuse disabled for the four "
+        "throughput cases. "
+        "Input is a deterministic synthetic low-run-locality pattern; run order alternates. No absolute speedup is "
+        "assumed.");
+    result.notes.push_back(
+        "300-color input exercises Wu plus its measured error accounting; it is not a real photograph/video workload. "
+        "Compact-size baselines reproduce the prior 256-entry local table and minimum LZW code size 8; both outputs "
+        "are independently decoded through WIC.");
+    result.notes.push_back(
+        "Temporal reuse never approximates <=255-color UI input. For higher-color inputs, every accepted reused RGB "
+        "channel "
         "is checked against a maximum error of 8 levels. Static synthetic-gradient indices are checked unchanged. "
-        "No dithering is implemented; real photograph/video subjective flicker and banding acceptance requires inspecting the optional quality artifacts.");
+        "No dithering is implemented; real photograph/video subjective flicker and banding acceptance requires "
+        "inspecting the optional quality artifacts.");
     RunRealQualityInputs(result, options);
     return result;
 }

@@ -15,6 +15,7 @@ public:
     // Start/Stop are owner-thread operations. Start can throw on setup failure.
     void Start();
     void Stop() noexcept;
+
 private:
     struct State;
     std::unique_ptr<State> state_;

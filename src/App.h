@@ -27,8 +27,10 @@ public:
     ~App() override;
     int Run(const LaunchOptions& options, const std::wstring& instanceWindowTitle);
     void Dispatch(AppCommand command, const std::filesystem::path& file = {});
+
 protected:
     LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override;
+
 private:
     void ReloadConfiguration(bool announce, bool retry = false, bool retryHotkeys = false);
     void ApplyConfiguration(bool retryHotkeys);

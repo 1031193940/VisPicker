@@ -12,21 +12,20 @@ namespace vispick::gif {
 namespace {
 
 void Check(HRESULT status, const char* operation) {
-    if (FAILED(status)) {
-        throw std::runtime_error(operation);
-    }
+    if (FAILED(status)) { throw std::runtime_error(operation); }
 }
 
 class ComScope {
 public:
     ComScope() : status_(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {
-        if (FAILED(status_) && status_ != RPC_E_CHANGED_MODE) {
-            throw std::runtime_error("CoInitializeEx failed");
-        }
+        if (FAILED(status_) && status_ != RPC_E_CHANGED_MODE) { throw std::runtime_error("CoInitializeEx failed"); }
     }
-    ~ComScope() { if (SUCCEEDED(status_)) { CoUninitialize(); } }
+    ~ComScope() {
+        if (SUCCEEDED(status_)) { CoUninitialize(); }
+    }
     ComScope(const ComScope&) = delete;
     ComScope& operator=(const ComScope&) = delete;
+
 private:
     HRESULT status_;
 };
@@ -40,22 +39,25 @@ public:
     PROPVARIANT value;
 };
 
-unsigned int ReadUnsigned(IWICMetadataQueryReader* reader, const wchar_t* path,
-                           unsigned int fallback = 0, bool required = false) {
+unsigned int ReadUnsigned(IWICMetadataQueryReader* reader, const wchar_t* path, unsigned int fallback = 0,
+                          bool required = false) {
     PropVariantScope property;
     const HRESULT status = reader->GetMetadataByName(path, &property.value);
     if (FAILED(status)) {
-        if (!required && status == WINCODEC_ERR_PROPERTYNOTFOUND) {
-            return fallback;
-        }
+        if (!required && status == WINCODEC_ERR_PROPERTYNOTFOUND) { return fallback; }
         throw std::runtime_error("Read GIF metadata field failed");
     }
     switch (property.value.vt) {
-    case VT_UI1: return property.value.bVal;
-    case VT_UI2: return property.value.uiVal;
-    case VT_UI4: return property.value.ulVal;
-    case VT_BOOL: return property.value.boolVal != VARIANT_FALSE ? 1U : 0U;
-    default: throw std::runtime_error("Unexpected GIF metadata type");
+    case VT_UI1:
+        return property.value.bVal;
+    case VT_UI2:
+        return property.value.uiVal;
+    case VT_UI4:
+        return property.value.ulVal;
+    case VT_BOOL:
+        return property.value.boolVal != VARIANT_FALSE ? 1U : 0U;
+    default:
+        throw std::runtime_error("Unexpected GIF metadata type");
     }
 }
 
@@ -85,12 +87,11 @@ GifFrameMetadata ReadMetadata(IWICBitmapFrameDecode* frame, const GifDocumentMet
     metadata.height = ReadUnsigned(reader.Get(), L"/imgdesc/Height", 0, true);
     metadata.delayCentiseconds = static_cast<std::uint16_t>(ReadUnsigned(reader.Get(), L"/grctlext/Delay"));
     const auto disposal = ReadUnsigned(reader.Get(), L"/grctlext/Disposal");
-    if (disposal > 3) {
-        throw std::runtime_error("Unsupported reserved GIF disposal value");
-    }
+    if (disposal > 3) { throw std::runtime_error("Unsupported reserved GIF disposal value"); }
     metadata.disposal = static_cast<DisposalMethod>(disposal);
     if (ReadUnsigned(reader.Get(), L"/grctlext/TransparencyFlag") != 0) {
-        metadata.transparentColorIndex = static_cast<int>(ReadUnsigned(reader.Get(), L"/grctlext/TransparentColorIndex"));
+        metadata.transparentColorIndex =
+            static_cast<int>(ReadUnsigned(reader.Get(), L"/grctlext/TransparentColorIndex"));
     }
     ValidateRegion(document, metadata);
     return metadata;
@@ -105,9 +106,7 @@ struct GifReader::Implementation {
     GifDocumentMetadata metadata;
 
     [[nodiscard]] Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> Frame(unsigned int frameIndex) const {
-        if (frameIndex >= metadata.frameCount) {
-            throw std::out_of_range("GIF frame index is outside the animation");
-        }
+        if (frameIndex >= metadata.frameCount) { throw std::out_of_range("GIF frame index is outside the animation"); }
         Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
         Check(decoder->GetFrame(frameIndex, frame.GetAddressOf()), "Read GIF frame failed");
         return frame;
@@ -115,18 +114,16 @@ struct GifReader::Implementation {
 
     explicit Implementation(const std::filesystem::path& path) {
         Check(CoCreateInstance(CLSID_WICImagingFactory1, nullptr, CLSCTX_INPROC_SERVER,
-            IID_PPV_ARGS(factory.GetAddressOf())), "Create WIC factory failed");
-        Check(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
-            WICDecodeMetadataCacheOnDemand, decoder.GetAddressOf()), "Decode GIF failed");
+                               IID_PPV_ARGS(factory.GetAddressOf())),
+              "Create WIC factory failed");
+        Check(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand,
+                                                 decoder.GetAddressOf()),
+              "Decode GIF failed");
         GUID container{};
         Check(decoder->GetContainerFormat(&container), "Read GIF container failed");
-        if (container != GUID_ContainerFormatGif) {
-            throw std::invalid_argument("Image is not a GIF container");
-        }
+        if (container != GUID_ContainerFormatGif) { throw std::invalid_argument("Image is not a GIF container"); }
         Check(decoder->GetFrameCount(&metadata.frameCount), "Read GIF frame count failed");
-        if (metadata.frameCount == 0) {
-            throw std::runtime_error("GIF has no image frames");
-        }
+        if (metadata.frameCount == 0) { throw std::runtime_error("GIF has no image frames"); }
         Microsoft::WRL::ComPtr<IWICMetadataQueryReader> reader;
         Check(decoder->GetMetadataQueryReader(reader.GetAddressOf()), "Read GIF document metadata failed");
         metadata.width = ReadUnsigned(reader.Get(), L"/logscrdesc/Width", 0, true);
@@ -150,8 +147,7 @@ struct GifReader::Implementation {
     }
 };
 
-GifReader::GifReader(const std::filesystem::path& path)
-    : implementation_(std::make_unique<Implementation>(path)) {}
+GifReader::GifReader(const std::filesystem::path& path) : implementation_(std::make_unique<Implementation>(path)) {}
 GifReader::~GifReader() = default;
 
 const GifDocumentMetadata& GifReader::Metadata() const noexcept {
@@ -175,11 +171,12 @@ DecodedGifFrame GifReader::ReadFrame(unsigned int frameIndex) const {
     decoded.pixels.resize(CheckedPixelCount(metadata.width, metadata.height));
     Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
     Check(implementation_->factory->CreateFormatConverter(converter.GetAddressOf()), "Create WIC converter failed");
-    Check(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA,
-        WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom), "Convert GIF subframe failed");
-    Check(converter->CopyPixels(nullptr, metadata.width * 4,
-        static_cast<UINT>(decoded.pixels.size() * 4), reinterpret_cast<BYTE*>(decoded.pixels.data())),
-        "Copy GIF subframe pixels failed");
+    Check(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                WICBitmapPaletteTypeCustom),
+          "Convert GIF subframe failed");
+    Check(converter->CopyPixels(nullptr, metadata.width * 4, static_cast<UINT>(decoded.pixels.size() * 4),
+                                reinterpret_cast<BYTE*>(decoded.pixels.data())),
+          "Copy GIF subframe pixels failed");
     return decoded;
 }
 
@@ -207,12 +204,11 @@ void GifCanvas::Compose(const DecodedGifFrame& frame) {
     }
     for (unsigned int row = 0; row < frame.metadata.height; ++row) {
         const auto sourceOffset = static_cast<std::size_t>(row) * frame.metadata.width;
-        const auto targetOffset = static_cast<std::size_t>(frame.metadata.top + row) * document_.width + frame.metadata.left;
+        const auto targetOffset =
+            static_cast<std::size_t>(frame.metadata.top + row) * document_.width + frame.metadata.left;
         for (unsigned int column = 0; column < frame.metadata.width; ++column) {
             const auto pixel = frame.pixels[sourceOffset + column];
-            if ((pixel >> 24) != 0) {
-                pixels_[targetOffset + column] = pixel | 0xFF000000U;
-            }
+            if ((pixel >> 24) != 0) { pixels_[targetOffset + column] = pixel | 0xFF000000U; }
         }
     }
     previous_ = frame.metadata;

@@ -19,20 +19,24 @@ namespace {
 class RecordingTestDirectory final {
 public:
     RecordingTestDirectory() {
-        path = std::filesystem::temp_directory_path()/(L"VisPick-recording-files-"+
-            std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64()));
+        path = std::filesystem::temp_directory_path() /
+               (L"VisPick-recording-files-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+                std::to_wstring(GetTickCount64()));
         if (!std::filesystem::create_directory(path)) { throw std::runtime_error("Test directory already exists"); }
     }
-    ~RecordingTestDirectory() { std::error_code ignored; std::filesystem::remove_all(path,ignored); }
+    ~RecordingTestDirectory() {
+        std::error_code ignored;
+        std::filesystem::remove_all(path, ignored);
+    }
     RecordingTestDirectory(const RecordingTestDirectory&) = delete;
     RecordingTestDirectory& operator=(const RecordingTestDirectory&) = delete;
     std::filesystem::path path;
 };
 std::string Contents(const std::filesystem::path& path) {
-    std::ifstream stream(path,std::ios::binary);
-    return {std::istreambuf_iterator<char>(stream),std::istreambuf_iterator<char>()};
+    std::ifstream stream(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
 }
-}
+} // namespace
 
 TEST_CASE("Recording memory plans include workers in flight and adapt to architecture") {
     for (const unsigned bits : {32U, 64U}) {
@@ -46,43 +50,54 @@ TEST_CASE("Recording memory plans include workers in flight and adapt to archite
             CHECK(plan.memoryLimit == (bits == 32 ? 128ULL : 256ULL) * 1024 * 1024);
         }
     }
-    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanMemory(
-        std::numeric_limits<int>::max(), std::numeric_limits<int>::max(), 65535, 65535, 6)), std::length_error);
-    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanMemory(100, 100, 100, 100, 4, 16)), std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanMemory(std::numeric_limits<int>::max(),
+                                                                     std::numeric_limits<int>::max(), 65535, 65535, 6)),
+                    std::length_error);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanMemory(100, 100, 100, 100, 4, 16)),
+                    std::invalid_argument);
 }
 
 TEST_CASE("Recording plans keep the requested scale when it fits") {
-    const auto original = vispick::recording::PlanRecording(1920,1080,100,8,32);
+    const auto original = vispick::recording::PlanRecording(1920, 1080, 100, 8, 32);
     CHECK(original.width == 1920);
     CHECK(original.height == 1080);
-    const auto reduced = vispick::recording::PlanRecording(3840,2160,50,8,64);
+    const auto reduced = vispick::recording::PlanRecording(3840, 2160, 50, 8, 64);
     CHECK(reduced.width == 1920);
     CHECK(reduced.height == 1080);
-    const auto pixel = vispick::recording::PlanRecording(1,1,1,1,32);
+    const auto pixel = vispick::recording::PlanRecording(1, 1, 1, 1, 32);
     CHECK(pixel.width == 1);
     CHECK(pixel.height == 1);
 }
 
 TEST_CASE("Full-screen 4K recording uses the largest scale within the memory budget") {
-    struct FullScreenCase { int sourceWidth; unsigned pointerBits; int scale; };
+    struct FullScreenCase {
+        int sourceWidth;
+        unsigned pointerBits;
+        int scale;
+    };
     constexpr int sourceHeight = 2160;
-    for (const auto& screen : {FullScreenCase{3840,64,81}, FullScreenCase{3840,32,52},
-             FullScreenCase{7680,64,53}, FullScreenCase{7680,32,30}}) {
-        const auto recording = vispick::recording::PlanRecording(screen.sourceWidth,sourceHeight,100,8,screen.pointerBits);
+    for (const auto& screen : {FullScreenCase{3840, 64, 81}, FullScreenCase{3840, 32, 52}, FullScreenCase{7680, 64, 53},
+                               FullScreenCase{7680, 32, 30}}) {
+        const auto recording =
+            vispick::recording::PlanRecording(screen.sourceWidth, sourceHeight, 100, 8, screen.pointerBits);
         CHECK(recording.width == screen.sourceWidth * screen.scale / 100);
         CHECK(recording.height == sourceHeight * screen.scale / 100);
         CHECK(recording.memory.maximumBytes <= recording.memory.memoryLimit);
-        CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanMemory(screen.sourceWidth,sourceHeight,
-            screen.sourceWidth*(screen.scale+1)/100,sourceHeight*(screen.scale+1)/100,8,screen.pointerBits)),std::length_error);
+        CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanMemory(
+                            screen.sourceWidth, sourceHeight, screen.sourceWidth * (screen.scale + 1) / 100,
+                            sourceHeight * (screen.scale + 1) / 100, 8, screen.pointerBits)),
+                        std::length_error);
     }
 }
 
 TEST_CASE("Recording fallback still rejects impossible and invalid plans") {
-    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(7680,4320,100,8,32)),std::length_error);
-    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(0,1080,100,8,64)),std::invalid_argument);
-    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920,1080,0,8,64)),std::invalid_argument);
-    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920,1080,101,8,64)),std::invalid_argument);
-    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920,1080,100,8,16)),std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(7680, 4320, 100, 8, 32)), std::length_error);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(0, 1080, 100, 8, 64)), std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920, 1080, 0, 8, 64)), std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920, 1080, 101, 8, 64)),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920, 1080, 100, 8, 16)),
+                    std::invalid_argument);
 }
 
 TEST_CASE("Recording changes ignore capture alpha and include boundary pixels") {
@@ -107,9 +122,10 @@ TEST_CASE("Recording changes ignore capture alpha and include boundary pixels") 
 TEST_CASE("Recording delta rejects empty mismatched and unchanged work") {
     vispick::Bitmap image(2, 2);
     vispick::Bitmap other(3, 2);
-    CHECK_THROWS_AS(static_cast<void>(vispick::recording::ChangedRectangle(image.View(), other.View())), std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::ChangedRectangle(image.View(), other.View())),
+                    std::invalid_argument);
     std::vector<std::uint32_t> crop;
-    CHECK_THROWS_AS(vispick::recording::CopyRectangle(image.View(), {-1,0,2,2}, crop), std::invalid_argument);
+    CHECK_THROWS_AS(vispick::recording::CopyRectangle(image.View(), {-1, 0, 2, 2}, crop), std::invalid_argument);
     vispick::recording::RegionEncoder encoder;
     CHECK_THROWS_AS(static_cast<void>(encoder.Encode(image.Pixels(), image.Pixels(), 2, false)), std::invalid_argument);
     CHECK_THROWS_AS(static_cast<void>(encoder.Encode(image.Pixels(), {}, 3, false)), std::invalid_argument);
@@ -117,8 +133,14 @@ TEST_CASE("Recording delta rejects empty mismatched and unchanged work") {
 
 TEST_CASE("Recording transparent deltas preserve exact WIC-composed UI pixels") {
     const auto path = std::filesystem::temp_directory_path() /
-        (L"VisPick-recording-delta-" + std::to_wstring(GetCurrentProcessId()) + L".gif");
-    struct RemoveFile { std::filesystem::path path; ~RemoveFile() { std::error_code ignored; std::filesystem::remove(path, ignored); } } cleanup{path};
+                      (L"VisPick-recording-delta-" + std::to_wstring(GetCurrentProcessId()) + L".gif");
+    struct RemoveFile {
+        std::filesystem::path path;
+        ~RemoveFile() {
+            std::error_code ignored;
+            std::filesystem::remove(path, ignored);
+        }
+    } cleanup{path};
     vispick::Bitmap first(257, 2);
     for (std::size_t pixel = 0; pixel < first.Pixels().size(); ++pixel) {
         first.Pixels()[pixel] = 0xFF000000U | static_cast<std::uint32_t>(pixel % 255) * 0x010101;
@@ -142,7 +164,8 @@ TEST_CASE("Recording transparent deltas preserve exact WIC-composed UI pixels") 
     {
         vispick::gif::GifWriter writer(path, first.Width(), first.Height());
         writer.WriteFrame(initial.frame, 3);
-        writer.WriteFrame(delta.frame, {0,0,257,2,7,vispick::gif::DisposalMethod::Keep,delta.transparentColorIndex});
+        writer.WriteFrame(delta.frame,
+                          {0, 0, 257, 2, 7, vispick::gif::DisposalMethod::Keep, delta.transparentColorIndex});
         writer.Finish();
     }
     const std::array expected{vispick::gif::PixelHash(first.Pixels()), vispick::gif::PixelHash(second.Pixels())};
@@ -156,27 +179,31 @@ TEST_CASE("Recording keeps a short final image with browser compatible timing an
     RecordingTestDirectory directory;
     for (const unsigned opaqueColors : {1U, 255U}) {
         const auto path = directory.path / (std::to_wstring(opaqueColors) + L"-colors.gif");
-        vispick::Bitmap first(256,1);
-        std::fill(first.Pixels().begin(),first.Pixels().end(),0xFF000000U);
+        vispick::Bitmap first(256, 1);
+        std::fill(first.Pixels().begin(), first.Pixels().end(), 0xFF000000U);
         auto finalImage = first;
         for (unsigned column = 0; column < 256; ++column) {
-            if (column != 128) { finalImage.Pixels()[column] |= opaqueColors == 1 ? 1U : (column < 128 ? column+1 : column); }
+            if (column != 128) {
+                finalImage.Pixels()[column] |= opaqueColors == 1 ? 1U : (column < 128 ? column + 1 : column);
+            }
         }
         vispick::recording::RegionEncoder encoder;
-        const auto initial = encoder.Encode(first.Pixels(),{},first.Width(),false);
-        const auto delta = encoder.Encode(finalImage.Pixels(),first.Pixels(),first.Width(),false);
+        const auto initial = encoder.Encode(first.Pixels(), {}, first.Width(), false);
+        const auto delta = encoder.Encode(finalImage.Pixels(), first.Pixels(), first.Width(), false);
         REQUIRE(delta.frame.palette.size() == opaqueColors + 1);
         REQUIRE(delta.transparentColorIndex >= 0);
         {
             vispick::gif::TimestampDelayAccumulator times(100000000);
-            vispick::gif::GifWriter writer(path,256,1);
-            writer.WriteFrame(initial.frame,vispick::recording::RecordedFrameDelay(times.AdvanceTo(132000000)));
-            writer.WriteFrame(delta.frame,{0,0,256,1,vispick::recording::RecordedFrameDelay(times.AdvanceTo(133000000)),
-                vispick::gif::DisposalMethod::Keep,delta.transparentColorIndex});
+            vispick::gif::GifWriter writer(path, 256, 1);
+            writer.WriteFrame(initial.frame, vispick::recording::RecordedFrameDelay(times.AdvanceTo(132000000)));
+            writer.WriteFrame(delta.frame,
+                              {0, 0, 256, 1, vispick::recording::RecordedFrameDelay(times.AdvanceTo(133000000)),
+                               vispick::gif::DisposalMethod::Keep, delta.transparentColorIndex});
             writer.Finish();
         }
-        const std::array expected{vispick::gif::PixelHash(first.Pixels()),vispick::gif::PixelHash(finalImage.Pixels())};
-        const auto decoded = vispick::gif::InspectGif(path,expected);
+        const std::array expected{vispick::gif::PixelHash(first.Pixels()),
+                                  vispick::gif::PixelHash(finalImage.Pixels())};
+        const auto decoded = vispick::gif::InspectGif(path, expected);
         CHECK(decoded.frameCount == 2);
         CHECK(decoded.mismatchedFrames == 0);
         CHECK(decoded.durationCentiseconds == 5);
@@ -190,14 +217,17 @@ TEST_CASE("Failed GIF preview construction releases its owned recording") {
     vispick::RecordingResult recording;
     recording.path = directory.path / L"owned-invalid.gif";
     const auto temporary = recording.path;
-    { std::ofstream stream(temporary); stream << "owned recording"; }
-    CHECK_THROWS_AS(vispick::GifPreview(std::move(recording),{},nullptr,WM_APP + 1,{}),std::invalid_argument);
+    {
+        std::ofstream stream(temporary);
+        stream << "owned recording";
+    }
+    CHECK_THROWS_AS(vispick::GifPreview(std::move(recording), {}, nullptr, WM_APP + 1, {}), std::invalid_argument);
     CHECK_FALSE(std::filesystem::exists(temporary));
 }
 
 TEST_CASE("Floyd Steinberg preserves average tone with bounded deterministic scratch") {
     const std::vector<std::uint32_t> gray(64 * 64, 0xFF808080);
-    vispick::gif::IndexedImage image{{0xFF000000,0xFFFFFFFF},std::vector<std::uint8_t>(gray.size()),false,false,0};
+    vispick::gif::IndexedImage image{{0xFF000000, 0xFFFFFFFF}, std::vector<std::uint8_t>(gray.size()), false, false, 0};
     auto repeated = image;
     vispick::gif::DitherFloydSteinberg(gray, 64, image);
     vispick::gif::DitherFloydSteinberg(gray, 64, repeated);
@@ -211,16 +241,16 @@ TEST_CASE("Floyd Steinberg preserves average tone with bounded deterministic scr
 }
 
 TEST_CASE("Dither cache distinguishes nearby colors on opposite sides of a palette boundary") {
-    const std::array pixels{0xFF646464U,0xFF676767U};
-    vispick::gif::IndexedImage image{{pixels[0],pixels[1]},{0,0},false,false,0};
+    const std::array pixels{0xFF646464U, 0xFF676767U};
+    vispick::gif::IndexedImage image{{pixels[0], pixels[1]}, {0, 0}, false, false, 0};
     vispick::gif::DitherFloydSteinberg(pixels, 2, image);
-    CHECK(image.pixels == std::vector<std::uint8_t>{0,1});
+    CHECK(image.pixels == std::vector<std::uint8_t>{0, 1});
     CHECK(image.exact);
 }
 
 TEST_CASE("Floyd Steinberg respects transparent holes and never alters an exact palette") {
     const std::vector<std::uint32_t> pixels(16, 0xFF808080);
-    vispick::gif::IndexedImage lossy{{0xFF000000,0xFFFFFFFF,0},std::vector<std::uint8_t>(16),false,false,0};
+    vispick::gif::IndexedImage lossy{{0xFF000000, 0xFFFFFFFF, 0}, std::vector<std::uint8_t>(16), false, false, 0};
     lossy.pixels[5] = 2;
     lossy.pixels[6] = 2;
     vispick::gif::DitherFloydSteinberg(pixels, 4, lossy, 2);
@@ -256,21 +286,27 @@ TEST_CASE("A static five-minute recording fits in one GIF frame delay") {
 
 TEST_CASE("GIF save commits replacement and preserves the source when destination fails") {
     RecordingTestDirectory directory;
-    const auto source = directory.path/L"recording.gif";
-    const auto destination = directory.path/L"saved.gif";
-    { std::ofstream stream(source); stream << "new GIF bytes"; }
-    { std::ofstream stream(destination); stream << "previous saved content"; }
-    CHECK_THROWS_AS(vispick::recording::CommitFile(source,source),std::invalid_argument);
+    const auto source = directory.path / L"recording.gif";
+    const auto destination = directory.path / L"saved.gif";
+    {
+        std::ofstream stream(source);
+        stream << "new GIF bytes";
+    }
+    {
+        std::ofstream stream(destination);
+        stream << "previous saved content";
+    }
+    CHECK_THROWS_AS(vispick::recording::CommitFile(source, source), std::invalid_argument);
     CHECK(Contents(source) == "new GIF bytes");
-    CHECK_THROWS(vispick::recording::CommitFile(source,directory.path/L"missing-parent"/L"save.gif"));
+    CHECK_THROWS(vispick::recording::CommitFile(source, directory.path / L"missing-parent" / L"save.gif"));
     CHECK(Contents(source) == "new GIF bytes");
     CHECK(Contents(destination) == "previous saved content");
-    REQUIRE(SetFileAttributesW(destination.c_str(),FILE_ATTRIBUTE_READONLY) != FALSE);
-    CHECK_THROWS(vispick::recording::CommitFile(source,destination));
-    CHECK(SetFileAttributesW(destination.c_str(),FILE_ATTRIBUTE_NORMAL) != FALSE);
+    REQUIRE(SetFileAttributesW(destination.c_str(), FILE_ATTRIBUTE_READONLY) != FALSE);
+    CHECK_THROWS(vispick::recording::CommitFile(source, destination));
+    CHECK(SetFileAttributesW(destination.c_str(), FILE_ATTRIBUTE_NORMAL) != FALSE);
     CHECK(Contents(source) == "new GIF bytes");
     CHECK(Contents(destination) == "previous saved content");
-    vispick::recording::CommitFile(source,destination);
+    vispick::recording::CommitFile(source, destination);
     CHECK_FALSE(std::filesystem::exists(source));
     CHECK(Contents(destination) == "new GIF bytes");
 }
@@ -278,28 +314,30 @@ TEST_CASE("GIF save commits replacement and preserves the source when destinatio
 TEST_CASE("GIF trim preserves variable delays and composes the new first frame across disposal") {
     auto disposal = vispick::gif::DisposalMethod::Previous;
     SUBCASE("Restore the canvas from before the frame") {}
-    SUBCASE("Restore the global background color") { disposal = vispick::gif::DisposalMethod::Background; }
+    SUBCASE("Restore the global background color") {
+        disposal = vispick::gif::DisposalMethod::Background;
+    }
     RecordingTestDirectory directory;
-    const auto source = directory.path/L"original.gif";
-    const auto trimmed = directory.path/L"trimmed.gif";
+    const auto source = directory.path / L"original.gif";
+    const auto trimmed = directory.path / L"trimmed.gif";
     constexpr std::uint32_t green = 0xFF228844, red = 0xFFCC2233, blue = 0xFF2255CC;
-    const std::array full{green,green,green,green};
+    const std::array full{green, green, green, green};
     {
         const std::array background{green};
-        vispick::gif::GifWriter writer(source,2,2,background);
-        writer.WriteFrame(vispick::gif::EncodeFrame(full),3);
-        const std::array previous{red,red};
-        writer.WriteFrame(vispick::gif::EncodeFrame(previous),{0,0,1,2,7,disposal});
-        const std::array next{blue,blue};
-        writer.WriteFrame(vispick::gif::EncodeFrame(next),{1,0,1,2,11,vispick::gif::DisposalMethod::Keep});
+        vispick::gif::GifWriter writer(source, 2, 2, background);
+        writer.WriteFrame(vispick::gif::EncodeFrame(full), 3);
+        const std::array previous{red, red};
+        writer.WriteFrame(vispick::gif::EncodeFrame(previous), {0, 0, 1, 2, 7, disposal});
+        const std::array next{blue, blue};
+        writer.WriteFrame(vispick::gif::EncodeFrame(next), {1, 0, 1, 2, 11, vispick::gif::DisposalMethod::Keep});
         writer.Finish();
     }
     const auto original = Contents(source);
-    const std::array second{red,green,red,green};
-    const std::array third{green,blue,green,blue};
-    const std::array expected{vispick::gif::PixelHash(second),vispick::gif::PixelHash(third)};
-    vispick::gif::TrimRecordedGif(source,trimmed,{3,21});
-    const auto inspection = vispick::gif::InspectGif(trimmed,expected);
+    const std::array second{red, green, red, green};
+    const std::array third{green, blue, green, blue};
+    const std::array expected{vispick::gif::PixelHash(second), vispick::gif::PixelHash(third)};
+    vispick::gif::TrimRecordedGif(source, trimmed, {3, 21});
+    const auto inspection = vispick::gif::InspectGif(trimmed, expected);
     CHECK(inspection.frameCount == 2);
     CHECK(inspection.durationCentiseconds == 18);
     CHECK(inspection.mismatchedFrames == 0);
@@ -311,39 +349,40 @@ TEST_CASE("GIF trim preserves variable delays and composes the new first frame a
         CHECK(reader.ReadFrameMetadata(1).delayCentiseconds == 11);
     }
     CHECK(Contents(source) == original);
-    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,source,{3,21}),std::invalid_argument);
-    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{4,21}),std::invalid_argument);
-    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{3,20}),std::invalid_argument);
-    CHECK_THROWS(vispick::gif::TrimRecordedGif(source,directory.path/L"missing"/L"failed.gif",{3,21}));
-    CHECK_THROWS(vispick::recording::CommitFile(trimmed,directory.path/L"missing"/L"failed.gif"));
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source, source, {3, 21}), std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source, trimmed, {4, 21}), std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source, trimmed, {3, 20}), std::invalid_argument);
+    CHECK_THROWS(vispick::gif::TrimRecordedGif(source, directory.path / L"missing" / L"failed.gif", {3, 21}));
+    CHECK_THROWS(vispick::recording::CommitFile(trimmed, directory.path / L"missing" / L"failed.gif"));
     CHECK(Contents(source) == original);
-    CHECK(vispick::gif::InspectGif(trimmed,expected).mismatchedFrames == 0);
+    CHECK(vispick::gif::InspectGif(trimmed, expected).mismatchedFrames == 0);
 }
 
 TEST_CASE("GIF trim retains a minimum-delay final frame without extending duration") {
     RecordingTestDirectory directory;
-    const auto source = directory.path/L"original.gif";
-    const auto trimmed = directory.path/L"trimmed.gif";
+    const auto source = directory.path / L"original.gif";
+    const auto trimmed = directory.path / L"trimmed.gif";
     const std::array first{0xFF112233U};
     const std::array last{0xFF446688U};
     {
-        vispick::gif::GifWriter writer(source,1,1);
-        writer.WriteFrame(vispick::gif::EncodeFrame(first),30);
-        writer.WriteFrame(vispick::gif::EncodeFrame(last),2);
+        vispick::gif::GifWriter writer(source, 1, 1);
+        writer.WriteFrame(vispick::gif::EncodeFrame(first), 30);
+        writer.WriteFrame(vispick::gif::EncodeFrame(last), 2);
         writer.Finish();
     }
-    vispick::gif::TrimRecordedGif(source,trimmed,{30,32});
+    vispick::gif::TrimRecordedGif(source, trimmed, {30, 32});
     const std::array expected{vispick::gif::PixelHash(last)};
-    const auto inspection = vispick::gif::InspectGif(trimmed,expected);
+    const auto inspection = vispick::gif::InspectGif(trimmed, expected);
     CHECK(inspection.frameCount == 1);
     CHECK(inspection.durationCentiseconds == 2);
     CHECK(inspection.mismatchedFrames == 0);
-    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{30,31}),std::invalid_argument);
-    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{30,30}),std::invalid_argument);
-    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{30,40}),std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source, trimmed, {30, 31}), std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source, trimmed, {30, 30}), std::invalid_argument);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source, trimmed, {30, 40}), std::invalid_argument);
     const auto original = Contents(source);
     unsigned checks = 0;
-    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source,trimmed,{30,32},[&] { return ++checks == 4; }),std::runtime_error);
+    CHECK_THROWS_AS(vispick::gif::TrimRecordedGif(source, trimmed, {30, 32}, [&] { return ++checks == 4; }),
+                    std::runtime_error);
     CHECK(checks == 4);
     CHECK(Contents(source) == original);
 }
@@ -351,40 +390,53 @@ TEST_CASE("GIF trim retains a minimum-delay final frame without extending durati
 TEST_CASE("GIF overwrite accepts a Unicode destination beyond MAX_PATH") {
     RecordingTestDirectory directory;
     const auto source = directory.path / L"recording.gif";
-    const auto nested = directory.path / std::wstring(80,L'长') / std::wstring(80,L'路') / std::wstring(80,L'径');
+    const auto nested = directory.path / std::wstring(80, L'长') / std::wstring(80, L'路') / std::wstring(80, L'径');
     const auto destination = nested / L"已保存.gif";
     REQUIRE(destination.native().size() > MAX_PATH);
     const auto extended = vispick::ExtendedFilePath(destination);
     const auto extendedRoot = vispick::ExtendedFilePath(directory.path);
     struct RemoveExtendedTree {
         const std::filesystem::path& path;
-        ~RemoveExtendedTree() { std::error_code ignored; std::filesystem::remove_all(path,ignored); }
+        ~RemoveExtendedTree() {
+            std::error_code ignored;
+            std::filesystem::remove_all(path, ignored);
+        }
     } cleanup{extendedRoot};
     std::filesystem::create_directories(extended.parent_path());
-    { std::ofstream stream(source); stream << "replacement"; }
-    { std::ofstream stream(extended); stream << "original"; }
-    vispick::recording::CommitFile(source,destination);
+    {
+        std::ofstream stream(source);
+        stream << "replacement";
+    }
+    {
+        std::ofstream stream(extended);
+        stream << "original";
+    }
+    vispick::recording::CommitFile(source, destination);
     CHECK_FALSE(std::filesystem::exists(source));
     CHECK(Contents(extended) == "replacement");
-    CHECK(std::distance(std::filesystem::directory_iterator(extended.parent_path()),std::filesystem::directory_iterator{}) == 1);
+    CHECK(std::distance(std::filesystem::directory_iterator(extended.parent_path()),
+                        std::filesystem::directory_iterator{}) == 1);
 }
 
 TEST_CASE("Old recording cleanup only removes expired files with the exact owned pattern") {
     RecordingTestDirectory directory;
     const auto now = std::filesystem::file_time_type::clock::now();
-    const auto old = now-std::chrono::hours(48);
-    for (const auto* name : {L"rec_vispick_1_2_3.gif",L"rec_vispick_1_2_4.gif",L"rec_vispick_1__3.gif",
-                            L"rec_vispick_name_2_3.gif",L"rec_other_1_2_3.gif",L"user.gif"}) {
-        const auto path = directory.path/name;
-        { std::ofstream stream(path); stream << "preserve unless exact old recording"; }
-        std::filesystem::last_write_time(path,name == std::wstring_view(L"rec_vispick_1_2_4.gif") ? now : old);
+    const auto old = now - std::chrono::hours(48);
+    for (const auto* name : {L"rec_vispick_1_2_3.gif", L"rec_vispick_1_2_4.gif", L"rec_vispick_1__3.gif",
+                             L"rec_vispick_name_2_3.gif", L"rec_other_1_2_3.gif", L"user.gif"}) {
+        const auto path = directory.path / name;
+        {
+            std::ofstream stream(path);
+            stream << "preserve unless exact old recording";
+        }
+        std::filesystem::last_write_time(path, name == std::wstring_view(L"rec_vispick_1_2_4.gif") ? now : old);
     }
-    std::filesystem::create_directory(directory.path/L"rec_vispick_5_6_7.gif");
-    std::filesystem::last_write_time(directory.path/L"rec_vispick_5_6_7.gif",old);
-    vispick::recording::CleanOldFiles(directory.path,now-std::chrono::hours(24));
-    CHECK_FALSE(std::filesystem::exists(directory.path/L"rec_vispick_1_2_3.gif"));
-    for (const auto* name : {L"rec_vispick_1_2_4.gif",L"rec_vispick_1__3.gif",L"rec_vispick_name_2_3.gif",
-                            L"rec_other_1_2_3.gif",L"user.gif",L"rec_vispick_5_6_7.gif"}) {
-        CHECK(std::filesystem::exists(directory.path/name));
+    std::filesystem::create_directory(directory.path / L"rec_vispick_5_6_7.gif");
+    std::filesystem::last_write_time(directory.path / L"rec_vispick_5_6_7.gif", old);
+    vispick::recording::CleanOldFiles(directory.path, now - std::chrono::hours(24));
+    CHECK_FALSE(std::filesystem::exists(directory.path / L"rec_vispick_1_2_3.gif"));
+    for (const auto* name : {L"rec_vispick_1_2_4.gif", L"rec_vispick_1__3.gif", L"rec_vispick_name_2_3.gif",
+                             L"rec_other_1_2_3.gif", L"user.gif", L"rec_vispick_5_6_7.gif"}) {
+        CHECK(std::filesystem::exists(directory.path / name));
     }
 }

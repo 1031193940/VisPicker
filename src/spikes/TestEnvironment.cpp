@@ -81,8 +81,8 @@ void AddDisplayDetails(std::vector<TestMonitorInfo>& monitors) {
         if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS) { return; }
         std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
         std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
-        const LONG status = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
-                                                &modeCount, modes.data(), nullptr);
+        const LONG status =
+            QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr);
         if (status == ERROR_INSUFFICIENT_BUFFER) { continue; }
         if (status != ERROR_SUCCESS) { return; }
         std::vector<bool> sourceFound(monitors.size(), false);
@@ -99,15 +99,17 @@ void AddDisplayDetails(std::vector<TestMonitorInfo>& monitors) {
                 const auto& monitor = monitors[monitorIndex];
                 if (_wcsicmp(monitor.deviceName.c_str(), source.viewGdiDeviceName) == 0) {
                     sourceFound[monitorIndex] = true;
-                    allOutputsPhysical[monitorIndex] = allOutputsPhysical[monitorIndex] &&
-                        path.targetInfo.targetAvailable && PhysicalConnector(path.targetInfo.outputTechnology) &&
+                    allOutputsPhysical[monitorIndex] =
+                        allOutputsPhysical[monitorIndex] && path.targetInfo.targetAvailable &&
+                        PhysicalConnector(path.targetInfo.outputTechnology) &&
                         (monitor.adapterFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0 &&
                         !monitor.adapterName.empty() && !NonPhysicalAdapter(monitor);
                 }
             }
         }
         for (std::size_t monitorIndex = 0; monitorIndex < monitors.size(); ++monitorIndex) {
-            monitors[monitorIndex].physicalDisplayVerified = sourceFound[monitorIndex] && allOutputsPhysical[monitorIndex];
+            monitors[monitorIndex].physicalDisplayVerified =
+                sourceFound[monitorIndex] && allOutputsPhysical[monitorIndex];
         }
         return;
     }
@@ -122,12 +124,15 @@ void EvaluateTestEnvironment(TestEnvironment& environment) {
         environment.remoteSession = environment.remoteSession || RemoteAdapter(monitor);
     }
     if (environment.remoteSession) {
-        environment.invalidReasons.emplace_back("Remote session/display evidence: physical-display performance acceptance is invalid.");
+        environment.invalidReasons.emplace_back(
+            "Remote session/display evidence: physical-display performance acceptance is invalid.");
     }
     if (!environment.sessionDetectionKnown) {
         environment.invalidReasons.emplace_back("Local session identity could not be independently verified.");
     }
-    if (environment.monitors.empty()) { environment.invalidReasons.emplace_back("No active display monitors detected."); }
+    if (environment.monitors.empty()) {
+        environment.invalidReasons.emplace_back("No active display monitors detected.");
+    }
     for (std::size_t index = 0; index < environment.monitors.size(); ++index) {
         const auto& monitor = environment.monitors[index];
         const std::string prefix = "Monitor " + std::to_string(index + 1) + ": ";
@@ -145,23 +150,21 @@ TestEnvironment DetectTestEnvironment() {
     TestEnvironment environment;
     environment.remoteSessionMetric = GetSystemMetrics(SM_REMOTESESSION) != 0;
     environment.remoteSession = environment.remoteSessionMetric;
-    for (auto& monitor : EnumerateMonitors()) {
-        environment.monitors.push_back({std::move(monitor)});
-    }
+    for (auto& monitor : EnumerateMonitors()) { environment.monitors.push_back({std::move(monitor)}); }
     AddDisplayDetails(environment.monitors);
     DWORD currentSession = 0;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &currentSession)) {
         DWORD glassSession = 0;
         DWORD size = sizeof(glassSession);
-        if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Terminal Server",
-                        L"GlassSessionId", RRF_RT_REG_DWORD, nullptr, &glassSession, &size) == ERROR_SUCCESS) {
+        if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Terminal Server", L"GlassSessionId",
+                         RRF_RT_REG_DWORD, nullptr, &glassSession, &size) == ERROR_SUCCESS) {
             environment.sessionDetectionKnown = true;
             environment.remoteSession = environment.remoteSession || currentSession != glassSession;
         }
         wchar_t* information = nullptr;
         DWORD returnedBytes = 0;
         const BOOL queried = WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, currentSession,
-            WTSClientProtocolType, &information, &returnedBytes);
+                                                         WTSClientProtocolType, &information, &returnedBytes);
         const std::unique_ptr<void, decltype(&WTSFreeMemory)> owner(information, WTSFreeMemory);
         if (queried && owner && returnedBytes >= sizeof(USHORT)) {
             USHORT protocol = 0;

@@ -13,6 +13,7 @@ public:
     ~TestWindow() override { Destroy(); }
     UINT throwOnMessage = 0;
     int destructionMessages = 0;
+
 protected:
     LRESULT OnMessage(const UINT message, const WPARAM parameter, const LPARAM data) override {
         if (message == throwOnMessage) { throw std::runtime_error("expected window-test failure"); }
@@ -23,8 +24,8 @@ protected:
 
 void CreateHidden(TestWindow& window, const wchar_t* className,
                   const vispick::WindowActivation activation = vispick::WindowActivation::Passive) {
-    window.Create({className, CS_DBLCLKS, IDC_ARROW}, L"hidden test", WS_POPUP,
-                  WS_EX_TOOLWINDOW, {0, 0, 32, 32}, activation);
+    window.Create({className, CS_DBLCLKS, IDC_ARROW}, L"hidden test", WS_POPUP, WS_EX_TOOLWINDOW, {0, 0, 32, 32},
+                  activation);
 }
 
 UINT observedMessage = 0;
@@ -60,8 +61,9 @@ TEST_CASE("Conflicting class options are rejected without creating a second wind
     TestWindow first;
     CreateHidden(first, L"VisPick.Tests.ConflictingClass");
     TestWindow second;
-    CHECK_THROWS_AS(second.Create({L"VisPick.Tests.ConflictingClass", 0, IDC_CROSS}, L"test",
-        WS_POPUP, 0, {0, 0, 10, 10}, vispick::WindowActivation::Passive), std::invalid_argument);
+    CHECK_THROWS_AS(second.Create({L"VisPick.Tests.ConflictingClass", 0, IDC_CROSS}, L"test", WS_POPUP, 0,
+                                  {0, 0, 10, 10}, vispick::WindowActivation::Passive),
+                    std::invalid_argument);
     CHECK(second.Handle() == nullptr);
 }
 

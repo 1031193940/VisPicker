@@ -23,16 +23,18 @@ public:
         if (wcscat_s(path, L"\\") != 0 || wcscat_s(path, name) != 0) { return; }
         module_ = LoadLibraryW(path);
     }
-    ~SystemLibrary() { if (module_ != nullptr) { FreeLibrary(module_); } }
+    ~SystemLibrary() {
+        if (module_ != nullptr) { FreeLibrary(module_); }
+    }
     SystemLibrary(const SystemLibrary&) = delete;
     SystemLibrary& operator=(const SystemLibrary&) = delete;
     [[nodiscard]] HMODULE Get() const noexcept { return module_; }
+
 private:
     HMODULE module_ = nullptr;
 };
 
-template <typename Function>
-Function FindFunction(HMODULE module, const char* name) noexcept {
+template <typename Function> Function FindFunction(HMODULE module, const char* name) noexcept {
     if (module == nullptr) { return nullptr; }
     const FARPROC address = GetProcAddress(module, name);
     static_assert(sizeof(Function) == sizeof(address));
@@ -41,7 +43,9 @@ Function FindFunction(HMODULE module, const char* name) noexcept {
     return function;
 }
 
-HMODULE User32() noexcept { return GetModuleHandleW(L"user32.dll"); }
+HMODULE User32() noexcept {
+    return GetModuleHandleW(L"user32.dll");
+}
 
 HMODULE Shcore() noexcept {
     static const SystemLibrary library(L"shcore.dll");
@@ -53,9 +57,7 @@ UINT SystemDpi() noexcept {
         const ScreenDc context;
         const int dpi = GetDeviceCaps(context.Get(), LOGPIXELSX);
         return dpi > 0 ? static_cast<UINT>(dpi) : 96U;
-    } catch (...) {
-        return 96U;
-    }
+    } catch (...) { return 96U; }
 }
 
 void MonitorDpi(HMONITOR monitor, UINT& dpiX, UINT& dpiY) noexcept {
@@ -135,11 +137,15 @@ RECT AdjustWindowBoundsForDpi(RECT clientBounds, DWORD style, DWORD extendedStyl
     using AdjustForDpi = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
     static const auto adjust = FindFunction<AdjustForDpi>(User32(), "AdjustWindowRectExForDpi");
     if (adjust) {
-        if (!adjust(&clientBounds, style, FALSE, extendedStyle, dpi)) { throw std::runtime_error("Cannot calculate DPI-aware window bounds"); }
+        if (!adjust(&clientBounds, style, FALSE, extendedStyle, dpi)) {
+            throw std::runtime_error("Cannot calculate DPI-aware window bounds");
+        }
         return clientBounds;
     }
     RECT frame{};
-    if (!AdjustWindowRectEx(&frame, style, FALSE, extendedStyle)) { throw std::runtime_error("Cannot calculate window frame bounds"); }
+    if (!AdjustWindowRectEx(&frame, style, FALSE, extendedStyle)) {
+        throw std::runtime_error("Cannot calculate window frame bounds");
+    }
     const int systemDpi = static_cast<int>(SystemDpi());
     const int targetDpi = static_cast<int>(dpi);
     clientBounds.left += MulDiv(frame.left, targetDpi, systemDpi);
@@ -157,7 +163,8 @@ RECT VirtualDesktopBounds() noexcept {
 
 std::vector<MonitorInfo> EnumerateMonitors() {
     MonitorEnumeration enumeration;
-    if (!EnumDisplayMonitors(nullptr, nullptr, CollectMonitor, reinterpret_cast<LPARAM>(&enumeration)) || enumeration.failed) {
+    if (!EnumDisplayMonitors(nullptr, nullptr, CollectMonitor, reinterpret_cast<LPARAM>(&enumeration)) ||
+        enumeration.failed) {
         throw std::runtime_error("Unable to enumerate display monitors");
     }
     return std::move(enumeration.monitors);

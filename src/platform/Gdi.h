@@ -8,8 +8,7 @@
 
 namespace vispick {
 
-template <typename Handle>
-class UniqueGdiObject {
+template <typename Handle> class UniqueGdiObject {
 public:
     UniqueGdiObject() noexcept = default;
     explicit UniqueGdiObject(Handle handle) noexcept : handle_(handle) {}
@@ -27,6 +26,7 @@ public:
         if (handle_ != nullptr) { DeleteObject(handle_); }
         handle_ = handle;
     }
+
 private:
     Handle handle_ = nullptr;
 };
@@ -38,6 +38,7 @@ public:
     ScreenDc(const ScreenDc&) = delete;
     ScreenDc& operator=(const ScreenDc&) = delete;
     [[nodiscard]] HDC Get() const noexcept { return deviceContext_; }
+
 private:
     HWND window_ = nullptr;
     HDC deviceContext_ = nullptr;
@@ -50,6 +51,7 @@ public:
     MemoryDc(const MemoryDc&) = delete;
     MemoryDc& operator=(const MemoryDc&) = delete;
     [[nodiscard]] HDC Get() const noexcept { return deviceContext_; }
+
 private:
     HDC deviceContext_ = nullptr;
 };
@@ -61,6 +63,7 @@ public:
     ~SelectObjectGuard();
     SelectObjectGuard(const SelectObjectGuard&) = delete;
     SelectObjectGuard& operator=(const SelectObjectGuard&) = delete;
+
 private:
     HDC deviceContext_ = nullptr;
     HGDIOBJ previousObject_ = nullptr;
@@ -77,6 +80,7 @@ public:
     [[nodiscard]] int Height() const noexcept { return height_; }
     [[nodiscard]] std::span<std::uint32_t> Pixels() noexcept;
     [[nodiscard]] std::span<const std::uint32_t> Pixels() const noexcept;
+
 private:
     int width_;
     int height_;

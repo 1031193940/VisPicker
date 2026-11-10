@@ -53,10 +53,13 @@ public:
 class DumpFile final {
 public:
     explicit DumpFile(HANDLE handle) noexcept : handle_(handle) {}
-    ~DumpFile() { if (handle_ != INVALID_HANDLE_VALUE) { CloseHandle(handle_); } }
+    ~DumpFile() {
+        if (handle_ != INVALID_HANDLE_VALUE) { CloseHandle(handle_); }
+    }
     DumpFile(const DumpFile&) = delete;
     DumpFile& operator=(const DumpFile&) = delete;
     [[nodiscard]] HANDLE Get() const noexcept { return handle_; }
+
 private:
     HANDLE handle_;
 };
@@ -64,10 +67,13 @@ private:
 class DumpLibrary final {
 public:
     explicit DumpLibrary(HMODULE module) noexcept : module_(module) {}
-    ~DumpLibrary() { if (module_ != nullptr) { FreeLibrary(module_); } }
+    ~DumpLibrary() {
+        if (module_ != nullptr) { FreeLibrary(module_); }
+    }
     DumpLibrary(const DumpLibrary&) = delete;
     DumpLibrary& operator=(const DumpLibrary&) = delete;
     [[nodiscard]] HMODULE Get() const noexcept { return module_; }
+
 private:
     HMODULE module_;
 };
@@ -90,17 +96,21 @@ DWORD WriteDump(EXCEPTION_POINTERS* exception, bool& usingFallback) noexcept {
             continue;
         }
         for (unsigned attempt = 0; attempt < 8; ++attempt) {
-            const auto formatted = StringCchPrintfW(state.dumpPath.data(), state.dumpPath.size(),
+            const auto formatted = StringCchPrintfW(
+                state.dumpPath.data(), state.dumpPath.size(),
                 L"%s\\VisPick-crash-%04u%02u%02u-%02u%02u%02u-%03u-%lu-%lu-%u.dmp", directory,
-                static_cast<unsigned>(time.wYear), static_cast<unsigned>(time.wMonth),
-                static_cast<unsigned>(time.wDay), static_cast<unsigned>(time.wHour),
-                static_cast<unsigned>(time.wMinute), static_cast<unsigned>(time.wSecond),
-                static_cast<unsigned>(time.wMilliseconds), GetCurrentProcessId(), GetCurrentThreadId(), attempt);
-            if (FAILED(formatted)) { error = ERROR_FILENAME_EXCED_RANGE; break; }
+                static_cast<unsigned>(time.wYear), static_cast<unsigned>(time.wMonth), static_cast<unsigned>(time.wDay),
+                static_cast<unsigned>(time.wHour), static_cast<unsigned>(time.wMinute),
+                static_cast<unsigned>(time.wSecond), static_cast<unsigned>(time.wMilliseconds), GetCurrentProcessId(),
+                GetCurrentThreadId(), attempt);
+            if (FAILED(formatted)) {
+                error = ERROR_FILENAME_EXCED_RANGE;
+                break;
+            }
             bool success = false;
             {
-                const DumpFile file(CreateFileW(state.dumpPath.data(), GENERIC_WRITE, FILE_SHARE_READ,
-                    nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+                const DumpFile file(CreateFileW(state.dumpPath.data(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                                                CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
                 if (file.Get() == INVALID_HANDLE_VALUE) {
                     error = GetLastError();
                     if (error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS) { continue; }
@@ -109,15 +119,18 @@ DWORD WriteDump(EXCEPTION_POINTERS* exception, bool& usingFallback) noexcept {
                 MINIDUMP_EXCEPTION_INFORMATION details{GetCurrentThreadId(), exception, FALSE};
                 std::size_t pathLength = 0;
                 static_cast<void>(StringCchLengthW(state.dumpPath.data(), state.dumpPath.size(), &pathLength));
-                MINIDUMP_USER_STREAM pathStream{CommentStreamW,
-                    static_cast<ULONG>((pathLength + 1) * sizeof(wchar_t)), state.dumpPath.data()};
+                MINIDUMP_USER_STREAM pathStream{CommentStreamW, static_cast<ULONG>((pathLength + 1) * sizeof(wchar_t)),
+                                                state.dumpPath.data()};
                 MINIDUMP_USER_STREAM_INFORMATION streams{1, &pathStream};
-                success = writeDump(GetCurrentProcess(), GetCurrentProcessId(), file.Get(), MiniDumpNormal,
-                    &details, &streams, nullptr) != FALSE;
+                success = writeDump(GetCurrentProcess(), GetCurrentProcessId(), file.Get(), MiniDumpNormal, &details,
+                                    &streams, nullptr) != FALSE;
                 error = success ? ERROR_SUCCESS : GetLastError();
                 if (!success && error == ERROR_SUCCESS) { error = ERROR_WRITE_FAULT; }
             }
-            if (success) { usingFallback = directoryIndex != 0; return ERROR_SUCCESS; }
+            if (success) {
+                usingFallback = directoryIndex != 0;
+                return ERROR_SUCCESS;
+            }
             // A failed/partial dump is not presented as a usable diagnostic.
             DeleteFileW(state.dumpPath.data());
             break;
@@ -132,11 +145,12 @@ LONG HandleException(EXCEPTION_POINTERS* exception) noexcept {
     const DWORD error = WriteDump(exception, usingFallback);
     if (error == ERROR_SUCCESS) {
         static_cast<void>(StringCchPrintfW(state.message.data(), state.message.size(),
-            L"VisPick 遇到未处理的异常，即将退出。\n崩溃转储已保存%s：\n%s",
-            usingFallback ? L"到备用目录" : L"", state.dumpPath.data()));
+                                           L"VisPick 遇到未处理的异常，即将退出。\n崩溃转储已保存%s：\n%s",
+                                           usingFallback ? L"到备用目录" : L"", state.dumpPath.data()));
     } else {
         static_cast<void>(StringCchPrintfW(state.message.data(), state.message.size(),
-            L"VisPick 遇到未处理的异常，即将退出。\n无法写入崩溃转储，错误代码：0x%08lX", error));
+                                           L"VisPick 遇到未处理的异常，即将退出。\n无法写入崩溃转储，错误代码：0x%08lX",
+                                           error));
     }
     OutputDebugStringW(state.message.data());
     return EXCEPTION_EXECUTE_HANDLER;
@@ -144,7 +158,10 @@ LONG HandleException(EXCEPTION_POINTERS* exception) noexcept {
 
 LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS* exception) noexcept {
     ++state.activeFilters;
-    if (!state.installed.load()) { --state.activeFilters; return EXCEPTION_CONTINUE_SEARCH; }
+    if (!state.installed.load()) {
+        --state.activeFilters;
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
     const auto currentThread = GetCurrentThreadId();
     DWORD expected = 0;
     if (!state.faultThread.compare_exchange_strong(expected, currentThread)) {
@@ -156,9 +173,11 @@ LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS* exception) noexcept {
     // SEH is contained separately from RAII functions: the crashing process may
     // have invalid memory/stack and DbgHelp itself may fault. No C++ escape.
     LONG disposition = EXCEPTION_EXECUTE_HANDLER;
-    __try { disposition = HandleException(exception); }
-    __except (GetExceptionCode() == EXCEPTION_BREAKPOINT || GetExceptionCode() == EXCEPTION_SINGLE_STEP
-        ? EXCEPTION_CONTINUE_SEARCH : EXCEPTION_EXECUTE_HANDLER) {
+    __try {
+        disposition = HandleException(exception);
+    } __except (GetExceptionCode() == EXCEPTION_BREAKPOINT || GetExceptionCode() == EXCEPTION_SINGLE_STEP
+                    ? EXCEPTION_CONTINUE_SEARCH
+                    : EXCEPTION_EXECUTE_HANDLER) {
         OutputDebugStringW(L"VisPick crash dump handler failed while processing the original exception.");
     }
     SetEvent(state.dumpCompleted);
@@ -167,29 +186,41 @@ LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS* exception) noexcept {
 }
 
 [[noreturn]] void ReportFatal(DWORD code) noexcept {
-    __try { RaiseException(code, EXCEPTION_NONCONTINUABLE, 0, nullptr); }
-    __except (ExceptionFilter(GetExceptionInformation())) {
+    __try {
+        RaiseException(code, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+    } __except (ExceptionFilter(GetExceptionInformation())) {
         OutputDebugStringW(L"VisPick is terminating after a fatal runtime error.\n");
     }
     TerminateProcess(GetCurrentProcess(), code);
     __assume(0);
 }
 
-void ReportTerminate() noexcept { ReportFatal(0xE0421002UL); }
-void ReportAbort(int) noexcept { ReportFatal(0xE0421003UL); }
+void ReportTerminate() noexcept {
+    ReportFatal(0xE0421002UL);
+}
+void ReportAbort(int) noexcept {
+    ReportFatal(0xE0421003UL);
+}
 void ReportInvalidParameter(const wchar_t*, const wchar_t*, const wchar_t*, unsigned, uintptr_t) noexcept {
     ReportFatal(0xE0421004UL);
 }
-void ReportPureCall() noexcept { ReportFatal(0xE0421005UL); }
+void ReportPureCall() noexcept {
+    ReportFatal(0xE0421005UL);
+}
 
 } // namespace
 
-CrashDump::~CrashDump() { Uninstall(); }
+CrashDump::~CrashDump() {
+    Uninstall();
+}
 
 CrashDumpStatus CrashDump::Install(std::span<const std::filesystem::path> directories) noexcept {
     const InstallationGuard guard;
     if (owner == this) { return status_; }
-    if (owner != nullptr) { status_ = {false, ERROR_ALREADY_EXISTS}; return status_; }
+    if (owner != nullptr) {
+        status_ = {false, ERROR_ALREADY_EXISTS};
+        return status_;
+    }
     try {
         const auto defaults = directories.empty() ? DiagnosticDirectories() : std::vector<std::filesystem::path>{};
         if (directories.empty()) { directories = defaults; }
@@ -215,7 +246,10 @@ CrashDumpStatus CrashDump::Install(std::span<const std::filesystem::path> direct
             ++state.directoryCount;
         }
         state.dumpCompleted = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!state.dumpCompleted) { status_ = {false, GetLastError()}; return status_; }
+        if (!state.dumpCompleted) {
+            status_ = {false, GetLastError()};
+            return status_;
+        }
         ULONG guaranteedStackBytes = 64 * 1024;
         SetThreadStackGuarantee(&guaranteedStackBytes);
         state.faultThread.store(0);

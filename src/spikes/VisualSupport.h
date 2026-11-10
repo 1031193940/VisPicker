@@ -30,7 +30,8 @@ struct ProcessMemory {
 inline ProcessMemory ReadProcessMemory() {
     PROCESS_MEMORY_COUNTERS_EX counters{};
     counters.cb = sizeof(counters);
-    if (!GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters), sizeof(counters))) {
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
+                              sizeof(counters))) {
         throw std::runtime_error("GetProcessMemoryInfo failed");
     }
     return {static_cast<std::uint64_t>(counters.PrivateUsage), static_cast<std::uint64_t>(counters.WorkingSetSize)};
@@ -44,6 +45,7 @@ public:
     PaintScope& operator=(const PaintScope&) = delete;
     [[nodiscard]] HDC Context() const noexcept { return context_; }
     [[nodiscard]] const RECT& Bounds() const noexcept { return paint_.rcPaint; }
+
 private:
     HWND window_;
     PAINTSTRUCT paint_{};
@@ -58,6 +60,7 @@ public:
     ~SavedDc() { RestoreDC(context_, saved_); }
     SavedDc(const SavedDc&) = delete;
     SavedDc& operator=(const SavedDc&) = delete;
+
 private:
     HDC context_;
     int saved_;
@@ -76,8 +79,7 @@ inline std::uint32_t CoordinatePixel(const int physicalX, const int physicalY) n
 
 class PatternWindow final : public Window {
 public:
-    explicit PatternWindow(const RECT bounds)
-        : surface_(bounds.right - bounds.left, bounds.bottom - bounds.top) {
+    explicit PatternWindow(const RECT bounds) : surface_(bounds.right - bounds.left, bounds.bottom - bounds.top) {
         auto pixels = surface_.Pixels();
         for (int row = 0; row < surface_.Height(); ++row) {
             for (int column = 0; column < surface_.Width(); ++column) {
@@ -103,9 +105,9 @@ protected:
         if (message == WM_PAINT) {
             PaintScope paint(Handle());
             const RECT dirty = paint.Bounds();
-            paintSucceeded_ = BitBlt(paint.Context(), dirty.left, dirty.top,
-                dirty.right - dirty.left, dirty.bottom - dirty.top,
-                surface_.DeviceContext(), dirty.left, dirty.top, SRCCOPY) != FALSE;
+            paintSucceeded_ =
+                BitBlt(paint.Context(), dirty.left, dirty.top, dirty.right - dirty.left, dirty.bottom - dirty.top,
+                       surface_.DeviceContext(), dirty.left, dirty.top, SRCCOPY) != FALSE;
             return 0;
         }
         return Window::OnMessage(message, parameter, data);

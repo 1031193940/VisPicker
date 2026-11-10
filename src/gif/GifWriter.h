@@ -27,6 +27,7 @@ public:
     explicit FrameEncoder(QuantizerOptions options = {}) : quantizer_(options) {}
     EncodedFrame Encode(std::span<const std::uint32_t> pixels);
     EncodedFrame EncodeIndexed(const IndexedImage& image);
+
 private:
     Quantizer quantizer_;
     LzwEncoder lzw_;
@@ -41,8 +42,7 @@ std::uint64_t PixelHash(std::span<const std::uint32_t> pixels);
 class GifWriter {
 public:
     GifWriter(const std::filesystem::path& path, int width, int height,
-              std::span<const std::uint32_t> globalPalette = {},
-              std::uint8_t backgroundColorIndex = 0);
+              std::span<const std::uint32_t> globalPalette = {}, std::uint8_t backgroundColorIndex = 0);
     ~GifWriter() = default;
     GifWriter(const GifWriter&) = delete;
     GifWriter& operator=(const GifWriter&) = delete;
@@ -77,7 +77,6 @@ struct GifInspection {
 
 // WIC reads raw subframes; GifCanvas applies location, transparency and disposal
 // before hashing the logical-screen image. Memory is bounded by a few canvases.
-GifInspection InspectGif(const std::filesystem::path& path,
-                         std::span<const std::uint64_t> expectedHashes = {});
+GifInspection InspectGif(const std::filesystem::path& path, std::span<const std::uint64_t> expectedHashes = {});
 
 } // namespace vispick::gif

@@ -18,8 +18,8 @@ int Extent(LONG start, LONG end) {
 
 void CopyDesktop(HDC destination, HDC source, const RECT& bounds, bool includeLayeredWindows) {
     const DWORD operation = SRCCOPY | (includeLayeredWindows ? CAPTUREBLT : 0UL);
-    if (!BitBlt(destination, 0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top,
-                source, bounds.left, bounds.top, operation)) {
+    if (!BitBlt(destination, 0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top, source, bounds.left,
+                bounds.top, operation)) {
         throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "BitBlt");
     }
 }
@@ -38,8 +38,8 @@ void DrawCapturedCursor(const HDC destination, const RECT bounds) {
     const UniqueGdiObject<HBITMAP> mask(information.hbmMask);
     const UniqueGdiObject<HBITMAP> color(information.hbmColor);
     if (!DrawIconEx(destination, cursor.ptScreenPos.x - bounds.left - static_cast<int>(information.xHotspot),
-                    cursor.ptScreenPos.y - bounds.top - static_cast<int>(information.yHotspot),
-                    cursor.hCursor, 0, 0, 0, nullptr, DI_NORMAL)) {
+                    cursor.ptScreenPos.y - bounds.top - static_cast<int>(information.yHotspot), cursor.hCursor, 0, 0, 0,
+                    nullptr, DI_NORMAL)) {
         throw std::runtime_error("DrawIconEx failed during capture");
     }
 }
@@ -83,12 +83,13 @@ BitmapView FrozenScreen::Image() const {
 
 void FrozenScreen::BlitTo(HDC destination, RECT localSource, POINT destinationOrigin) const {
     if (localSource.left < 0 || localSource.top < 0 || localSource.right > surface_.Width() ||
-        localSource.bottom > surface_.Height() || localSource.left >= localSource.right || localSource.top >= localSource.bottom) {
+        localSource.bottom > surface_.Height() || localSource.left >= localSource.right ||
+        localSource.top >= localSource.bottom) {
         throw std::out_of_range("Frozen screen source rectangle outside image");
     }
-    if (!BitBlt(destination, destinationOrigin.x, destinationOrigin.y,
-                localSource.right - localSource.left, localSource.bottom - localSource.top,
-                surface_.DeviceContext(), localSource.left, localSource.top, SRCCOPY)) {
+    if (!BitBlt(destination, destinationOrigin.x, destinationOrigin.y, localSource.right - localSource.left,
+                localSource.bottom - localSource.top, surface_.DeviceContext(), localSource.left, localSource.top,
+                SRCCOPY)) {
         throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "FrozenScreen::BlitTo");
     }
 }

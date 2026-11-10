@@ -14,7 +14,9 @@ namespace vispick {
 namespace {
 
 struct HandleDeleter {
-    void operator()(void* handle) const noexcept { if (handle) { CloseHandle(handle); } }
+    void operator()(void* handle) const noexcept {
+        if (handle) { CloseHandle(handle); }
+    }
 };
 struct LocalDeleter {
     void operator()(wchar_t* text) const noexcept { LocalFree(text); }
@@ -22,13 +24,17 @@ struct LocalDeleter {
 
 std::wstring CurrentUserSid() {
     HANDLE rawToken = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &rawToken)) { throw std::runtime_error("OpenProcessToken failed"); }
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &rawToken)) {
+        throw std::runtime_error("OpenProcessToken failed");
+    }
     const std::unique_ptr<void, HandleDeleter> token(rawToken);
     DWORD bytes = 0;
     GetTokenInformation(token.get(), TokenUser, nullptr, 0, &bytes);
     if (bytes == 0 || bytes > 65536) { throw std::runtime_error("Cannot size current user token"); }
     std::vector<std::byte> storage(bytes);
-    if (!GetTokenInformation(token.get(), TokenUser, storage.data(), bytes, &bytes)) { throw std::runtime_error("GetTokenInformation failed"); }
+    if (!GetTokenInformation(token.get(), TokenUser, storage.data(), bytes, &bytes)) {
+        throw std::runtime_error("GetTokenInformation failed");
+    }
     const auto* user = reinterpret_cast<const TOKEN_USER*>(storage.data());
     wchar_t* rawSid = nullptr;
     if (!ConvertSidToStringSidW(user->User.Sid, &rawSid)) { throw std::runtime_error("ConvertSidToStringSidW failed"); }
@@ -53,7 +59,9 @@ bool ValidUtf16(const std::wstring_view text) noexcept {
         if (character == L'\0') { return false; }
         if (character >= 0xD800 && character <= 0xDBFF) {
             if (++index == text.size() || text[index] < 0xDC00 || text[index] > 0xDFFF) { return false; }
-        } else if (character >= 0xDC00 && character <= 0xDFFF) { return false; }
+        } else if (character >= 0xDC00 && character <= 0xDFFF) {
+            return false;
+        }
     }
     return true;
 }
@@ -72,10 +80,15 @@ std::filesystem::path AbsolutePath(const std::filesystem::path& path) {
 } // namespace
 
 SingleInstance::SingleInstance(std::wstring identity) {
-    if (identity.empty() || identity.size() > 64 || !std::all_of(identity.begin(), identity.end(), [](const wchar_t character) {
-        return (character >= L'a' && character <= L'z') || (character >= L'A' && character <= L'Z') ||
-               (character >= L'0' && character <= L'9') || character == L'.' || character == L'_' || character == L'-';
-    })) { throw std::invalid_argument("Single-instance identity must contain 1..64 ASCII letters, digits, dots, underscores or hyphens"); }
+    if (identity.empty() || identity.size() > 64 ||
+        !std::all_of(identity.begin(), identity.end(), [](const wchar_t character) {
+            return (character >= L'a' && character <= L'z') || (character >= L'A' && character <= L'Z') ||
+                   (character >= L'0' && character <= L'9') || character == L'.' || character == L'_' ||
+                   character == L'-';
+        })) {
+        throw std::invalid_argument(
+            "Single-instance identity must contain 1..64 ASCII letters, digits, dots, underscores or hyphens");
+    }
     const std::wstring userIdentity = identity + L"." + CurrentUserSid();
     const std::wstring mutexName = L"Local\\" + userIdentity;
     windowTitle_ = L"VisPick.Main." + userIdentity;
@@ -84,10 +97,14 @@ SingleInstance::SingleInstance(std::wstring identity) {
     primary_ = GetLastError() != ERROR_ALREADY_EXISTS;
 }
 
-SingleInstance::~SingleInstance() { if (mutex_) { CloseHandle(mutex_); } }
+SingleInstance::~SingleInstance() {
+    if (mutex_) { CloseHandle(mutex_); }
+}
 
 std::vector<std::byte> SingleInstance::Encode(const LaunchOptions& options) {
-    if (!ValidOptions(options)) { throw std::invalid_argument("Invalid launch options for single-instance forwarding"); }
+    if (!ValidOptions(options)) {
+        throw std::invalid_argument("Invalid launch options for single-instance forwarding");
+    }
     const auto& pin = options.pinFile.native();
     const auto& config = options.configPath.native();
     constexpr std::size_t maximumCodeUnits = (MaximumPayloadBytes - sizeof(WireHeader)) / sizeof(wchar_t);
@@ -102,16 +119,22 @@ std::vector<std::byte> SingleInstance::Encode(const LaunchOptions& options) {
     std::vector<std::byte> payload(sizeof(header) + (pin.size() + config.size()) * sizeof(wchar_t));
     std::memcpy(payload.data(), &header, sizeof(header));
     std::memcpy(payload.data() + sizeof(header), pin.data(), pin.size() * sizeof(wchar_t));
-    std::memcpy(payload.data() + sizeof(header) + pin.size() * sizeof(wchar_t), config.data(), config.size() * sizeof(wchar_t));
+    std::memcpy(payload.data() + sizeof(header) + pin.size() * sizeof(wchar_t), config.data(),
+                config.size() * sizeof(wchar_t));
     return payload;
 }
 
 std::optional<LaunchOptions> SingleInstance::Decode(const COPYDATASTRUCT& data) {
-    if (data.dwData != CopyDataTag || !data.lpData || data.cbData < sizeof(WireHeader) || data.cbData > MaximumPayloadBytes) { return std::nullopt; }
+    if (data.dwData != CopyDataTag || !data.lpData || data.cbData < sizeof(WireHeader) ||
+        data.cbData > MaximumPayloadBytes) {
+        return std::nullopt;
+    }
     WireHeader header;
     std::memcpy(&header, data.lpData, sizeof(header));
     if (header.magic != CopyDataTag || header.version != 1 || (header.flags & ~7U) != 0 ||
-        header.command > static_cast<std::uint32_t>(AppCommand::Exit)) { return std::nullopt; }
+        header.command > static_cast<std::uint32_t>(AppCommand::Exit)) {
+        return std::nullopt;
+    }
     const std::uint64_t codeUnits = static_cast<std::uint64_t>(header.pinCodeUnits) + header.configCodeUnits;
     if (sizeof(WireHeader) + codeUnits * sizeof(wchar_t) != data.cbData) { return std::nullopt; }
     const auto* bytes = static_cast<const std::byte*>(data.lpData) + sizeof(WireHeader);
@@ -137,13 +160,15 @@ bool SingleInstance::ConfigMatches(const std::filesystem::path& requested, const
     const auto requestedPath = AbsolutePath(requested).native();
     const auto activePath = AbsolutePath(active).native();
     if (requestedPath.size() > INT_MAX || activePath.size() > INT_MAX) { return false; }
-    return CompareStringOrdinal(requestedPath.data(), static_cast<int>(requestedPath.size()),
-        activePath.data(), static_cast<int>(activePath.size()), TRUE) == CSTR_EQUAL;
+    return CompareStringOrdinal(requestedPath.data(), static_cast<int>(requestedPath.size()), activePath.data(),
+                                static_cast<int>(activePath.size()), TRUE) == CSTR_EQUAL;
 }
 
 ForwardResult SingleInstance::Forward(const LaunchOptions& launch, const DWORD timeoutMilliseconds) const {
     if (primary_) { return ForwardResult::Unavailable; }
-    if (timeoutMilliseconds == 0 || timeoutMilliseconds > 30000) { throw std::invalid_argument("Forward timeout must be 1..30000 milliseconds"); }
+    if (timeoutMilliseconds == 0 || timeoutMilliseconds > 30000) {
+        throw std::invalid_argument("Forward timeout must be 1..30000 milliseconds");
+    }
     if (!ValidOptions(launch)) { throw std::invalid_argument("Invalid launch options for single-instance forwarding"); }
     LaunchOptions options = launch;
     // Resolve in the sender's working directory before crossing process boundaries.
@@ -160,7 +185,8 @@ ForwardResult SingleInstance::Forward(const LaunchOptions& launch, const DWORD t
     }
     const ULONGLONG now = GetTickCount64();
     if (now >= deadline) { return ForwardResult::TimedOut; }
-    if (options.command == AppCommand::Screenshot || options.command == AppCommand::Gif || options.command == AppCommand::Pin) {
+    if (options.command == AppCommand::Screenshot || options.command == AppCommand::Gif ||
+        options.command == AppCommand::Pin) {
         DWORD process = 0;
         if (GetWindowThreadProcessId(target, &process) != 0) {
             // A foreground-eligible launcher can transfer that permission to
@@ -170,8 +196,8 @@ ForwardResult SingleInstance::Forward(const LaunchOptions& launch, const DWORD t
     }
     DWORD_PTR response = 0;
     SetLastError(ERROR_SUCCESS);
-    if (!SendMessageTimeoutW(target, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data),
-        SMTO_ABORTIFHUNG | SMTO_BLOCK, static_cast<UINT>(deadline - now), &response)) {
+    if (!SendMessageTimeoutW(target, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data), SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                             static_cast<UINT>(deadline - now), &response)) {
         return GetLastError() == ERROR_TIMEOUT ? ForwardResult::TimedOut : ForwardResult::Unavailable;
     }
     if (response == Accepted) { return ForwardResult::Delivered; }

@@ -52,7 +52,7 @@ IndexedImage Quantize(std::span<const std::uint32_t> pixels);
 // Apply Floyd-Steinberg error diffusion to an existing lossy palette mapping.
 // Exact mappings remain unchanged. Transparent indices neither receive nor
 // propagate error; the two error rows and 32K lookup are bounded by image width.
-void DitherFloydSteinberg(std::span<const std::uint32_t> source, int width,
-    IndexedImage& image, int transparentColorIndex = -1);
+void DitherFloydSteinberg(std::span<const std::uint32_t> source, int width, IndexedImage& image,
+                          int transparentColorIndex = -1);
 
 } // namespace vispick::gif

@@ -3,7 +3,9 @@
 
 namespace vispick {
 
-HotkeyRegistration::~HotkeyRegistration() { Clear(); }
+HotkeyRegistration::~HotkeyRegistration() {
+    Clear();
+}
 
 void HotkeyRegistration::Clear() noexcept {
     for (const auto& binding : registered_) { UnregisterHotKey(window_, binding.identifier); }
@@ -17,16 +19,20 @@ std::vector<HotkeyFailure> HotkeyRegistration::Rebind(std::span<const HotkeyBind
     std::erase_if(registered_, [&](const Registered& current) {
         const auto index = static_cast<std::size_t>(current.identifier - 1);
         if (index < bindings.size() && bindings[index].command == current.command &&
-            bindings[index].hotkey == current.hotkey) { return false; }
+            bindings[index].hotkey == current.hotkey) {
+            return false;
+        }
         UnregisterHotKey(window_, current.identifier);
         return true;
     });
     std::vector<HotkeyFailure> failures;
     int identifier = 1;
     for (const auto& binding : bindings) {
-        if (binding.hotkey.Enabled() && std::none_of(registered_.begin(), registered_.end(),
-            [&](const Registered& current) { return current.identifier == identifier; })) {
-            if (RegisterHotKey(window_, identifier, binding.hotkey.modifiers | MOD_NOREPEAT, binding.hotkey.virtualKey)) {
+        if (binding.hotkey.Enabled() &&
+            std::none_of(registered_.begin(), registered_.end(),
+                         [&](const Registered& current) { return current.identifier == identifier; })) {
+            if (RegisterHotKey(window_, identifier, binding.hotkey.modifiers | MOD_NOREPEAT,
+                               binding.hotkey.virtualKey)) {
                 registered_.push_back({identifier, binding.command, binding.hotkey});
             } else {
                 const DWORD error = GetLastError();

@@ -38,15 +38,18 @@ int wmain() {
         if (commandLine.command == vispick::SpikeCommand::Desktop) {
             throw std::invalid_argument("Use VisPickTest.exe for --desktop-tests.");
         }
-        if (commandLine.options.outputDirectory.empty()) { commandLine.options.outputDirectory = vispick::DefaultReportDirectory(); }
+        if (commandLine.options.outputDirectory.empty()) {
+            commandLine.options.outputDirectory = vispick::DefaultReportDirectory();
+        }
         std::filesystem::create_directories(commandLine.options.outputDirectory);
         const auto environment = vispick::DetectTestEnvironment();
         std::vector<vispick::SpikeResult> results;
         const auto run = [&](vispick::SpikeCommand command, const char* name, auto function) {
             if (commandLine.command != command && commandLine.command != vispick::SpikeCommand::All) { return; }
             output.Show(L"Running " + vispick::Utf8ToWide(name) + L"...\n");
-            try { results.push_back(function(commandLine.options)); }
-            catch (const std::exception& error) {
+            try {
+                results.push_back(function(commandLine.options));
+            } catch (const std::exception& error) {
                 results.push_back({name, false, {}, {vispick::WideToUtf8(vispick::ExceptionMessage(error))}});
             }
             vispick::WriteReports(commandLine.options.outputDirectory, results, environment);
@@ -58,7 +61,8 @@ int wmain() {
         run(vispick::SpikeCommand::GifPipeline, "gif-pipeline", vispick::RunGifPipelineSpike);
         run(vispick::SpikeCommand::Quantizer, "quantizer", vispick::RunQuantizerBenchmark);
         const bool passed = vispick::AcceptancePassed(results, environment);
-        output.Show(!environment.physicalAcceptanceEligible ? L"NOT ELIGIBLE: 非验收有效环境，数据仅供诊断。\n" : (passed ? L"PASS\n" : L"FAIL: see results.json\n"));
+        output.Show(!environment.physicalAcceptanceEligible ? L"NOT ELIGIBLE: 非验收有效环境，数据仅供诊断。\n"
+                                                            : (passed ? L"PASS\n" : L"FAIL: see results.json\n"));
         output.Show(L"Reports: " + commandLine.options.outputDirectory.native() + L"\n");
         return passed ? 0 : 1;
     } catch (const std::exception& error) {

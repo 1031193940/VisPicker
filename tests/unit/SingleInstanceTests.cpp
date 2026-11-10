@@ -30,6 +30,7 @@ public:
     std::optional<vispick::LaunchOptions> received;
     LRESULT response = vispick::SingleInstance::Accepted;
     int dispatchCount = 0;
+
 protected:
     LRESULT OnMessage(const UINT message, const WPARAM parameter, const LPARAM data) override {
         if (message == WM_COPYDATA) {
@@ -40,7 +41,10 @@ protected:
             }
             return response;
         }
-        if (message == WM_APP + 25) { ++dispatchCount; return 0; }
+        if (message == WM_APP + 25) {
+            ++dispatchCount;
+            return 0;
+        }
         return Window::OnMessage(message, parameter, data);
     }
 };
@@ -118,8 +122,8 @@ TEST_CASE("SingleInstance decoder rejects invalid header sizes fields and tags")
     CHECK_FALSE(vispick::SingleInstance::Decode(data));
     data = {vispick::SingleInstance::CopyDataTag, vispick::SingleInstance::MaximumPayloadBytes + 1, valid.data()};
     CHECK_FALSE(vispick::SingleInstance::Decode(data));
-    const std::array<std::pair<std::size_t, std::uint32_t>, 7> corruptions{{
-        {0, 0}, {1, 2}, {2, 0xFFFFFFFFU}, {3, 8}, {3, 3}, {4, 0xFFFFFFFFU}, {5, 0xFFFFFFFFU}}};
+    const std::array<std::pair<std::size_t, std::uint32_t>, 7> corruptions{
+        {{0, 0}, {1, 2}, {2, 0xFFFFFFFFU}, {3, 8}, {3, 3}, {4, 0xFFFFFFFFU}, {5, 0xFFFFFFFFU}}};
     for (const auto& [word, value] : corruptions) {
         auto changed = valid;
         ChangeWord(changed, word, value);
@@ -138,7 +142,7 @@ TEST_CASE("SingleInstance validates command path consistency and UTF16") {
     CHECK_THROWS_AS(static_cast<void>(vispick::SingleInstance::Encode(options)), std::invalid_argument);
     options.pinFile.clear();
     for (const std::wstring invalid : {std::wstring(1, static_cast<wchar_t>(0xD800)),
-         std::wstring(1, static_cast<wchar_t>(0xDC00)), std::wstring(L"a\0b", 3)}) {
+                                       std::wstring(1, static_cast<wchar_t>(0xDC00)), std::wstring(L"a\0b", 3)}) {
         options.configPath = invalid;
         CHECK_THROWS_AS(static_cast<void>(vispick::SingleInstance::Encode(options)), std::invalid_argument);
     }
@@ -152,7 +156,8 @@ TEST_CASE("SingleInstance validates command path consistency and UTF16") {
 TEST_CASE("SingleInstance bounds payload before allocation and supports exact byte limit") {
     vispick::LaunchOptions options;
     const auto emptyBytes = vispick::SingleInstance::Encode(options).size();
-    options.configPath = std::wstring((vispick::SingleInstance::MaximumPayloadBytes - emptyBytes) / sizeof(wchar_t), L'x');
+    options.configPath =
+        std::wstring((vispick::SingleInstance::MaximumPayloadBytes - emptyBytes) / sizeof(wchar_t), L'x');
     auto bytes = vispick::SingleInstance::Encode(options);
     CHECK(bytes.size() == vispick::SingleInstance::MaximumPayloadBytes);
     REQUIRE(Decode(bytes));
@@ -174,8 +179,8 @@ TEST_CASE("SingleInstance delivers owned commands then receiver dispatches async
     const vispick::SingleInstance primary(identity);
     const vispick::SingleInstance secondary(identity);
     InstanceReceiver receiver;
-    receiver.Create({vispick::SingleInstance::MainWindowClass, 0, IDC_ARROW}, primary.WindowTitle().c_str(),
-        WS_POPUP, WS_EX_TOOLWINDOW, {0, 0, 1, 1}, vispick::WindowActivation::Passive);
+    receiver.Create({vispick::SingleInstance::MainWindowClass, 0, IDC_ARROW}, primary.WindowTitle().c_str(), WS_POPUP,
+                    WS_EX_TOOLWINDOW, {0, 0, 1, 1}, vispick::WindowActivation::Passive);
     vispick::LaunchOptions options;
     options.command = vispick::AppCommand::PinFile;
     options.pinFile = L"relative.png";

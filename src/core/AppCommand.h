@@ -7,9 +7,23 @@
 namespace vispick {
 
 enum class AppCommand {
-    None, Screenshot, Gif, Pin, PinClipboard, PinFile, TogglePins,
-    ShowPins, HidePins, ClosePins, ResetPinPassthrough, RestorePin,
-    OpenConfig, Reload, ToggleAutostart, About, Exit,
+    None,
+    Screenshot,
+    Gif,
+    Pin,
+    PinClipboard,
+    PinFile,
+    TogglePins,
+    ShowPins,
+    HidePins,
+    ClosePins,
+    ResetPinPassthrough,
+    RestorePin,
+    OpenConfig,
+    Reload,
+    ToggleAutostart,
+    About,
+    Exit,
     TogglePinsAcrossDesktops // Tray-only command; keep existing IPC command values stable.
 };
 

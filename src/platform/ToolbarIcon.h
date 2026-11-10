@@ -4,7 +4,29 @@
 
 namespace vispick {
 
-enum class ToolbarIcon { None, Rectangle, Ellipse, Arrow, Pencil, Text, Mosaic, Save, Copy, Pin, Cancel, Check, Stroke, Font, Record, Stop, Pause, Play, TrimStart, TrimEnd, Reset };
+enum class ToolbarIcon {
+    None,
+    Rectangle,
+    Ellipse,
+    Arrow,
+    Pencil,
+    Text,
+    Mosaic,
+    Save,
+    Copy,
+    Pin,
+    Cancel,
+    Check,
+    Stroke,
+    Font,
+    Record,
+    Stop,
+    Pause,
+    Play,
+    TrimStart,
+    TrimEnd,
+    Reset
+};
 
 [[nodiscard]] UniqueGdiObject<HPEN> CreateToolbarIconPen(int dpi);
 // Stroke uses a logical pixel width. Font uses a size level from 0 through 2.

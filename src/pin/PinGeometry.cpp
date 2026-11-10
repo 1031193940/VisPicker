@@ -12,8 +12,10 @@ SIZE PinImageSize(const SIZE source, const unsigned quarterTurns) noexcept {
 }
 
 SIZE ScaledPinSize(const SIZE source, const double scale) {
-    if (source.cx <= 0 || source.cy <= 0 || !std::isfinite(scale) || scale <= 0 ||
-        source.cx * scale > 32760 || source.cy * scale > 32760) { throw std::invalid_argument("Pin dimensions exceed layered-window limits"); }
+    if (source.cx <= 0 || source.cy <= 0 || !std::isfinite(scale) || scale <= 0 || source.cx * scale > 32760 ||
+        source.cy * scale > 32760) {
+        throw std::invalid_argument("Pin dimensions exceed layered-window limits");
+    }
     return {std::max<LONG>(1, static_cast<LONG>(std::lround(source.cx * scale))),
             std::max<LONG>(1, static_cast<LONG>(std::lround(source.cy * scale)))};
 }
@@ -22,8 +24,9 @@ double LimitPinScale(const SIZE source, const double requested, const std::uint6
     if (source.cx <= 0 || source.cy <= 0 || !std::isfinite(requested) || maximumPixels == 0) {
         throw std::invalid_argument("Invalid pin scale or pixel budget");
     }
-    const double limit = std::min({8.0, 32760.0 / source.cx, 32760.0 / source.cy,
-        std::sqrt(static_cast<double>(maximumPixels) / (static_cast<double>(source.cx) * source.cy))});
+    const double limit =
+        std::min({8.0, 32760.0 / source.cx, 32760.0 / source.cy,
+                  std::sqrt(static_cast<double>(maximumPixels) / (static_cast<double>(source.cx) * source.cy))});
     if (limit < 0.1) { throw std::length_error("Image exceeds pin rendering budget even at 10% scale"); }
     double scale = std::clamp(requested, 0.1, limit);
     SIZE size = ScaledPinSize(source, scale);
@@ -34,12 +37,17 @@ double LimitPinScale(const SIZE source, const double requested, const std::uint6
         for (int iteration = 0; iteration < 48; ++iteration) {
             const double middle = (low + high) / 2;
             size = ScaledPinSize(source, middle);
-            if (static_cast<std::uint64_t>(size.cx) * size.cy <= maximumPixels) { low = middle; }
-            else { high = middle; }
+            if (static_cast<std::uint64_t>(size.cx) * size.cy <= maximumPixels) {
+                low = middle;
+            } else {
+                high = middle;
+            }
         }
         scale = low;
         size = ScaledPinSize(source, scale);
-        if (static_cast<std::uint64_t>(size.cx) * size.cy > maximumPixels) { throw std::length_error("Pin minimum scale exceeds pixel budget"); }
+        if (static_cast<std::uint64_t>(size.cx) * size.cy > maximumPixels) {
+            throw std::length_error("Pin minimum scale exceeds pixel budget");
+        }
     }
     return scale;
 }
@@ -79,7 +87,10 @@ POINT SnapPinOrigin(const RECT proposed, const std::span<const RECT> targets, co
             for (const LONG moving : {proposed.left, proposed.right}) {
                 for (const LONG fixed : {target.left, target.right}) {
                     const auto difference = static_cast<long long>(fixed) - moving;
-                    if (std::abs(difference) < bestHorizontal) { bestHorizontal = std::abs(difference); horizontal = static_cast<LONG>(difference); }
+                    if (std::abs(difference) < bestHorizontal) {
+                        bestHorizontal = std::abs(difference);
+                        horizontal = static_cast<LONG>(difference);
+                    }
                 }
             }
         }
@@ -87,7 +98,10 @@ POINT SnapPinOrigin(const RECT proposed, const std::span<const RECT> targets, co
             for (const LONG moving : {proposed.top, proposed.bottom}) {
                 for (const LONG fixed : {target.top, target.bottom}) {
                     const auto difference = static_cast<long long>(fixed) - moving;
-                    if (std::abs(difference) < bestVertical) { bestVertical = std::abs(difference); vertical = static_cast<LONG>(difference); }
+                    if (std::abs(difference) < bestVertical) {
+                        bestVertical = std::abs(difference);
+                        vertical = static_cast<LONG>(difference);
+                    }
                 }
             }
         }
@@ -103,22 +117,31 @@ POINT KeepPinVisible(const RECT imageBounds, const std::span<const RECT> monitor
     const LONG visibleHeight = std::min(32L, height);
     for (const RECT monitor : monitors) {
         RECT intersection{};
-        if (IntersectRect(&intersection, &imageBounds, &monitor) && intersection.right - intersection.left >= visibleWidth &&
-            intersection.bottom - intersection.top >= visibleHeight) { return {imageBounds.left, imageBounds.top}; }
+        if (IntersectRect(&intersection, &imageBounds, &monitor) &&
+            intersection.right - intersection.left >= visibleWidth &&
+            intersection.bottom - intersection.top >= visibleHeight) {
+            return {imageBounds.left, imageBounds.top};
+        }
     }
     const RECT* nearest = &monitors.front();
     double bestDistance = std::numeric_limits<double>::max();
     for (const RECT& monitor : monitors) {
-        const double horizontal = static_cast<double>(imageBounds.left) - std::clamp(imageBounds.left, monitor.left, monitor.right);
-        const double vertical = static_cast<double>(imageBounds.top) - std::clamp(imageBounds.top, monitor.top, monitor.bottom);
+        const double horizontal =
+            static_cast<double>(imageBounds.left) - std::clamp(imageBounds.left, monitor.left, monitor.right);
+        const double vertical =
+            static_cast<double>(imageBounds.top) - std::clamp(imageBounds.top, monitor.top, monitor.bottom);
         const double distance = horizontal * horizontal + vertical * vertical;
-        if (distance < bestDistance) { bestDistance = distance; nearest = &monitor; }
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            nearest = &monitor;
+        }
     }
     return {std::clamp(imageBounds.left, nearest->left, std::max(nearest->left, nearest->right - width)),
             std::clamp(imageBounds.top, nearest->top, std::max(nearest->top, nearest->bottom - height))};
 }
 
-Bitmap TransformPin(const BitmapView source, const unsigned quarterTurns, const bool flipHorizontal, const bool flipVertical) {
+Bitmap TransformPin(const BitmapView source, const unsigned quarterTurns, const bool flipHorizontal,
+                    const bool flipVertical) {
     const SIZE size = PinImageSize({source.Width(), source.Height()}, quarterTurns);
     Bitmap output(size.cx, size.cy);
     for (int row = 0; row < size.cy; ++row) {
@@ -128,10 +151,20 @@ Bitmap TransformPin(const BitmapView source, const unsigned quarterTurns, const 
             int sourceX = horizontal;
             int sourceY = vertical;
             switch (quarterTurns % 4) {
-            case 1: sourceX = vertical; sourceY = source.Height() - horizontal - 1; break;
-            case 2: sourceX = source.Width() - horizontal - 1; sourceY = source.Height() - vertical - 1; break;
-            case 3: sourceX = source.Width() - vertical - 1; sourceY = horizontal; break;
-            default: break;
+            case 1:
+                sourceX = vertical;
+                sourceY = source.Height() - horizontal - 1;
+                break;
+            case 2:
+                sourceX = source.Width() - horizontal - 1;
+                sourceY = source.Height() - vertical - 1;
+                break;
+            case 3:
+                sourceX = source.Width() - vertical - 1;
+                sourceY = horizontal;
+                break;
+            default:
+                break;
             }
             output.Row(row)[column] = source.Row(sourceY)[sourceX];
         }
@@ -142,7 +175,7 @@ Bitmap TransformPin(const BitmapView source, const unsigned quarterTurns, const 
 std::uint32_t PremultiplyPinPixel(const std::uint32_t pixel) noexcept {
     const auto alpha = pixel >> 24U;
     return (alpha << 24U) | (((((pixel >> 16U) & 255U) * alpha + 127U) / 255U) << 16U) |
-        (((((pixel >> 8U) & 255U) * alpha + 127U) / 255U) << 8U) | (((pixel & 255U) * alpha + 127U) / 255U);
+           (((((pixel >> 8U) & 255U) * alpha + 127U) / 255U) << 8U) | (((pixel & 255U) * alpha + 127U) / 255U);
 }
 
 } // namespace vispick

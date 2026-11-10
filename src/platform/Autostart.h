@@ -18,7 +18,8 @@ public:
     // Repair an existing VisPick command only when its original executable is missing.
     [[nodiscard]] bool RepairIfEnabled(const std::filesystem::path& executable) const;
     [[nodiscard]] static std::wstring BuildCommand(const std::filesystem::path& executable,
-                                                  const std::filesystem::path& config = {});
+                                                   const std::filesystem::path& config = {});
+
 private:
     std::wstring keyPath_;
     std::wstring valueName_;

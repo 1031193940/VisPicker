@@ -11,10 +11,9 @@ namespace vispick::gif {
 class LzwEncoder {
 public:
     LzwEncoder();
-    std::vector<std::uint8_t> Encode(std::span<const std::uint8_t> pixels,
-                                    int minimumCodeSize = 8);
-    void EncodeTo(std::span<const std::uint8_t> pixels, int minimumCodeSize,
-                  std::vector<std::uint8_t>& destination, int paletteSize = 0);
+    std::vector<std::uint8_t> Encode(std::span<const std::uint8_t> pixels, int minimumCodeSize = 8);
+    void EncodeTo(std::span<const std::uint8_t> pixels, int minimumCodeSize, std::vector<std::uint8_t>& destination,
+                  int paletteSize = 0);
 
 private:
     std::vector<int> dictionaryKeys_;
@@ -22,7 +21,6 @@ private:
 };
 
 // GIF's LSB-first variable-width LZW stream, without GIF sub-block framing.
-std::vector<std::uint8_t> EncodeLzw(std::span<const std::uint8_t> pixels,
-                                  int minimumCodeSize = 8);
+std::vector<std::uint8_t> EncodeLzw(std::span<const std::uint8_t> pixels, int minimumCodeSize = 8);
 
 } // namespace vispick::gif

@@ -36,6 +36,7 @@ public:
     PaintScope(const PaintScope&) = delete;
     PaintScope& operator=(const PaintScope&) = delete;
     [[nodiscard]] HDC Context() const noexcept { return context_; }
+
 private:
     HWND window_;
     PAINTSTRUCT paint_{};
@@ -54,15 +55,15 @@ public:
     TemporaryArtifact(const TemporaryArtifact&) = delete;
     TemporaryArtifact& operator=(const TemporaryArtifact&) = delete;
     void Keep() noexcept { keep_ = true; }
+
 private:
     std::filesystem::path path_;
     bool keep_ = false;
 };
 
 void FillPattern(Bitmap& image, int frameNumber) {
-    constexpr std::array<std::uint32_t, 8> colors{
-        0xFF172333U, 0xFFEEF2F6U, 0xFF3689E5U, 0xFF34B788U,
-        0xFFF0BB45U, 0xFFD85C62U, 0xFF946EE0U, 0xFF54BBC8U};
+    constexpr std::array<std::uint32_t, 8> colors{0xFF172333U, 0xFFEEF2F6U, 0xFF3689E5U, 0xFF34B788U,
+                                                  0xFFF0BB45U, 0xFFD85C62U, 0xFF946EE0U, 0xFF54BBC8U};
     const int squareLeft = (frameNumber * 7) % (image.Width() - 100);
     const int squareTop = 180 + (frameNumber * 3) % 400;
     for (int row = 0; row < image.Height(); ++row) {
@@ -72,13 +73,11 @@ void FillPattern(Bitmap& image, int frameNumber) {
                 const int bit = column / 80;
                 paletteIndex = ((frameNumber >> bit) & 1) != 0 ? 1 : 0;
             }
-            if (column >= squareLeft && column < squareLeft + 100 &&
-                row >= squareTop && row < squareTop + 100) {
+            if (column >= squareLeft && column < squareLeft + 100 && row >= squareTop && row < squareTop + 100) {
                 paletteIndex = 1;
             }
-            image.Pixels()[static_cast<std::size_t>(row) *
-                static_cast<std::size_t>(image.Width()) + static_cast<std::size_t>(column)] =
-                colors[paletteIndex];
+            image.Pixels()[static_cast<std::size_t>(row) * static_cast<std::size_t>(image.Width()) +
+                           static_cast<std::size_t>(column)] = colors[paletteIndex];
         }
     }
 }
@@ -105,9 +104,7 @@ public:
 
 protected:
     LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override {
-        if (message == WM_ERASEBKGND) {
-            return 1;
-        }
+        if (message == WM_ERASEBKGND) { return 1; }
         if (message == WM_PAINT) {
             PaintScope paint(Handle());
             BITMAPINFO information{};
@@ -117,9 +114,9 @@ protected:
             information.bmiHeader.biPlanes = 1;
             information.bmiHeader.biBitCount = 32;
             information.bmiHeader.biCompression = BI_RGB;
-            const int scanlines = StretchDIBits(paint.Context(), 0, 0,
-                image_.Width(), image_.Height(), 0, 0, image_.Width(), image_.Height(),
-                image_.Pixels().data(), &information, DIB_RGB_COLORS, SRCCOPY);
+            const int scanlines =
+                StretchDIBits(paint.Context(), 0, 0, image_.Width(), image_.Height(), 0, 0, image_.Width(),
+                              image_.Height(), image_.Pixels().data(), &information, DIB_RGB_COLORS, SRCCOPY);
             paintedSuccessfully_ = scanlines == image_.Height();
             return 0;
         }
@@ -132,15 +129,14 @@ private:
 };
 
 void AddTiming(SpikeResult& result, const char* name, std::vector<double> samples) {
-    if (samples.empty()) {
-        return;
-    }
+    if (samples.empty()) { return; }
     std::sort(samples.begin(), samples.end());
     const std::string prefix(name);
-    result.measurements.push_back({prefix + "_mean", std::accumulate(samples.begin(),
-        samples.end(), 0.0) / static_cast<double>(samples.size()), "ms"});
-    result.measurements.push_back({prefix + "_p95", samples[static_cast<std::size_t>(
-        0.95 * static_cast<double>(samples.size() - 1))], "ms"});
+    result.measurements.push_back(
+        {prefix + "_mean", std::accumulate(samples.begin(), samples.end(), 0.0) / static_cast<double>(samples.size()),
+         "ms"});
+    result.measurements.push_back(
+        {prefix + "_p95", samples[static_cast<std::size_t>(0.95 * static_cast<double>(samples.size() - 1))], "ms"});
     result.measurements.push_back({prefix + "_max", samples.back(), "ms"});
 }
 
@@ -148,15 +144,15 @@ void DescribeHitWindow(SpikeResult& result, HWND hitWindow) {
     // Class/geometry are enough to identify overlay types; never read titles,
     // process command lines, or the unexpected pixels themselves.
     std::array<wchar_t, 256> className{};
-    const int characterCount = hitWindow != nullptr
-        ? GetClassNameW(hitWindow, className.data(), static_cast<int>(className.size())) : 0;
+    const int characterCount =
+        hitWindow != nullptr ? GetClassNameW(hitWindow, className.data(), static_cast<int>(className.size())) : 0;
     if (characterCount > 0) {
         std::array<char, 768> utf8Name{};
-        const int byteCount = WideCharToMultiByte(CP_UTF8, 0, className.data(), characterCount,
-            utf8Name.data(), static_cast<int>(utf8Name.size()), nullptr, nullptr);
+        const int byteCount = WideCharToMultiByte(CP_UTF8, 0, className.data(), characterCount, utf8Name.data(),
+                                                  static_cast<int>(utf8Name.size()), nullptr, nullptr);
         if (byteCount > 0) {
             result.notes.push_back("Hit window class at first mismatch: " +
-                std::string(utf8Name.data(), static_cast<std::size_t>(byteCount)));
+                                   std::string(utf8Name.data(), static_cast<std::size_t>(byteCount)));
         } else {
             result.notes.push_back("Hit window class at first mismatch: unavailable (UTF-8 conversion failed).");
         }
@@ -182,11 +178,9 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
     }
     SpikeResult result{"gif-correctness", false, {}, {}};
     const auto monitors = EnumerateMonitors();
-    const auto chosenMonitor = std::find_if(monitors.begin(), monitors.end(),
-        [](const MonitorInfo& monitor) {
-            return monitor.bounds.right - monitor.bounds.left >= 1280 &&
-                   monitor.bounds.bottom - monitor.bounds.top >= 720;
-        });
+    const auto chosenMonitor = std::find_if(monitors.begin(), monitors.end(), [](const MonitorInfo& monitor) {
+        return monitor.bounds.right - monitor.bounds.left >= 1280 && monitor.bounds.bottom - monitor.bounds.top >= 720;
+    });
     if (chosenMonitor == monitors.end()) {
         result.notes.push_back("No monitor can display the required 1280x720 physical-pixel pattern.");
         return result;
@@ -197,7 +191,7 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
     const RECT captureBounds{left, top, left + 1280, top + 720};
     AnimationWindow pattern;
     pattern.Create({L"VisPick.Spike.GifCorrectness", 0, IDC_ARROW}, L"VisPick GIF capture test pattern", WS_POPUP,
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW, captureBounds, WindowActivation::Passive);
+                   WS_EX_TOPMOST | WS_EX_TOOLWINDOW, captureBounds, WindowActivation::Passive);
     DisableWindowAnimations(pattern.Handle());
     ShowWindow(pattern.Handle(), SW_SHOWNOACTIVATE);
     UpdateWindow(pattern.Handle());
@@ -229,8 +223,8 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
     const int plannedFrames = framesPerSecond * options.seconds;
     const auto start = Clock::now();
     while (nextTick < plannedFrames) {
-        const auto deadline = start + std::chrono::nanoseconds(
-            static_cast<std::int64_t>(nextTick) * 1000000000LL / framesPerSecond);
+        const auto deadline =
+            start + std::chrono::nanoseconds(static_cast<std::int64_t>(nextTick) * 1000000000LL / framesPerSecond);
         timer.WaitUntil(deadline);
         const auto frameStart = Clock::now();
         latenessSamples.push_back(Milliseconds(frameStart - deadline));
@@ -240,14 +234,11 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
         // The test source must remain visible above other ordinary topmost
         // windows. Reassert its Z order without stealing keyboard activation;
         // this sets up the harness before sampling and is not a capture retry.
-        if (!SetWindowPos(pattern.Handle(), HWND_TOPMOST, 0, 0, 0, 0,
-                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+        if (!SetWindowPos(pattern.Handle(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
             throw std::runtime_error("Cannot bring GIF test pattern above other topmost windows");
         }
         pattern.UpdatePattern(nextTick);
-        if (!pattern.PaintedSuccessfully()) {
-            throw std::runtime_error("GIF test pattern painting failed");
-        }
+        if (!pattern.PaintedSuccessfully()) { throw std::runtime_error("GIF test pattern painting failed"); }
         const auto renderEnd = Clock::now();
         renderSamples.push_back(Milliseconds(renderEnd - frameStart));
         // Make the real desktop compositor display the newly painted pattern.
@@ -260,7 +251,10 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
         capture.Capture(false);
         const auto captureEnd = Clock::now();
         const auto captureNanoseconds = QpcNanoseconds(QpcNow());
-        if (!delays) { firstCaptureNanoseconds = captureNanoseconds; delays.emplace(captureNanoseconds); }
+        if (!delays) {
+            firstCaptureNanoseconds = captureNanoseconds;
+            delays.emplace(captureNanoseconds);
+        }
         captureSamples.push_back(Milliseconds(captureEnd - captureStart));
         const auto capturedHash = gif::PixelHash(capture.Image().Pixels());
         if (!std::equal(capture.Image().Pixels().begin(), capture.Image().Pixels().end(),
@@ -273,28 +267,26 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
             const auto expectedPixels = pattern.Image().Pixels();
             for (std::size_t pixelIndex = 0; pixelIndex < capturedPixels.size(); ++pixelIndex) {
                 if (!SameRgb(capturedPixels[pixelIndex], expectedPixels[pixelIndex])) {
-                    if (mismatchCount == 0) {
-                        firstMismatch = pixelIndex;
-                    }
+                    if (mismatchCount == 0) { firstMismatch = pixelIndex; }
                     ++mismatchCount;
                 }
             }
             const auto firstColumn = static_cast<LONG>(firstMismatch % 1280);
             const auto firstRow = static_cast<LONG>(firstMismatch / 1280);
-            const POINT firstScreenPoint{captureBounds.left + firstColumn,
-                                         captureBounds.top + firstRow};
+            const POINT firstScreenPoint{captureBounds.left + firstColumn, captureBounds.top + firstRow};
             const HWND hitWindow = WindowFromPoint(firstScreenPoint);
-            const bool patternAtMismatch = hitWindow == pattern.Handle() ||
+            const bool patternAtMismatch =
+                hitWindow == pattern.Handle() ||
                 (hitWindow != nullptr && GetAncestor(hitWindow, GA_ROOT) == pattern.Handle());
             RECT actualBounds{};
             const bool boundsMatch = GetWindowRect(pattern.Handle(), &actualBounds) != FALSE &&
-                EqualRect(&actualBounds, &captureBounds) != FALSE;
+                                     EqualRect(&actualBounds, &captureBounds) != FALSE;
             bool previousFrameMatches = false;
             if (!capturedHashes.empty()) {
                 Bitmap previousPattern(1280, 720);
                 FillPattern(previousPattern, pendingTick);
-                previousFrameMatches = std::equal(capturedPixels.begin(), capturedPixels.end(),
-                    previousPattern.Pixels().begin(), SameRgb);
+                previousFrameMatches =
+                    std::equal(capturedPixels.begin(), capturedPixels.end(), previousPattern.Pixels().begin(), SameRgb);
             }
             result.measurements.push_back({"pattern_mismatch_at_tick", static_cast<double>(nextTick), "tick"});
             result.measurements.push_back({"pattern_mismatched_pixels", static_cast<double>(mismatchCount), "pixels"});
@@ -303,26 +295,31 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
             result.measurements.push_back({"first_mismatch_screen_x", static_cast<double>(firstScreenPoint.x), "px"});
             result.measurements.push_back({"first_mismatch_screen_y", static_cast<double>(firstScreenPoint.y), "px"});
             result.measurements.push_back({"previous_frame_available", capturedHashes.empty() ? 0.0 : 1.0, "boolean"});
-            result.measurements.push_back({"previous_frame_tick", capturedHashes.empty() ? -1.0 : static_cast<double>(pendingTick), "tick"});
+            result.measurements.push_back(
+                {"previous_frame_tick", capturedHashes.empty() ? -1.0 : static_cast<double>(pendingTick), "tick"});
             result.measurements.push_back({"matches_previous_frame_rgb", previousFrameMatches ? 1.0 : 0.0, "boolean"});
-            result.measurements.push_back({"foreign_window_hit_at_first_mismatch", patternAtMismatch ? 0.0 : 1.0, "boolean"});
-            result.measurements.push_back({"pattern_window_visible", IsWindowVisible(pattern.Handle()) != FALSE ? 1.0 : 0.0, "boolean"});
+            result.measurements.push_back(
+                {"foreign_window_hit_at_first_mismatch", patternAtMismatch ? 0.0 : 1.0, "boolean"});
+            result.measurements.push_back(
+                {"pattern_window_visible", IsWindowVisible(pattern.Handle()) != FALSE ? 1.0 : 0.0, "boolean"});
             result.measurements.push_back({"pattern_bounds_match_capture", boundsMatch ? 1.0 : 0.0, "boolean"});
             result.measurements.push_back({"gdi_flush_succeeded", gdiFlushSucceeded != FALSE ? 1.0 : 0.0, "boolean"});
-            result.measurements.push_back({"dwm_flush_hresult", static_cast<double>(compositionFlushStatus), "HRESULT"});
-            result.measurements.push_back({"verified_frames_before_failure", static_cast<double>(capturedHashes.size()), "frames"});
+            result.measurements.push_back(
+                {"dwm_flush_hresult", static_cast<double>(compositionFlushStatus), "HRESULT"});
+            result.measurements.push_back(
+                {"verified_frames_before_failure", static_cast<double>(capturedHashes.size()), "frames"});
             DescribeHitWindow(result, hitWindow);
             AddTiming(result, "capture_before_failure", std::move(captureSamples));
             AddTiming(result, "pattern_render_before_failure", std::move(renderSamples));
             AddTiming(result, "pattern_present_wait_before_failure", std::move(presentSamples));
             result.notes.push_back("Captured desktop RGB differs from the current known pattern. "
-                "The failed sample is not retried; the partial GIF is deleted. Diagnostics "
-                "record only counts, coordinates, status flags, hit-window class/geometry and "
-                "timings, never window titles or unexpected pixels.");
+                                   "The failed sample is not retried; the partial GIF is deleted. Diagnostics "
+                                   "record only counts, coordinates, status flags, hit-window class/geometry and "
+                                   "timings, never window titles or unexpected pixels.");
             result.notes.push_back("Previous-frame comparison regenerates the last verified pattern "
-                "and compares every RGB pixel. WindowFromPoint is only a hit-test observation at "
-                "the first mismatch; it cannot establish or exclude visual occlusion. "
-                "No cause is inferred from these flags alone.");
+                                   "and compares every RGB pixel. WindowFromPoint is only a hit-test observation at "
+                                   "the first mismatch; it cannot establish or exclude visual occlusion. "
+                                   "No cause is inferred from these flags alone.");
             return result;
         }
         const auto verificationEnd = Clock::now();
@@ -351,13 +348,16 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
     timer.WaitUntil(start + std::chrono::seconds(options.seconds));
     const auto recordingStopNanoseconds = QpcNanoseconds(QpcNow());
     const double wallSeconds = std::chrono::duration<double>(Clock::now() - start).count();
-    const double elapsedSeconds = static_cast<double>(recordingStopNanoseconds - firstCaptureNanoseconds) / 1000000000.0;
+    const double elapsedSeconds =
+        static_cast<double>(recordingStopNanoseconds - firstCaptureNanoseconds) / 1000000000.0;
     if (pendingFrame.has_value()) {
         const auto finalDelay = delays->AdvanceTo(recordingStopNanoseconds);
-        if (finalDelay != 0) { writer.WriteFrame(*pendingFrame, static_cast<std::uint16_t>(finalDelay)); }
-        else {
+        if (finalDelay != 0) {
+            writer.WriteFrame(*pendingFrame, static_cast<std::uint16_t>(finalDelay));
+        } else {
             capturedHashes.pop_back();
-            result.notes.emplace_back("The final sample had no representable 10ms display interval and was coalesced, without forcing a fabricated delay.");
+            result.notes.emplace_back("The final sample had no representable 10ms display interval and was coalesced, "
+                                      "without forcing a fabricated delay.");
         }
     }
     writer.Finish();
@@ -378,7 +378,8 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
     result.measurements.push_back({"captured_timeline_duration", elapsedSeconds, "s"});
     result.measurements.push_back({"gif_duration", gifSeconds, "s"});
     result.measurements.push_back({"duration_error", durationError, "%"});
-    result.measurements.push_back({"decoded_mismatched_frames", static_cast<double>(inspection.mismatchedFrames), "frames"});
+    result.measurements.push_back(
+        {"decoded_mismatched_frames", static_cast<double>(inspection.mismatchedFrames), "frames"});
     result.measurements.push_back({"file_size", static_cast<double>(std::filesystem::file_size(outputPath)), "bytes"});
     result.measurements.push_back({"queued_compressed_frames_max", 1, "frames"});
     result.measurements.push_back({"compressed_frame_max", static_cast<double>(maximumCompressedBytes), "bytes"});
@@ -392,25 +393,34 @@ SpikeResult RunGifSpike(const SpikeOptions& options) {
     AddTiming(result, "capture_plus_encode", std::move(acquisitionAndEncodeSamples));
     AddTiming(result, "scheduler_lateness", std::move(latenessSamples));
     result.notes.push_back("Real desktop BitBlt capture of a controlled 1280x720 animated pattern; "
-        "SRCCOPY without CAPTUREBLT, full opaque GIF frames; delay accumulator uses actual capture-completion timestamps.");
-    result.notes.push_back("Before each sample, the harness reasserts HWND_TOPMOST without activation "
+                           "SRCCOPY without CAPTUREBLT, full opaque GIF frames; delay accumulator uses actual "
+                           "capture-completion timestamps.");
+    result.notes.push_back(
+        "Before each sample, the harness reasserts HWND_TOPMOST without activation "
         "to keep its test pattern above ordinary topmost windows. A failed RGB sample is never retried.");
-    result.notes.push_back("Every captured frame matches the displayed source pattern; every decoded "
+    result.notes.push_back(
+        "Every captured frame matches the displayed source pattern; every decoded "
         "WIC frame is checked against its captured RGB hash. WIC validates decoding, not browser/Photos playback.");
     result.notes.push_back("Harness costs are reported separately: pattern generation/painting, "
-        "GdiFlush+DwmFlush presentation wait, RGB verification, and file writes. The drop count "
-        "measures this complete sequential experiment, not a production recorder. Use "
-        "the separate --spike-gif-pipeline experiment for throughput; these sequential timings cannot identify a production bottleneck.");
+                           "GdiFlush+DwmFlush presentation wait, RGB verification, and file writes. The drop count "
+                           "measures this complete sequential experiment, not a production recorder. Use "
+                           "the separate --spike-gif-pipeline experiment for throughput; these sequential timings "
+                           "cannot identify a production bottleneck.");
     result.notes.push_back("P0 uses one UI/capture/encode thread and one pending compressed frame. "
-        "P5 still needs parallel encoding, changed rectangles, transparency, cursor capture, "
-        "backpressure, lock-screen pause, and preview UI. Wu fallback is unit-tested; this <=8-color workload exercises exact palettes.");
-    result.notes.emplace_back("Correctness-only experiment: source presentation is synchronized deliberately, and skipped scheduling ticks do not fail it. GIF timeline begins at first completed capture and ends at recording stop; it does not fabricate exposure before the first image exists.");
+                           "P5 still needs parallel encoding, changed rectangles, transparency, cursor capture, "
+                           "backpressure, lock-screen pause, and preview UI. Wu fallback is unit-tested; this "
+                           "<=8-color workload exercises exact palettes.");
+    result.notes.emplace_back(
+        "Correctness-only experiment: source presentation is synchronized deliberately, and skipped scheduling ticks "
+        "do not fail it. GIF timeline begins at first completed capture and ends at recording stop; it does not "
+        "fabricate exposure before the first image exists.");
     if (skippedTicks != 0) {
-        result.notes.push_back("This sequential correctness check has no throughput acceptance gate. "
+        result.notes.push_back(
+            "This sequential correctness check has no throughput acceptance gate. "
             "Use these timings to budget P5 worker parallelism; preserved GIF duration does not hide dropped ticks.");
     }
-    result.passed = durationError < 1.0 &&
-        inspection.mismatchedFrames == 0 && inspection.frameCount == capturedHashes.size();
+    result.passed =
+        durationError < 1.0 && inspection.mismatchedFrames == 0 && inspection.frameCount == capturedHashes.size();
     return result;
 }
 

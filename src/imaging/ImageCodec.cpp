@@ -14,7 +14,12 @@ using Microsoft::WRL::ComPtr;
 struct FileHandle {
     HANDLE value = INVALID_HANDLE_VALUE;
     ~FileHandle() { Close(); }
-    void Close() noexcept { if (value != INVALID_HANDLE_VALUE) { CloseHandle(value); value = INVALID_HANDLE_VALUE; } }
+    void Close() noexcept {
+        if (value != INVALID_HANDLE_VALUE) {
+            CloseHandle(value);
+            value = INVALID_HANDLE_VALUE;
+        }
+    }
 };
 void Check(HRESULT result, const char* operation) {
     if (FAILED(result)) { throw std::runtime_error(operation); }
@@ -23,12 +28,20 @@ struct Wic {
     HRESULT status = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     ComPtr<IWICImagingFactory> factory;
     Wic() {
-        if (FAILED(status) && status != RPC_E_CHANGED_MODE) { throw std::runtime_error("Initialize imaging COM failed"); }
+        if (FAILED(status) && status != RPC_E_CHANGED_MODE) {
+            throw std::runtime_error("Initialize imaging COM failed");
+        }
         const auto created = CoCreateInstance(CLSID_WICImagingFactory1, nullptr, CLSCTX_INPROC_SERVER,
-            IID_PPV_ARGS(factory.GetAddressOf()));
-        if (FAILED(created)) { if (SUCCEEDED(status)) { CoUninitialize(); } Check(created, "Create WIC factory failed"); }
+                                              IID_PPV_ARGS(factory.GetAddressOf()));
+        if (FAILED(created)) {
+            if (SUCCEEDED(status)) { CoUninitialize(); }
+            Check(created, "Create WIC factory failed");
+        }
     }
-    ~Wic() { factory.Reset(); if (SUCCEEDED(status)) { CoUninitialize(); } }
+    ~Wic() {
+        factory.Reset();
+        if (SUCCEEDED(status)) { CoUninitialize(); }
+    }
 };
 void CheckSize(UINT width, UINT height) {
     constexpr std::uint64_t maximumPixels = sizeof(void*) == 8 ? 64ULL * 1024 * 1024 : 32ULL * 1024 * 1024;
@@ -42,20 +55,25 @@ Bitmap Convert(Wic& context, IWICBitmapSource* source) {
     CheckSize(width, height);
     ComPtr<IWICFormatConverter> converter;
     Check(context.factory->CreateFormatConverter(&converter), "Create image converter failed");
-    Check(converter->Initialize(source, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone,
-        nullptr, 0, WICBitmapPaletteTypeCustom), "Convert image to BGRA failed");
+    Check(converter->Initialize(source, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                WICBitmapPaletteTypeCustom),
+          "Convert image to BGRA failed");
     Bitmap result(static_cast<int>(width), static_cast<int>(height));
     Check(converter->CopyPixels(nullptr, static_cast<UINT>(result.StrideBytes()),
-        static_cast<UINT>(result.Pixels().size_bytes()), reinterpret_cast<BYTE*>(result.Pixels().data())), "Read image pixels failed");
+                                static_cast<UINT>(result.Pixels().size_bytes()),
+                                reinterpret_cast<BYTE*>(result.Pixels().data())),
+          "Read image pixels failed");
     return result;
 }
 ComPtr<IWICBitmap> Source(Wic& context, BitmapView image) {
     CheckSize(static_cast<UINT>(image.Width()), static_cast<UINT>(image.Height()));
     ComPtr<IWICBitmap> bitmap;
     // WIC copies the memory supplied to CreateBitmapFromMemory.
-    Check(context.factory->CreateBitmapFromMemory(static_cast<UINT>(image.Width()), static_cast<UINT>(image.Height()),
-        GUID_WICPixelFormat32bppBGRA, static_cast<UINT>(image.StrideBytes()), static_cast<UINT>(image.Pixels().size_bytes()),
-        reinterpret_cast<BYTE*>(const_cast<std::uint32_t*>(image.Pixels().data())), &bitmap), "Create WIC bitmap failed");
+    Check(context.factory->CreateBitmapFromMemory(
+              static_cast<UINT>(image.Width()), static_cast<UINT>(image.Height()), GUID_WICPixelFormat32bppBGRA,
+              static_cast<UINT>(image.StrideBytes()), static_cast<UINT>(image.Pixels().size_bytes()),
+              reinterpret_cast<BYTE*>(const_cast<std::uint32_t*>(image.Pixels().data())), &bitmap),
+          "Create WIC bitmap failed");
     return bitmap;
 }
 Bitmap Decode(Wic& context, IWICBitmapDecoder* decoder) {
@@ -63,25 +81,30 @@ Bitmap Decode(Wic& context, IWICBitmapDecoder* decoder) {
     Check(decoder->GetFrame(0, &frame), "Read first image frame failed");
     return Convert(context, frame.Get());
 }
-}
+} // namespace
 
 Bitmap ReadImage(const std::filesystem::path& path) {
     const auto source = ExtendedFilePath(path);
     Wic context;
     ComPtr<IWICBitmapDecoder> decoder;
     Check(context.factory->CreateDecoderFromFilename(source.c_str(), nullptr, GENERIC_READ,
-        WICDecodeMetadataCacheOnDemand, &decoder), "Open image file failed");
+                                                     WICDecodeMetadataCacheOnDemand, &decoder),
+          "Open image file failed");
     return Decode(context, decoder.Get());
 }
 
 Bitmap DecodeImage(std::span<const std::uint8_t> bytes) {
-    if (bytes.empty() || bytes.size() > 512ULL * 1024 * 1024) { throw std::length_error("Encoded image buffer is empty or too large"); }
+    if (bytes.empty() || bytes.size() > 512ULL * 1024 * 1024) {
+        throw std::length_error("Encoded image buffer is empty or too large");
+    }
     Wic context;
     ComPtr<IWICStream> stream;
     Check(context.factory->CreateStream(&stream), "Create image stream failed");
-    Check(stream->InitializeFromMemory(const_cast<BYTE*>(bytes.data()), static_cast<DWORD>(bytes.size())), "Read image memory failed");
+    Check(stream->InitializeFromMemory(const_cast<BYTE*>(bytes.data()), static_cast<DWORD>(bytes.size())),
+          "Read image memory failed");
     ComPtr<IWICBitmapDecoder> decoder;
-    Check(context.factory->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder), "Decode image memory failed");
+    Check(context.factory->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder),
+          "Decode image memory failed");
     return Decode(context, decoder.Get());
 }
 
@@ -91,8 +114,9 @@ void EncodeToStream(Wic& context, BitmapView image, SaveFormat format, int jpgQu
     CheckSize(static_cast<UINT>(image.Width()), static_cast<UINT>(image.Height()));
     ComPtr<IWICBitmap> bitmap;
     ComPtr<IWICBitmapEncoder> encoder;
-    const auto container = format == SaveFormat::Png ? GUID_ContainerFormatPng :
-        format == SaveFormat::Jpg ? GUID_ContainerFormatJpeg : GUID_ContainerFormatBmp;
+    const auto container = format == SaveFormat::Png   ? GUID_ContainerFormatPng
+                           : format == SaveFormat::Jpg ? GUID_ContainerFormatJpeg
+                                                       : GUID_ContainerFormatBmp;
     Check(context.factory->CreateEncoder(container, nullptr, &encoder), "Create image encoder failed");
     Check(encoder->Initialize(stream, WICBitmapEncoderNoCache), "Initialize image encoder failed");
     ComPtr<IWICBitmapFrameEncode> frame;
@@ -107,7 +131,8 @@ void EncodeToStream(Wic& context, BitmapView image, SaveFormat format, int jpgQu
         Check(properties->Write(1, &property, &value), "Set JPEG quality failed");
     }
     Check(frame->Initialize(properties.Get()), "Initialize output frame failed");
-    Check(frame->SetSize(static_cast<UINT>(image.Width()), static_cast<UINT>(image.Height())), "Set output dimensions failed");
+    Check(frame->SetSize(static_cast<UINT>(image.Width()), static_cast<UINT>(image.Height())),
+          "Set output dimensions failed");
     // Baseline Win7 BMP has no BGRA encoder. Use BGR for JPEG and BMP;
     // PNG retains straight alpha without requiring a platform update.
     GUID pixelFormat = format == SaveFormat::Png ? GUID_WICPixelFormat32bppBGRA : GUID_WICPixelFormat24bppBGR;
@@ -116,12 +141,15 @@ void EncodeToStream(Wic& context, BitmapView image, SaveFormat format, int jpgQu
     if (format == SaveFormat::Png && pixelFormat == GUID_WICPixelFormat32bppBGRA) {
         // The encoder accepts the packed source pixels directly.
         Check(frame->WritePixels(static_cast<UINT>(image.Height()), static_cast<UINT>(image.StrideBytes()),
-            static_cast<UINT>(image.Pixels().size_bytes()),
-            reinterpret_cast<BYTE*>(const_cast<std::uint32_t*>(image.Pixels().data()))), "Encode image pixels failed");
+                                 static_cast<UINT>(image.Pixels().size_bytes()),
+                                 reinterpret_cast<BYTE*>(const_cast<std::uint32_t*>(image.Pixels().data()))),
+              "Encode image pixels failed");
     } else {
         bitmap = Source(context, image);
         Check(context.factory->CreateFormatConverter(&converted), "Create encoding converter failed");
-        Check(converted->Initialize(bitmap.Get(), pixelFormat, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom), "Convert encoding pixels failed");
+        Check(converted->Initialize(bitmap.Get(), pixelFormat, WICBitmapDitherTypeNone, nullptr, 0,
+                                    WICBitmapPaletteTypeCustom),
+              "Convert encoding pixels failed");
         Check(frame->WriteSource(converted.Get(), nullptr), "Encode image pixels failed");
     }
     Check(frame->Commit(), "Commit image frame failed");
@@ -136,7 +164,7 @@ std::uint64_t EncodedSize(IStream* stream) {
     }
     return information.cbSize.QuadPart;
 }
-}
+} // namespace
 
 std::vector<std::uint8_t> EncodeImage(BitmapView image, SaveFormat format, int jpgQuality) {
     Wic context;
@@ -176,11 +204,12 @@ void SaveImage(const std::filesystem::path& path, BitmapView image, SaveFormat f
     // user's existing file; rename a complete sibling file on the same volume.
     const auto destination = ExtendedFilePath(path);
     const auto temporary = UniqueSiblingPath(destination, L".tmp");
-    FileHandle file{CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    FileHandle file{
+        CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr)};
     if (file.value == INVALID_HANDLE_VALUE) { throw std::runtime_error("Create temporary output file failed"); }
     DWORD written = 0;
     const bool saved = WriteFile(file.value, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr) &&
-        written == bytes.size() && FlushFileBuffers(file.value);
+                       written == bytes.size() && FlushFileBuffers(file.value);
     file.Close();
     try {
         if (!saved) { throw std::runtime_error("Write temporary image file failed"); }
@@ -197,14 +226,17 @@ Bitmap ScaleImage(BitmapView image, int width, int height, ImageInterpolation in
     auto source = Source(context, image);
     ComPtr<IWICFormatConverter> premultiplied;
     Check(context.factory->CreateFormatConverter(&premultiplied), "Create scaling converter failed");
-    Check(premultiplied->Initialize(source.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone,
-        nullptr, 0, WICBitmapPaletteTypeCustom), "Premultiply scaling source failed");
+    Check(premultiplied->Initialize(source.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                    WICBitmapPaletteTypeCustom),
+          "Premultiply scaling source failed");
     ComPtr<IWICBitmapScaler> scaler;
     Check(context.factory->CreateBitmapScaler(&scaler), "Create image scaler failed");
-    const auto mode = interpolation == ImageInterpolation::Nearest ? WICBitmapInterpolationModeNearestNeighbor :
-        interpolation == ImageInterpolation::Linear ? WICBitmapInterpolationModeLinear :
-        interpolation == ImageInterpolation::Cubic ? WICBitmapInterpolationModeCubic : WICBitmapInterpolationModeFant;
-    Check(scaler->Initialize(premultiplied.Get(), static_cast<UINT>(width), static_cast<UINT>(height), mode), "Scale image failed");
+    const auto mode = interpolation == ImageInterpolation::Nearest  ? WICBitmapInterpolationModeNearestNeighbor
+                      : interpolation == ImageInterpolation::Linear ? WICBitmapInterpolationModeLinear
+                      : interpolation == ImageInterpolation::Cubic  ? WICBitmapInterpolationModeCubic
+                                                                    : WICBitmapInterpolationModeFant;
+    Check(scaler->Initialize(premultiplied.Get(), static_cast<UINT>(width), static_cast<UINT>(height), mode),
+          "Scale image failed");
     return Convert(context, scaler.Get());
 }
 

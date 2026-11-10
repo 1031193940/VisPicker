@@ -19,12 +19,15 @@ class DiagnosticTestDirectory final {
 public:
     DiagnosticTestDirectory() {
         static std::atomic<unsigned> sequence{0};
-        path = std::filesystem::temp_directory_path() / (L"VisPick-diagnostic-tests-" +
-            std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64()) + L"-" +
-            std::to_wstring(sequence.fetch_add(1)));
+        path = std::filesystem::temp_directory_path() /
+               (L"VisPick-diagnostic-tests-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+                std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(sequence.fetch_add(1)));
         if (!std::filesystem::create_directory(path)) { throw std::runtime_error("Test directory already exists"); }
     }
-    ~DiagnosticTestDirectory() { std::error_code error; std::filesystem::remove_all(path, error); }
+    ~DiagnosticTestDirectory() {
+        std::error_code error;
+        std::filesystem::remove_all(path, error);
+    }
     DiagnosticTestDirectory(const DiagnosticTestDirectory&) = delete;
     DiagnosticTestDirectory& operator=(const DiagnosticTestDirectory&) = delete;
     std::filesystem::path path;
@@ -35,7 +38,9 @@ std::string ReadBytes(const std::filesystem::path& path) {
     return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
 }
 
-LONG WINAPI PriorExceptionFilter(EXCEPTION_POINTERS*) { return EXCEPTION_CONTINUE_SEARCH; }
+LONG WINAPI PriorExceptionFilter(EXCEPTION_POINTERS*) {
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 
 } // namespace
 
@@ -70,7 +75,10 @@ TEST_CASE("Log records preserve UTF8 timestamp levels and escaped record boundar
     std::istringstream lines(bytes);
     std::string line;
     unsigned count = 0;
-    while (std::getline(lines, line)) { CHECK(std::regex_match(line, record)); ++count; }
+    while (std::getline(lines, line)) {
+        CHECK(std::regex_match(line, record));
+        ++count;
+    }
     CHECK(count == 3);
 }
 
@@ -97,7 +105,10 @@ TEST_CASE("Log disable and reenable append without writing disabled messages") {
 TEST_CASE("Log reports ordered directory fallback and actual path") {
     DiagnosticTestDirectory directory;
     const auto blocked = directory.path / L"ordinary-file";
-    { std::ofstream file(blocked); file << "do not replace"; }
+    {
+        std::ofstream file(blocked);
+        file << "do not replace";
+    }
     const std::array candidates{blocked, directory.path / L"fallback"};
     vispick::Log log;
     const auto status = log.Configure(true, candidates);
@@ -112,7 +123,10 @@ TEST_CASE("Log reports ordered directory fallback and actual path") {
 TEST_CASE("Log all-path failure is explicit and does not become enabled") {
     DiagnosticTestDirectory directory;
     const auto blocked = directory.path / L"ordinary-file";
-    { std::ofstream file(blocked); file << "keep"; }
+    {
+        std::ofstream file(blocked);
+        file << "keep";
+    }
     const std::array candidates{blocked};
     vispick::Log log;
     const auto status = log.Configure(true, candidates);
@@ -150,7 +164,8 @@ TEST_CASE("UI and worker logging produce complete unique records without interle
     for (unsigned worker = 0; worker < 6; ++worker) {
         workers.emplace_back([&log, worker] {
             for (unsigned record = 0; record < 150; ++record) {
-                log.WriteUtf8(vispick::LogLevel::Info, "record=" + std::to_string(worker) + ":" + std::to_string(record) + ":中文");
+                log.WriteUtf8(vispick::LogLevel::Info,
+                              "record=" + std::to_string(worker) + ":" + std::to_string(record) + ":中文");
             }
         });
     }

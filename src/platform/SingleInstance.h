@@ -33,7 +33,8 @@ public:
     // owned result and PostMessage before returning Accepted from WM_COPYDATA.
     [[nodiscard]] static std::optional<LaunchOptions> Decode(const COPYDATASTRUCT& data);
     [[nodiscard]] static bool ConfigMatches(const std::filesystem::path& requested,
-                                             const std::filesystem::path& active);
+                                            const std::filesystem::path& active);
+
 private:
     HANDLE mutex_ = nullptr;
     bool primary_ = false;

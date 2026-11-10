@@ -80,16 +80,14 @@ struct Config {
 struct ConfigLoadResult {
     Config config;
     std::vector<ConfigDiagnostic> diagnostics;
-    bool accepted = true; // false: whole-file failure; config is the previous snapshot.
+    bool accepted = true;   // false: whole-file failure; config is the previous snapshot.
     bool retryable = false; // A writer may still be replacing or filling the file.
 };
 
 // Missing and invalid fields retain their previous valid value, or the default at startup.
 // Duplicate keys are diagnosed; the last occurrence wins. Unknown keys are ignored.
-[[nodiscard]] ConfigLoadResult ParseConfig(std::span<const std::uint8_t> bytes,
-    const Config* previous = nullptr);
-[[nodiscard]] ConfigLoadResult LoadConfig(const std::filesystem::path& path,
-    const Config* previous = nullptr);
+[[nodiscard]] ConfigLoadResult ParseConfig(std::span<const std::uint8_t> bytes, const Config* previous = nullptr);
+[[nodiscard]] ConfigLoadResult LoadConfig(const std::filesystem::path& path, const Config* previous = nullptr);
 
 // Atomically update just this preference, preserving the user's other INI bytes.
 // Throws on an unreadable, malformed, read-only, or unwritable configuration.

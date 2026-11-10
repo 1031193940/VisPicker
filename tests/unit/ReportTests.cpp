@@ -22,8 +22,8 @@ TEST_CASE("Markdown numbers retain integer precision without scientific notation
 
 TEST_CASE("A successful diagnostic in an invalid environment is never an acceptance pass") {
     struct ReportFiles {
-        std::filesystem::path directory = std::filesystem::temp_directory_path() /
-            (L"VisPick-report-unit-" + std::to_wstring(GetCurrentProcessId()));
+        std::filesystem::path directory =
+            std::filesystem::temp_directory_path() / (L"VisPick-report-unit-" + std::to_wstring(GetCurrentProcessId()));
         ~ReportFiles() {
             std::error_code ignored;
             std::filesystem::remove(directory / L"results.json", ignored);
@@ -40,8 +40,8 @@ TEST_CASE("A successful diagnostic in an invalid environment is never an accepta
     monitor.adapterName = L"Remote 显示适配器";
     monitor.refreshHz = 32;
     environment.monitors.push_back(monitor);
-    const std::vector<vispick::SpikeResult> results{{"example", true,
-        {{"pixels", 11366400, "pixels"}, {"bytes", 1717873, "bytes"}}, {}}};
+    const std::vector<vispick::SpikeResult> results{
+        {"example", true, {{"pixels", 11366400, "pixels"}, {"bytes", 1717873, "bytes"}}, {}}};
     vispick::WriteReports(files.directory, results, environment);
     std::ifstream jsonFile(files.directory / L"results.json", std::ios::binary);
     std::ifstream markdownFile(files.directory / L"results.md", std::ios::binary);

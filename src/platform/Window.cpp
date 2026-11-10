@@ -10,7 +10,7 @@ namespace vispick {
 namespace {
 std::atomic<WindowExceptionCallback> exceptionCallback{nullptr};
 std::atomic<std::uint64_t> exceptionCount{0};
-}
+} // namespace
 
 Window::~Window() {
     // Derived destructors must destroy HWND before any message-visible state.
@@ -46,19 +46,18 @@ void Window::RegisterClass(const WindowClassOptions& options) {
     if (!RegisterClassExW(&windowClass)) { throw std::runtime_error("RegisterClassExW failed"); }
 }
 
-void Window::Create(const WindowClassOptions& windowClass, const wchar_t* title,
-                    const DWORD style, DWORD extendedStyle, const RECT& bounds,
-                    const WindowActivation activation, const HWND owner) {
-    if (window_) {
-        throw std::logic_error("Window already created");
-    }
+void Window::Create(const WindowClassOptions& windowClass, const wchar_t* title, const DWORD style, DWORD extendedStyle,
+                    const RECT& bounds, const WindowActivation activation, const HWND owner) {
+    if (window_) { throw std::logic_error("Window already created"); }
     RegisterClass(windowClass);
-    if (activation == WindowActivation::Passive) { extendedStyle |= WS_EX_NOACTIVATE; }
-    else { extendedStyle &= ~static_cast<DWORD>(WS_EX_NOACTIVATE); }
+    if (activation == WindowActivation::Passive) {
+        extendedStyle |= WS_EX_NOACTIVATE;
+    } else {
+        extendedStyle &= ~static_cast<DWORD>(WS_EX_NOACTIVATE);
+    }
     creatingThread_ = GetCurrentThreadId();
-    if (!CreateWindowExW(extendedStyle, windowClass.name, title, style,
-                         bounds.left, bounds.top, bounds.right - bounds.left,
-                         bounds.bottom - bounds.top, owner, nullptr,
+    if (!CreateWindowExW(extendedStyle, windowClass.name, title, style, bounds.left, bounds.top,
+                         bounds.right - bounds.left, bounds.bottom - bounds.top, owner, nullptr,
                          GetModuleHandleW(nullptr), this)) {
         throw std::runtime_error("CreateWindowExW failed");
     }
@@ -96,8 +95,7 @@ LRESULT Window::OnMessage(const UINT message, const WPARAM parameter, const LPAR
     return DefWindowProcW(window_, message, parameter, data);
 }
 
-LRESULT CALLBACK Window::Dispatch(const HWND window, const UINT message,
-                                  const WPARAM parameter, const LPARAM data) {
+LRESULT CALLBACK Window::Dispatch(const HWND window, const UINT message, const WPARAM parameter, const LPARAM data) {
     auto* instance = reinterpret_cast<Window*>(GetWindowLongPtrW(window, GWLP_USERDATA));
     if (message == WM_NCCREATE) {
         const auto* creation = reinterpret_cast<const CREATESTRUCTW*>(data);
@@ -105,19 +103,21 @@ LRESULT CALLBACK Window::Dispatch(const HWND window, const UINT message,
         instance->window_ = window;
         SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(instance));
     }
-    if (!instance) {
-        return DefWindowProcW(window, message, parameter, data);
-    }
+    if (!instance) { return DefWindowProcW(window, message, parameter, data); }
     // Window procedures cannot propagate C++ exceptions through Win32 callbacks.
     LRESULT result = 0;
     try {
         result = instance->OnMessage(message, parameter, data);
     } catch (const std::exception& error) {
         ReportException(window, message, error.what());
-        result = message == WM_NCCREATE ? FALSE : message == WM_CREATE ? -1 : DefWindowProcW(window, message, parameter, data);
+        result = message == WM_NCCREATE ? FALSE
+                 : message == WM_CREATE ? -1
+                                        : DefWindowProcW(window, message, parameter, data);
     } catch (...) {
         ReportException(window, message, "unknown C++ exception");
-        result = message == WM_NCCREATE ? FALSE : message == WM_CREATE ? -1 : DefWindowProcW(window, message, parameter, data);
+        result = message == WM_NCCREATE ? FALSE
+                 : message == WM_CREATE ? -1
+                                        : DefWindowProcW(window, message, parameter, data);
     }
     if (message == WM_NCDESTROY || (message == WM_NCCREATE && result == FALSE)) {
         SetWindowLongPtrW(window, GWLP_USERDATA, 0);

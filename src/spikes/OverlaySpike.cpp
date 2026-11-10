@@ -20,9 +20,8 @@ namespace {
 class OverlayWindow final : public Window {
 public:
     explicit OverlayWindow(const RECT bounds)
-        : client_{0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top},
-          frozen_(CaptureScreen(bounds)), masked_(client_.right, client_.bottom),
-          backBuffer_(client_.right, client_.bottom) {
+        : client_{0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top}, frozen_(CaptureScreen(bounds)),
+          masked_(client_.right, client_.bottom), backBuffer_(client_.right, client_.bottom) {
         const auto source = frozen_->Image().Pixels();
         auto destination = masked_.Pixels();
         for (std::size_t pixelIndex = 0; pixelIndex < source.size(); ++pixelIndex) {
@@ -67,20 +66,20 @@ protected:
         if (message != WM_PAINT) { return Window::OnMessage(message, parameter, data); }
         spikes::PaintScope paint(Handle());
         try {
-            if (damage_.empty()) { ComposeRegion(client_); }
-            else { for (const RECT& dirty : damage_) { ComposeRegion(dirty); } }
+            if (damage_.empty()) {
+                ComposeRegion(client_);
+            } else {
+                for (const RECT& dirty : damage_) { ComposeRegion(dirty); }
+            }
             const RECT dirty = paint.Bounds();
             // BeginPaint already clips this destination DC to the exact update
             // region (not merely rcPaint's bounding box). The interior is not
             // copied for disjoint dirty strips; no duplicate GetUpdateRgn needed.
-            if (!BitBlt(paint.Context(), dirty.left, dirty.top,
-                        dirty.right - dirty.left, dirty.bottom - dirty.top,
+            if (!BitBlt(paint.Context(), dirty.left, dirty.top, dirty.right - dirty.left, dirty.bottom - dirty.top,
                         backBuffer_.DeviceContext(), dirty.left, dirty.top, SRCCOPY)) {
                 paintSucceeded_ = false;
             }
-        } catch (...) {
-            paintSucceeded_ = false;
-        }
+        } catch (...) { paintSucceeded_ = false; }
         return 0;
     }
 
@@ -92,7 +91,10 @@ private:
 
     void AddDifference(const RECT source, const RECT removed) {
         RECT overlap{};
-        if (!IntersectRect(&overlap, &source, &removed)) { AddDamage(source); return; }
+        if (!IntersectRect(&overlap, &source, &removed)) {
+            AddDamage(source);
+            return;
+        }
         AddDamage({source.left, source.top, source.right, overlap.top});
         AddDamage({source.left, overlap.bottom, source.right, source.bottom});
         AddDamage({source.left, overlap.top, overlap.left, overlap.bottom});
@@ -138,8 +140,8 @@ private:
         FillRect(context, &label, brush);
         SetTextColor(context, RGB(255, 255, 255));
         SetBkMode(context, TRANSPARENT);
-        const std::wstring dimensions = std::to_wstring(selection_.right - selection_.left) +
-            L" x " + std::to_wstring(selection_.bottom - selection_.top);
+        const std::wstring dimensions = std::to_wstring(selection_.right - selection_.left) + L" x " +
+                                        std::to_wstring(selection_.bottom - selection_.top);
         DrawTextW(context, dimensions.c_str(), static_cast<int>(dimensions.size()), &label,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
@@ -198,8 +200,8 @@ SpikeResult RunOverlaySpike(const SpikeOptions& options) {
             peakPrivateCommit = std::max(peakPrivateCommit, spikes::ReadProcessMemory().privateCommitBytes);
         }
     }
-    const double average = std::accumulate(paintTimes.begin(), paintTimes.end(), 0.0) /
-                           static_cast<double>(paintTimes.size());
+    const double average =
+        std::accumulate(paintTimes.begin(), paintTimes.end(), 0.0) / static_cast<double>(paintTimes.size());
     const double maximum = *std::max_element(paintTimes.begin(), paintTimes.end());
     const bool paintSucceeded = overlay->PaintSucceeded();
     overlay.reset(); // Release the FrozenScreen and both other full-size DIBs before sampling.
@@ -210,7 +212,8 @@ SpikeResult RunOverlaySpike(const SpikeOptions& options) {
                             static_cast<std::int64_t>(memoryBefore.privateCommitBytes);
     const auto bufferBytes = static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) * 4U;
     constexpr std::uint64_t memoryToleranceBytes = 5U * 1024U * 1024U;
-    const bool memoryStable = std::abs(afterDelta) <= static_cast<std::int64_t>(memoryToleranceBytes) &&
+    const bool memoryStable =
+        std::abs(afterDelta) <= static_cast<std::int64_t>(memoryToleranceBytes) &&
         peakPrivateCommit - memoryBefore.privateCommitBytes <= 3U * bufferBytes + memoryToleranceBytes;
     result.passed = paintSucceeded && average <= 5.0 && maximum <= 16.0 && memoryStable;
     result.measurements = {
@@ -221,8 +224,8 @@ SpikeResult RunOverlaySpike(const SpikeOptions& options) {
         {"paint_and_gdi_flush_average", average, "ms"},
         {"paint_and_gdi_flush_p95", spikes::Percentile(paintTimes, 0.95), "ms"},
         {"paint_and_gdi_flush_max", maximum, "ms"},
-        {"gdi_flush_average", std::accumulate(flushTimes.begin(), flushTimes.end(), 0.0) /
-            static_cast<double>(flushTimes.size()), "ms"},
+        {"gdi_flush_average",
+         std::accumulate(flushTimes.begin(), flushTimes.end(), 0.0) / static_cast<double>(flushTimes.size()), "ms"},
         {"full_screen_buffer_count", 3, "buffers"},
         {"full_screen_buffer_bytes", static_cast<double>(bufferBytes), "bytes"},
         {"owned_image_bytes", static_cast<double>(3U * bufferBytes), "bytes"},
@@ -233,15 +236,23 @@ SpikeResult RunOverlaySpike(const SpikeOptions& options) {
         {"working_set_before", static_cast<double>(memoryBefore.workingSetBytes), "bytes"},
         {"working_set_after_close", static_cast<double>(memoryAfter.workingSetBytes), "bytes"},
         {"memory_stable", memoryStable ? 1.0 : 0.0, "boolean"},
-        {"physical_acceptance_eligible", environment.physicalAcceptanceEligible ? 1.0 : 0.0, "boolean"}
-    };
-    result.notes.emplace_back("Actual virtual-desktop window; first half moves a 640x360 selection, second half moves a selection spanning 75% of each canvas dimension. Symmetric-difference strips, borders and labels are redrawn.");
-    result.notes.emplace_back("Timers include synchronous WM_PAINT and GdiFlush; exclude DWM presentation/vsync. Frozen desktop pixels are never written to disk.");
-    result.notes.emplace_back("Exactly three owned full-screen images coexist: immutable shared FrozenScreen, precomputed mask, and back buffer. Capture writes directly into the retained frozen DIB. Private commit is sampled after initialization and every 100 frames; observed peak is not the OS lifetime peak. Close releases all three before the final memory sample; a 5 MiB allowance covers window/allocator bookkeeping.");
-    result.notes.emplace_back("BeginPaint already clips the destination to the precise update region; rcPaint is only its bounding rectangle. Back-buffer composition separately clips each dirty strip.");
+        {"physical_acceptance_eligible", environment.physicalAcceptanceEligible ? 1.0 : 0.0, "boolean"}};
+    result.notes.emplace_back(
+        "Actual virtual-desktop window; first half moves a 640x360 selection, second half moves a selection spanning "
+        "75% of each canvas dimension. Symmetric-difference strips, borders and labels are redrawn.");
+    result.notes.emplace_back("Timers include synchronous WM_PAINT and GdiFlush; exclude DWM presentation/vsync. "
+                              "Frozen desktop pixels are never written to disk.");
+    result.notes.emplace_back(
+        "Exactly three owned full-screen images coexist: immutable shared FrozenScreen, precomputed mask, and back "
+        "buffer. Capture writes directly into the retained frozen DIB. Private commit is sampled after initialization "
+        "and every 100 frames; observed peak is not the OS lifetime peak. Close releases all three before the final "
+        "memory sample; a 5 MiB allowance covers window/allocator bookkeeping.");
+    result.notes.emplace_back("BeginPaint already clips the destination to the precise update region; rcPaint is only "
+                              "its bounding rectangle. Back-buffer composition separately clips each dirty strip.");
     result.notes.insert(result.notes.end(), environment.invalidReasons.begin(), environment.invalidReasons.end());
     if (width != 7680 || height != 2160) {
-        result.notes.emplace_back("This machine's canvas differs from AC0-5's 7680x2160 target; this run is not evidence for that exact configuration.");
+        result.notes.emplace_back("This machine's canvas differs from AC0-5's 7680x2160 target; this run is not "
+                                  "evidence for that exact configuration.");
     }
     return result;
 }

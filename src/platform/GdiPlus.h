@@ -4,7 +4,7 @@
 #include <objidl.h>
 // SDK 10.0.22621's FontCollection wrappers contain bounds/SAL defects.
 #pragma warning(push)
-#pragma warning(disable: 6385 28252 28253)
+#pragma warning(disable : 6385 28252 28253)
 #include <gdiplus.h>
 #pragma warning(pop)
 
@@ -19,8 +19,11 @@ namespace vispick {
             const Gdiplus::GdiplusStartupInput input;
             available_ = Gdiplus::GdiplusStartup(&token_, &input, nullptr) == Gdiplus::Ok;
         }
-        ~Lifetime() { if (available_) { Gdiplus::GdiplusShutdown(token_); } }
+        ~Lifetime() {
+            if (available_) { Gdiplus::GdiplusShutdown(token_); }
+        }
         [[nodiscard]] bool Available() const noexcept { return available_; }
+
     private:
         ULONG_PTR token_ = 0;
         bool available_ = false;

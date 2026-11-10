@@ -45,25 +45,30 @@ ScreenDc::ScreenDc(HWND window) : window_(window), deviceContext_(GetDC(window))
     if (deviceContext_ == nullptr) { ThrowWin32("GetDC"); }
 }
 
-ScreenDc::~ScreenDc() { ReleaseDC(window_, deviceContext_); }
+ScreenDc::~ScreenDc() {
+    ReleaseDC(window_, deviceContext_);
+}
 
 MemoryDc::MemoryDc(HDC compatibleWith) : deviceContext_(CreateCompatibleDC(compatibleWith)) {
     if (deviceContext_ == nullptr) { ThrowWin32("CreateCompatibleDC"); }
 }
 
-MemoryDc::~MemoryDc() { DeleteDC(deviceContext_); }
+MemoryDc::~MemoryDc() {
+    DeleteDC(deviceContext_);
+}
 
 SelectObjectGuard::SelectObjectGuard(HDC deviceContext, HGDIOBJ object)
     : deviceContext_(deviceContext), previousObject_(SelectObject(deviceContext, object)) {
     if (previousObject_ == nullptr || previousObject_ == HGDI_ERROR) { ThrowWin32("SelectObject"); }
 }
 
-SelectObjectGuard::~SelectObjectGuard() { SelectObject(deviceContext_, previousObject_); }
+SelectObjectGuard::~SelectObjectGuard() {
+    SelectObject(deviceContext_, previousObject_);
+}
 
 DibSection::DibSection(int width, int height)
     : width_(ValidateDimension(width)), height_(ValidateDimension(height)),
-      bitmap_(CreateBitmap(width_, height_, pixels_)),
-      selectedBitmap_(deviceContext_.Get(), bitmap_.Get()) {}
+      bitmap_(CreateBitmap(width_, height_, pixels_)), selectedBitmap_(deviceContext_.Get(), bitmap_.Get()) {}
 
 std::span<std::uint32_t> DibSection::Pixels() noexcept {
     return {pixels_, static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_)};

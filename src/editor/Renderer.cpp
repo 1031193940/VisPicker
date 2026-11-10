@@ -11,7 +11,9 @@ namespace vispick {
 namespace {
 
 void CheckGdiPlus(Gdiplus::Status status) {
-    if (status != Gdiplus::Ok) { throw std::runtime_error("GDI+ annotation operation failed: " + std::to_string(status)); }
+    if (status != Gdiplus::Ok) {
+        throw std::runtime_error("GDI+ annotation operation failed: " + std::to_string(status));
+    }
 }
 
 class SavedDc {
@@ -22,6 +24,7 @@ public:
     ~SavedDc() { RestoreDC(deviceContext_, saved_); }
     SavedDc(const SavedDc&) = delete;
     SavedDc& operator=(const SavedDc&) = delete;
+
 private:
     HDC deviceContext_;
     int saved_;
@@ -36,7 +39,7 @@ Gdiplus::Color ShapeColor(std::uint32_t color) {
 }
 
 void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annotation& annotation,
-    std::vector<Gdiplus::PointF>& curvePoints) {
+                    std::vector<Gdiplus::PointF>& curvePoints) {
     RECT intersection{};
     if (!IntersectRect(&intersection, &screenClip, &annotation.bounds)) { return; }
     const SavedDc saved(destination);
@@ -52,8 +55,10 @@ void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annota
         information.bmiHeader.biBitCount = 32;
         information.bmiHeader.biCompression = BI_RGB;
         if (StretchDIBits(destination, annotation.bounds.left - origin.x, annotation.bounds.top - origin.y,
-            bitmap.Width(), bitmap.Height(), 0, 0, bitmap.Width(), bitmap.Height(), bitmap.Pixels().data(),
-            &information, DIB_RGB_COLORS, SRCCOPY) == GDI_ERROR) { throw std::runtime_error("Mosaic blit failed"); }
+                          bitmap.Width(), bitmap.Height(), 0, 0, bitmap.Width(), bitmap.Height(),
+                          bitmap.Pixels().data(), &information, DIB_RGB_COLORS, SRCCOPY) == GDI_ERROR) {
+            throw std::runtime_error("Mosaic blit failed");
+        }
         return;
     }
     if (annotation.tool == AnnotationTool::Text) {
@@ -62,18 +67,21 @@ void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annota
         const SelectObjectGuard selected(destination, font.Get());
         SetBkMode(destination, TRANSPARENT);
         SetTextAlign(destination, TA_LEFT | TA_TOP | TA_NOUPDATECP);
-        SetTextColor(destination, RGB((annotation.color >> 16) & 0xFF, (annotation.color >> 8) & 0xFF, annotation.color & 0xFF));
+        SetTextColor(destination,
+                     RGB((annotation.color >> 16) & 0xFF, (annotation.color >> 8) & 0xFF, annotation.color & 0xFF));
         TEXTMETRICW metrics{};
         if (!GetTextMetricsW(destination, &metrics)) { throw std::runtime_error("Text annotation metrics failed"); }
         const int tabWidth = std::max(1L, metrics.tmAveCharWidth * 8);
         const int textOrigin = annotation.bounds.left - origin.x;
         for (const auto& line : annotation.textLines) {
-            if (line.text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) { throw std::length_error("Text annotation line too long"); }
+            if (line.text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+                throw std::length_error("Text annotation line too long");
+            }
             if (!line.text.empty()) {
                 const int textTop = annotation.bounds.top - origin.y + line.offset.y;
                 if (line.tabOffsets.empty()) {
-                    TabbedTextOutW(destination, textOrigin + line.offset.x, textTop,
-                        line.text.c_str(), static_cast<int>(line.text.size()), 1, &tabWidth, textOrigin);
+                    TabbedTextOutW(destination, textOrigin + line.offset.x, textTop, line.text.c_str(),
+                                   static_cast<int>(line.text.size()), 1, &tabWidth, textOrigin);
                 } else {
                     std::size_t begin = 0;
                     std::size_t tab = 0;
@@ -81,9 +89,14 @@ void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annota
                     while (begin < line.text.size()) {
                         const auto end = line.text.find(L'\t', begin);
                         const auto length = (end == std::wstring::npos ? line.text.size() : end) - begin;
-                        if (length != 0) { TextOutW(destination, textOrigin + horizontal, textTop, line.text.data() + begin, static_cast<int>(length)); }
+                        if (length != 0) {
+                            TextOutW(destination, textOrigin + horizontal, textTop, line.text.data() + begin,
+                                     static_cast<int>(length));
+                        }
                         if (end == std::wstring::npos) { break; }
-                        if (tab >= line.tabOffsets.size()) { throw std::invalid_argument("Missing native text tab position"); }
+                        if (tab >= line.tabOffsets.size()) {
+                            throw std::invalid_argument("Missing native text tab position");
+                        }
                         horizontal = line.tabOffsets[tab++];
                         begin = end + 1;
                     }
@@ -108,7 +121,8 @@ void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annota
     };
     const auto start = convert(annotation.points.front());
     const auto end = convert(annotation.points.back());
-    const Gdiplus::RectF rectangle(std::min(start.X, end.X), std::min(start.Y, end.Y), std::abs(end.X - start.X), std::abs(end.Y - start.Y));
+    const Gdiplus::RectF rectangle(std::min(start.X, end.X), std::min(start.Y, end.Y), std::abs(end.X - start.X),
+                                   std::abs(end.Y - start.Y));
     if (annotation.tool == AnnotationTool::Rectangle || annotation.tool == AnnotationTool::Mosaic) {
         CheckGdiPlus(graphics.DrawRectangle(&pen, rectangle));
     } else if (annotation.tool == AnnotationTool::Ellipse) {
@@ -122,7 +136,8 @@ void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annota
         const float directionX = horizontal / length;
         const float directionY = vertical / length;
         const Gdiplus::PointF base(end.X - directionX * headLength, end.Y - directionY * headLength);
-        const Gdiplus::PointF corners[]{end,
+        const Gdiplus::PointF corners[]{
+            end,
             {base.X - directionY * headLength * 0.5F, base.Y + directionX * headLength * 0.5F},
             {base.X + directionY * headLength * 0.5F, base.Y - directionX * headLength * 0.5F}};
         CheckGdiPlus(graphics.DrawLine(&pen, start, base));
@@ -133,8 +148,9 @@ void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annota
             const float size = static_cast<float>(annotation.strokePixels);
             Gdiplus::SolidBrush brush(ShapeColor(annotation.color));
             CheckGdiPlus(graphics.FillEllipse(&brush, start.X - size * 0.5F, start.Y - size * 0.5F, size, size));
-        } else if (annotation.points.size() == 2) { CheckGdiPlus(graphics.DrawLine(&pen, start, end)); }
-        else {
+        } else if (annotation.points.size() == 2) {
+            CheckGdiPlus(graphics.DrawLine(&pen, start, end));
+        } else {
             curvePoints.clear();
             if (annotation.points.size() > static_cast<std::size_t>((std::numeric_limits<int>::max() - 1) / 3)) {
                 throw std::length_error("Annotation curve too long");
@@ -148,15 +164,20 @@ void DrawAnnotation(HDC destination, POINT origin, RECT screenClip, const Annota
                 const auto control = convert(annotation.points[index]);
                 const auto next = convert(annotation.points[index + 1]);
                 const Gdiplus::PointF middle((control.X + next.X) * 0.5F, (control.Y + next.Y) * 0.5F);
-                curvePoints.push_back({previous.X + (control.X - previous.X) * (2.0F / 3.0F), previous.Y + (control.Y - previous.Y) * (2.0F / 3.0F)});
-                curvePoints.push_back({middle.X + (control.X - middle.X) * (2.0F / 3.0F), middle.Y + (control.Y - middle.Y) * (2.0F / 3.0F)});
+                curvePoints.push_back({previous.X + (control.X - previous.X) * (2.0F / 3.0F),
+                                       previous.Y + (control.Y - previous.Y) * (2.0F / 3.0F)});
+                curvePoints.push_back({middle.X + (control.X - middle.X) * (2.0F / 3.0F),
+                                       middle.Y + (control.Y - middle.Y) * (2.0F / 3.0F)});
                 curvePoints.push_back(middle);
                 previous = middle;
             }
             curvePoints.push_back({previous.X + (end.X - previous.X) / 3.0F, previous.Y + (end.Y - previous.Y) / 3.0F});
-            curvePoints.push_back({previous.X + (end.X - previous.X) * (2.0F / 3.0F), previous.Y + (end.Y - previous.Y) * (2.0F / 3.0F)});
+            curvePoints.push_back(
+                {previous.X + (end.X - previous.X) * (2.0F / 3.0F), previous.Y + (end.Y - previous.Y) * (2.0F / 3.0F)});
             curvePoints.push_back(end);
-            if (curvePoints.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) { throw std::length_error("Annotation curve too long"); }
+            if (curvePoints.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+                throw std::length_error("Annotation curve too long");
+            }
             CheckGdiPlus(graphics.DrawBeziers(&pen, curvePoints.data(), static_cast<int>(curvePoints.size())));
         }
     }
@@ -169,14 +190,17 @@ struct EditorRenderer::State {
     void EnsureCache() {
         if (revision == model.Revision()) { return; }
         RECT annotationRegion{};
-        for (const auto& annotation : model.Committed()) { UnionRect(&annotationRegion, &annotationRegion, &annotation.bounds); }
+        for (const auto& annotation : model.Committed()) {
+            UnionRect(&annotationRegion, &annotationRegion, &annotation.bounds);
+        }
         const auto desktop = model.DesktopBounds();
         IntersectRect(&cacheBounds, &annotationRegion, &desktop);
         const int width = cacheBounds.right - cacheBounds.left;
         const int height = cacheBounds.bottom - cacheBounds.top;
         if (cache) { GdiFlush(); } // Complete prior GDI reads before CPU overwrites the cache.
         constexpr std::uint64_t maximumCacheBytes = 16ULL * 1024 * 1024;
-        if (width <= 0 || height <= 0 || static_cast<std::uint64_t>(width) * height * sizeof(std::uint32_t) > maximumCacheBytes) {
+        if (width <= 0 || height <= 0 ||
+            static_cast<std::uint64_t>(width) * height * sizeof(std::uint32_t) > maximumCacheBytes) {
             cache.reset();
             revision = model.Revision();
             return;
@@ -193,7 +217,8 @@ struct EditorRenderer::State {
             std::transform(source, source + width, target, [](std::uint32_t pixel) { return pixel | 0xFF000000U; });
         }
         for (const auto& annotation : model.Committed()) {
-            DrawAnnotation(cache->DeviceContext(), {cacheBounds.left, cacheBounds.top}, cacheBounds, annotation, curvePoints);
+            DrawAnnotation(cache->DeviceContext(), {cacheBounds.left, cacheBounds.top}, cacheBounds, annotation,
+                           curvePoints);
         }
         GdiFlush();
         // GDI text does not preserve the DIB alpha byte. This combined cache is explicitly
@@ -229,16 +254,19 @@ void EditorRenderer::Draw(HDC destination, POINT destinationScreenOrigin, RECT s
         information.bmiHeader.biPlanes = 1;
         information.bmiHeader.biBitCount = 32;
         information.bmiHeader.biCompression = BI_RGB;
-        if (StretchDIBits(destination, clipped.left - destinationScreenOrigin.x, clipped.top - destinationScreenOrigin.y,
-            clipped.right - clipped.left, clipped.bottom - clipped.top, clipped.left - desktop.left,
-            frozen.Height() - (clipped.bottom - desktop.top),
-            clipped.right - clipped.left, clipped.bottom - clipped.top, frozen.Pixels().data(), &information,
-            DIB_RGB_COLORS, SRCCOPY) == GDI_ERROR) { throw std::runtime_error("Frozen editor source blit failed"); }
+        if (StretchDIBits(destination, clipped.left - destinationScreenOrigin.x,
+                          clipped.top - destinationScreenOrigin.y, clipped.right - clipped.left,
+                          clipped.bottom - clipped.top, clipped.left - desktop.left,
+                          frozen.Height() - (clipped.bottom - desktop.top), clipped.right - clipped.left,
+                          clipped.bottom - clipped.top, frozen.Pixels().data(), &information, DIB_RGB_COLORS,
+                          SRCCOPY) == GDI_ERROR) {
+            throw std::runtime_error("Frozen editor source blit failed");
+        }
     }
     if (hasCachedPixels) {
         if (!BitBlt(destination, cached.left - destinationScreenOrigin.x, cached.top - destinationScreenOrigin.y,
-            cached.right - cached.left, cached.bottom - cached.top, state_->cache->DeviceContext(),
-            cached.left - state_->cacheBounds.left, cached.top - state_->cacheBounds.top, SRCCOPY)) {
+                    cached.right - cached.left, cached.bottom - cached.top, state_->cache->DeviceContext(),
+                    cached.left - state_->cacheBounds.left, cached.top - state_->cacheBounds.top, SRCCOPY)) {
             throw std::runtime_error("Annotation cache blit failed");
         }
     } else if (!state_->cache) {
@@ -254,17 +282,21 @@ void EditorRenderer::Draw(HDC destination, POINT destinationScreenOrigin, RECT s
 Bitmap EditorRenderer::Flatten(RECT screenSelection) {
     RECT clipped{};
     const auto desktop = state_->model.DesktopBounds();
-    if (!IntersectRect(&clipped, &screenSelection, &desktop)) { throw std::invalid_argument("Empty annotation output selection"); }
+    if (!IntersectRect(&clipped, &screenSelection, &desktop)) {
+        throw std::invalid_argument("Empty annotation output selection");
+    }
     state_->EnsureCache();
     Bitmap output = state_->model.Frozen().CropOpaque(clipped.left - desktop.left, clipped.top - desktop.top,
-        clipped.right - clipped.left, clipped.bottom - clipped.top);
+                                                      clipped.right - clipped.left, clipped.bottom - clipped.top);
     if (state_->cache) {
         RECT overlap{};
         if (IntersectRect(&overlap, &clipped, &state_->cacheBounds)) {
             const BitmapView view(state_->cache->Width(), state_->cache->Height(), state_->cache->Pixels());
             for (LONG row = overlap.top; row < overlap.bottom; ++row) {
-                const auto* source = view.Row(row - state_->cacheBounds.top) + (overlap.left - state_->cacheBounds.left);
-                std::copy_n(source, overlap.right - overlap.left, output.Row(row - clipped.top) + (overlap.left - clipped.left));
+                const auto* source =
+                    view.Row(row - state_->cacheBounds.top) + (overlap.left - state_->cacheBounds.left);
+                std::copy_n(source, overlap.right - overlap.left,
+                            output.Row(row - clipped.top) + (overlap.left - clipped.left));
             }
         }
     } else if (state_->model.HasAnnotations()) {
@@ -275,18 +307,22 @@ Bitmap EditorRenderer::Flatten(RECT screenSelection) {
         const BitmapView view(tile.Width(), tile.Height(), tile.Pixels());
         for (LONG top = clipped.top; top < clipped.bottom; top += tile.Height()) {
             for (LONG left = clipped.left; left < clipped.right; left += tile.Width()) {
-                const RECT tileClip{left, top, std::min(clipped.right, left + tile.Width()), std::min(clipped.bottom, top + tile.Height())};
+                const RECT tileClip{left, top, std::min(clipped.right, left + tile.Width()),
+                                    std::min(clipped.bottom, top + tile.Height())};
                 const auto annotations = state_->model.Committed();
                 if (!std::any_of(annotations.begin(), annotations.end(), [&](const Annotation& annotation) {
-                    RECT overlap{};
-                    return IntersectRect(&overlap, &tileClip, &annotation.bounds) != FALSE;
-                })) { continue; }
+                        RECT overlap{};
+                        return IntersectRect(&overlap, &tileClip, &annotation.bounds) != FALSE;
+                    })) {
+                    continue;
+                }
                 Draw(tile.DeviceContext(), {left, top}, tileClip, false);
                 if (!GdiFlush()) { throw std::runtime_error("Flush annotation export tile failed"); }
                 for (LONG row = top; row < tileClip.bottom; ++row) {
                     const auto* source = view.Row(row - top);
-                    std::transform(source, source + (tileClip.right - left), output.Row(row - clipped.top) + (left - clipped.left),
-                        [](std::uint32_t pixel) { return pixel | 0xFF000000U; });
+                    std::transform(source, source + (tileClip.right - left),
+                                   output.Row(row - clipped.top) + (left - clipped.left),
+                                   [](std::uint32_t pixel) { return pixel | 0xFF000000U; });
                 }
             }
         }
@@ -294,6 +330,8 @@ Bitmap EditorRenderer::Flatten(RECT screenSelection) {
     return output;
 }
 
-std::uint64_t EditorRenderer::CacheBuildCount() const noexcept { return state_->buildCount; }
+std::uint64_t EditorRenderer::CacheBuildCount() const noexcept {
+    return state_->buildCount;
+}
 
 } // namespace vispick

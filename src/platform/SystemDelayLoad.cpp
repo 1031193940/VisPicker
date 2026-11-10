@@ -7,10 +7,15 @@ namespace {
 FARPROC WINAPI LoadSystemDependency(unsigned notification, PDelayLoadInfo information) noexcept {
     if (notification != dliNotePreLoadLibrary) { return nullptr; }
     const wchar_t* filename = nullptr;
-    if (_stricmp(information->szDll, "dwmapi.dll") == 0) { filename = L"\\dwmapi.dll"; }
-    else if (_stricmp(information->szDll, "gdiplus.dll") == 0) { filename = L"\\gdiplus.dll"; }
-    else if (_stricmp(information->szDll, "winmm.dll") == 0) { filename = L"\\winmm.dll"; }
-    else if (_stricmp(information->szDll, "wtsapi32.dll") == 0) { filename = L"\\wtsapi32.dll"; }
+    if (_stricmp(information->szDll, "dwmapi.dll") == 0) {
+        filename = L"\\dwmapi.dll";
+    } else if (_stricmp(information->szDll, "gdiplus.dll") == 0) {
+        filename = L"\\gdiplus.dll";
+    } else if (_stricmp(information->szDll, "winmm.dll") == 0) {
+        filename = L"\\winmm.dll";
+    } else if (_stricmp(information->szDll, "wtsapi32.dll") == 0) {
+        filename = L"\\wtsapi32.dll";
+    }
     wchar_t path[MAX_PATH]{};
     const UINT length = GetSystemDirectoryW(path, ARRAYSIZE(path));
     if (filename && length && length < ARRAYSIZE(path) && SUCCEEDED(StringCchCatW(path, ARRAYSIZE(path), filename))) {
@@ -31,6 +36,6 @@ FARPROC WINAPI LoadSystemDependency(unsigned notification, PDelayLoadInfo inform
     RaiseException(VcppException(ERROR_SEVERITY_ERROR, ERROR_MOD_NOT_FOUND), EXCEPTION_NONCONTINUABLE, 0, nullptr);
     return nullptr;
 }
-}
+} // namespace
 
 extern "C" const PfnDliHook __pfnDliNotifyHook2 = LoadSystemDependency;

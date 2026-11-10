@@ -17,4 +17,3 @@ struct CommandLine {
 [[nodiscard]] std::wstring CommandLineHelp();
 
 } // namespace vispick
-

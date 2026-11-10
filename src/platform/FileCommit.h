@@ -17,11 +17,12 @@ namespace vispick {
     auto absolute = std::filesystem::absolute(path).lexically_normal();
     absolute.make_preferred();
     const auto& name = absolute.native();
-    return name.starts_with(L"\\\\") ? std::filesystem::path(L"\\\\?\\UNC\\" + name.substr(2)) :
-        std::filesystem::path(L"\\\\?\\" + name);
+    return name.starts_with(L"\\\\") ? std::filesystem::path(L"\\\\?\\UNC\\" + name.substr(2))
+                                     : std::filesystem::path(L"\\\\?\\" + name);
 }
 
-[[nodiscard]] inline std::filesystem::path UniqueSiblingPath(const std::filesystem::path& destination, const wchar_t* extension) {
+[[nodiscard]] inline std::filesystem::path UniqueSiblingPath(const std::filesystem::path& destination,
+                                                             const wchar_t* extension) {
     GUID identity{};
     if (FAILED(CoCreateGuid(&identity))) { throw std::runtime_error("Create a unique output filename failed"); }
     constexpr wchar_t digits[] = L"0123456789abcdef";
@@ -56,9 +57,12 @@ inline void CommitStagedFile(const std::filesystem::path& staging, const std::fi
     }
     if (attributes & FILE_ATTRIBUTE_READONLY) { throw std::runtime_error("Cannot replace a read-only output file"); }
 
-    constexpr DWORD retainedAttributes = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
-    if ((attributes & retainedAttributes) && !SetFileAttributesW(source.c_str(), FILE_ATTRIBUTE_ARCHIVE | (attributes & retainedAttributes))) {
-        throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Preserve output file attributes");
+    constexpr DWORD retainedAttributes =
+        FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
+    if ((attributes & retainedAttributes) &&
+        !SetFileAttributesW(source.c_str(), FILE_ATTRIBUTE_ARCHIVE | (attributes & retainedAttributes))) {
+        throw std::system_error(static_cast<int>(GetLastError()), std::system_category(),
+                                "Preserve output file attributes");
     }
 
     // ReplaceFile merges DACLs and named streams. Its documented partial-failure
@@ -72,8 +76,9 @@ inline void CommitStagedFile(const std::filesystem::path& staging, const std::fi
     if (GetFileAttributesW(backup.c_str()) != INVALID_FILE_ATTRIBUTES &&
         !MoveFileExW(backup.c_str(), target.c_str(), MOVEFILE_WRITE_THROUGH)) {
         const auto name = backup.u8string();
-        throw std::system_error(static_cast<int>(error), std::system_category(), "Replace output; original retained at " +
-            std::string(reinterpret_cast<const char*>(name.data()), name.size()));
+        throw std::system_error(static_cast<int>(error), std::system_category(),
+                                "Replace output; original retained at " +
+                                    std::string(reinterpret_cast<const char*>(name.data()), name.size()));
     }
     throw std::system_error(static_cast<int>(error), std::system_category(), "Replace output file");
 }

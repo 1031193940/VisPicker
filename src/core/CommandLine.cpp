@@ -16,9 +16,7 @@ int ParsePositiveInteger(std::wstring_view value, int upperBound) {
             throw std::invalid_argument("Expected an unsigned decimal integer.");
         }
         const int digit = character - L'0';
-        if (result > (upperBound - digit) / 10) {
-            throw std::invalid_argument("Integer argument is out of range.");
-        }
+        if (result > (upperBound - digit) / 10) { throw std::invalid_argument("Integer argument is out of range."); }
         result = result * 10 + digit;
         if (result > upperBound) { throw std::invalid_argument("Integer argument is out of range."); }
     }
@@ -40,7 +38,9 @@ CommandLine ParseCommandLine(std::span<const std::wstring> arguments) {
             if (++argumentIndex == arguments.size()) { throw std::invalid_argument("Missing option value."); }
             const auto& value = arguments[argumentIndex];
             if (argument == L"--output") {
-                if (hasOutput || value.empty() || value.starts_with(L"--")) { throw std::invalid_argument("Invalid or duplicate output directory."); }
+                if (hasOutput || value.empty() || value.starts_with(L"--")) {
+                    throw std::invalid_argument("Invalid or duplicate output directory.");
+                }
                 result.options.outputDirectory = value;
                 hasOutput = true;
             } else if (argument == L"--iterations") {
@@ -55,16 +55,27 @@ CommandLine ParseCommandLine(std::span<const std::wstring> arguments) {
             continue;
         }
         if (hasCommand) { throw std::invalid_argument("Specify exactly one spike command."); }
-        if (argument == L"--help" || argument == L"-h") { result.command = SpikeCommand::Help; }
-        else if (argument == L"--spike-capture") { result.command = SpikeCommand::Capture; }
-        else if (argument == L"--spike-overlay") { result.command = SpikeCommand::Overlay; }
-        else if (argument == L"--spike-pin") { result.command = SpikeCommand::Pin; }
-        else if (argument == L"--spike-gif") { result.command = SpikeCommand::Gif; }
-        else if (argument == L"--spike-gif-pipeline") { result.command = SpikeCommand::GifPipeline; }
-        else if (argument == L"--spike-quantizer") { result.command = SpikeCommand::Quantizer; }
-        else if (argument == L"--all" || argument == L"--spike-all") { result.command = SpikeCommand::All; }
-        else if (argument == L"--desktop-tests") { result.command = SpikeCommand::Desktop; }
-        else { throw std::invalid_argument("Unknown command-line option. Use --help."); }
+        if (argument == L"--help" || argument == L"-h") {
+            result.command = SpikeCommand::Help;
+        } else if (argument == L"--spike-capture") {
+            result.command = SpikeCommand::Capture;
+        } else if (argument == L"--spike-overlay") {
+            result.command = SpikeCommand::Overlay;
+        } else if (argument == L"--spike-pin") {
+            result.command = SpikeCommand::Pin;
+        } else if (argument == L"--spike-gif") {
+            result.command = SpikeCommand::Gif;
+        } else if (argument == L"--spike-gif-pipeline") {
+            result.command = SpikeCommand::GifPipeline;
+        } else if (argument == L"--spike-quantizer") {
+            result.command = SpikeCommand::Quantizer;
+        } else if (argument == L"--all" || argument == L"--spike-all") {
+            result.command = SpikeCommand::All;
+        } else if (argument == L"--desktop-tests") {
+            result.command = SpikeCommand::Desktop;
+        } else {
+            throw std::invalid_argument("Unknown command-line option. Use --help.");
+        }
         hasCommand = true;
     }
     if (!hasCommand && (hasOutput || hasIterations || hasSeconds)) {
@@ -91,4 +102,3 @@ std::wstring CommandLineHelp() {
 }
 
 } // namespace vispick
-

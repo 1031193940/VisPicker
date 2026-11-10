@@ -7,9 +7,10 @@
 namespace {
 constexpr RECT Desktop{-1920, -1080, 2560, 1440};
 bool Same(const RECT first, const RECT second) {
-    return first.left == second.left && first.top == second.top && first.right == second.right && first.bottom == second.bottom;
+    return first.left == second.left && first.top == second.top && first.right == second.right &&
+           first.bottom == second.bottom;
 }
-}
+} // namespace
 
 TEST_CASE("Selection normalizes reversed drags across negative screen origins") {
     CHECK(Same(vispick::NormalizeSelection({200, 300}, {-300, -400}, Desktop), {-300, -400, 200, 300}));
@@ -27,25 +28,34 @@ TEST_CASE("Selection move clamps translation without shrinking the rectangle") {
 
 TEST_CASE("Selection eight handles resize their intended edges") {
     constexpr RECT selected{-100, -100, 100, 100};
-    const std::array<RECT, 8> expected{{{-150, -160, 100, 100}, {-100, -160, 100, 100},
-        {-100, -160, 1, 100}, {-100, -100, 1, 100}, {-100, -100, 1, 1},
-        {-100, -100, 100, 1}, {-150, -100, 100, 1}, {-150, -100, 100, 100}}};
+    const std::array<RECT, 8> expected{{{-150, -160, 100, 100},
+                                        {-100, -160, 100, 100},
+                                        {-100, -160, 1, 100},
+                                        {-100, -100, 1, 100},
+                                        {-100, -100, 1, 1},
+                                        {-100, -100, 100, 1},
+                                        {-150, -100, 100, 1},
+                                        {-150, -100, 100, 100}}};
     // A common point lets each test assert which axes are held fixed. Right and
     // bottom handles use the separate point (1,1) to retain positive extent.
     for (unsigned index = 0; index < 8; ++index) {
-        const auto handle = static_cast<vispick::SelectionHandle>(static_cast<unsigned>(vispick::SelectionHandle::TopLeft) + index);
-        const POINT point{index == 0 || index == 6 || index == 7 ? -150L : 1L,
-            index <= 2 ? -160L : 1L};
+        const auto handle =
+            static_cast<vispick::SelectionHandle>(static_cast<unsigned>(vispick::SelectionHandle::TopLeft) + index);
+        const POINT point{index == 0 || index == 6 || index == 7 ? -150L : 1L, index <= 2 ? -160L : 1L};
         CHECK(Same(vispick::ResizeSelection(selected, handle, point, Desktop), expected[index]));
     }
 }
 
 TEST_CASE("Selection resize clamps to desktop and does not invert at opposing edge") {
     constexpr RECT selected{-100, -100, 100, 100};
-    CHECK(Same(vispick::ResizeSelection(selected, vispick::SelectionHandle::TopLeft, {-9999, -9999}, Desktop), {-1920, -1080, 100, 100}));
-    CHECK(Same(vispick::ResizeSelection(selected, vispick::SelectionHandle::BottomRight, {9999, 9999}, Desktop), {-100, -100, 2560, 1440}));
-    CHECK(Same(vispick::ResizeSelection(selected, vispick::SelectionHandle::TopLeft, {9999, 9999}, Desktop), {99, 99, 100, 100}));
-    CHECK(Same(vispick::ResizeSelection(selected, vispick::SelectionHandle::BottomRight, {-9999, -9999}, Desktop), {-100, -100, -99, -99}));
+    CHECK(Same(vispick::ResizeSelection(selected, vispick::SelectionHandle::TopLeft, {-9999, -9999}, Desktop),
+               {-1920, -1080, 100, 100}));
+    CHECK(Same(vispick::ResizeSelection(selected, vispick::SelectionHandle::BottomRight, {9999, 9999}, Desktop),
+               {-100, -100, 2560, 1440}));
+    CHECK(Same(vispick::ResizeSelection(selected, vispick::SelectionHandle::TopLeft, {9999, 9999}, Desktop),
+               {99, 99, 100, 100}));
+    CHECK(Same(vispick::ResizeSelection(selected, vispick::SelectionHandle::BottomRight, {-9999, -9999}, Desktop),
+               {-100, -100, -99, -99}));
 }
 
 TEST_CASE("Selection handle hit test prioritizes handles over movement and outside") {
@@ -53,7 +63,7 @@ TEST_CASE("Selection handle hit test prioritizes handles over movement and outsi
     const auto points = vispick::SelectionHandles(selected);
     for (unsigned index = 0; index < points.size(); ++index) {
         CHECK(vispick::HitSelection(selected, points[index], 4) ==
-            static_cast<vispick::SelectionHandle>(static_cast<unsigned>(vispick::SelectionHandle::TopLeft) + index));
+              static_cast<vispick::SelectionHandle>(static_cast<unsigned>(vispick::SelectionHandle::TopLeft) + index));
     }
     CHECK(vispick::HitSelection(selected, {0, 0}, 4) == vispick::SelectionHandle::Move);
     CHECK(vispick::HitSelection(selected, {200, 200}, 4) == vispick::SelectionHandle::None);

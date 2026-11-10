@@ -30,8 +30,13 @@ public:
     std::vector<HotkeyFailure> Rebind(std::span<const HotkeyBinding> bindings);
     [[nodiscard]] AppCommand CommandFor(int identifier) const noexcept;
     void Clear() noexcept;
+
 private:
-    struct Registered { int identifier; AppCommand command; Hotkey hotkey; };
+    struct Registered {
+        int identifier;
+        AppCommand command;
+        Hotkey hotkey;
+    };
     HWND window_;
     std::vector<Registered> registered_;
 };

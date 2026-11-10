@@ -53,6 +53,7 @@ public:
     void Pause(bool paused) noexcept;
     [[nodiscard]] bool Finished() const noexcept;
     [[nodiscard]] std::optional<RecordingResult> TakeResult();
+
 private:
     struct Implementation;
     std::unique_ptr<Implementation> implementation_;

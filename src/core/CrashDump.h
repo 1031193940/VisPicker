@@ -24,6 +24,7 @@ public:
     [[nodiscard]] CrashDumpStatus Install(std::span<const std::filesystem::path> directories = {}) noexcept;
     void Uninstall() noexcept;
     [[nodiscard]] CrashDumpStatus Status() const noexcept { return status_; }
+
 private:
     CrashDumpStatus status_;
 };

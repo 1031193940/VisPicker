@@ -66,11 +66,8 @@ Moments Volume(const std::vector<Moments>& integral, const Box& box) {
 }
 
 double MeanSquared(const Moments& moments) {
-    if (moments.count == 0) {
-        return 0;
-    }
-    return (moments.red * moments.red + moments.green * moments.green +
-            moments.blue * moments.blue) / moments.count;
+    if (moments.count == 0) { return 0; }
+    return (moments.red * moments.red + moments.green * moments.green + moments.blue * moments.blue) / moments.count;
 }
 
 double Variance(const std::vector<Moments>& integral, const Box& box) {
@@ -84,17 +81,14 @@ bool Split(const std::vector<Moments>& integral, Box& first, Box& second) {
     int bestPosition = 0;
     for (int axis = 0; axis < 3; ++axis) {
         const auto coordinate = static_cast<std::size_t>(axis);
-        for (int position = first.lower[coordinate] + 1;
-             position < first.upper[coordinate]; ++position) {
+        for (int position = first.lower[coordinate] + 1; position < first.upper[coordinate]; ++position) {
             Box left = first;
             Box right = first;
             left.upper[coordinate] = position;
             right.lower[coordinate] = position;
             const auto leftMoments = Volume(integral, left);
             const auto rightMoments = Volume(integral, right);
-            if (leftMoments.count == 0 || rightMoments.count == 0) {
-                continue;
-            }
+            if (leftMoments.count == 0 || rightMoments.count == 0) { continue; }
             const double score = MeanSquared(leftMoments) + MeanSquared(rightMoments);
             if (score > bestScore) {
                 bestScore = score;
@@ -103,9 +97,7 @@ bool Split(const std::vector<Moments>& integral, Box& first, Box& second) {
             }
         }
     }
-    if (bestAxis < 0) {
-        return false;
-    }
+    if (bestAxis < 0) { return false; }
     second = first;
     first.upper[static_cast<std::size_t>(bestAxis)] = bestPosition;
     second.lower[static_cast<std::size_t>(bestAxis)] = bestPosition;
@@ -120,16 +112,13 @@ int ChannelError(std::uint32_t source, std::uint32_t mapped) {
                      std::abs(static_cast<int>(source & 255) - static_cast<int>(mapped & 255))});
 }
 
-IndexedImage QuantizeWu(std::span<const std::uint32_t> pixels,
-                        std::span<std::int16_t> reuseSeeds) {
+IndexedImage QuantizeWu(std::span<const std::uint32_t> pixels, std::span<std::int16_t> reuseSeeds) {
     std::vector<Moments> integral(CellCount);
     for (const auto pixel : pixels) {
         const int red = static_cast<int>((pixel >> 16) & 255);
         const int green = static_cast<int>((pixel >> 8) & 255);
         const int blue = static_cast<int>(pixel & 255);
-        auto& moments = integral[static_cast<std::size_t>(Cell((red >> 3) + 1,
-                                                              (green >> 3) + 1,
-                                                              (blue >> 3) + 1))];
+        auto& moments = integral[static_cast<std::size_t>(Cell((red >> 3) + 1, (green >> 3) + 1, (blue >> 3) + 1))];
         moments.count += 1;
         moments.red += red;
         moments.green += green;
@@ -165,11 +154,10 @@ IndexedImage QuantizeWu(std::span<const std::uint32_t> pixels,
     std::vector<Box> boxes(1);
     boxes.front().variance = Variance(integral, boxes.front());
     while (boxes.size() < 255) {
-        const auto largest = std::max_element(boxes.begin(), boxes.end(),
-            [](const Box& left, const Box& right) { return left.variance < right.variance; });
-        if (largest->variance <= 0) {
-            break;
-        }
+        const auto largest = std::max_element(boxes.begin(), boxes.end(), [](const Box& left, const Box& right) {
+            return left.variance < right.variance;
+        });
+        if (largest->variance <= 0) { break; }
         Box second;
         if (Split(integral, *largest, second)) {
             boxes.push_back(second);
@@ -187,13 +175,12 @@ IndexedImage QuantizeWu(std::span<const std::uint32_t> pixels,
         const auto channel = [count = moments.count](double sum) {
             return static_cast<std::uint32_t>(std::clamp(std::lround(sum / count), 0L, 255L));
         };
-        result.palette.push_back(0xFF000000U | (channel(moments.red) << 16) |
-                                 (channel(moments.green) << 8) | channel(moments.blue));
+        result.palette.push_back(0xFF000000U | (channel(moments.red) << 16) | (channel(moments.green) << 8) |
+                                 channel(moments.blue));
         for (int red = box.lower[0] + 1; red <= box.upper[0]; ++red) {
             for (int green = box.lower[1] + 1; green <= box.upper[1]; ++green) {
                 for (int blue = box.lower[2] + 1; blue <= box.upper[2]; ++blue) {
-                    lookup[static_cast<std::size_t>(Cell(red, green, blue))] =
-                        static_cast<std::uint8_t>(paletteIndex);
+                    lookup[static_cast<std::size_t>(Cell(red, green, blue))] = static_cast<std::uint8_t>(paletteIndex);
                 }
             }
         }
@@ -210,8 +197,8 @@ IndexedImage QuantizeWu(std::span<const std::uint32_t> pixels,
         // chains per pixel. Alpha is ignored when reducing the RGB lanes below.
         const __m128i sourceChannels = _mm_cvtsi32_si128(static_cast<int>(pixel));
         const __m128i mappedChannels = _mm_cvtsi32_si128(static_cast<int>(result.palette[paletteIndex]));
-        const __m128i channelErrors = _mm_or_si128(_mm_subs_epu8(sourceChannels, mappedChannels),
-                                                 _mm_subs_epu8(mappedChannels, sourceChannels));
+        const __m128i channelErrors =
+            _mm_or_si128(_mm_subs_epu8(sourceChannels, mappedChannels), _mm_subs_epu8(mappedChannels, sourceChannels));
         maximumChannelErrors = _mm_max_epu8(maximumChannelErrors, channelErrors);
         if (!reuseSeeds.empty()) {
             const auto cell = static_cast<std::size_t>((red << 10) | (green << 5) | blue);
@@ -219,8 +206,9 @@ IndexedImage QuantizeWu(std::span<const std::uint32_t> pixels,
         }
     }
     const auto channelMaxima = static_cast<std::uint32_t>(_mm_cvtsi128_si32(maximumChannelErrors));
-    result.maximumChannelError = std::max({static_cast<int>(channelMaxima & 255U),
-        static_cast<int>((channelMaxima >> 8) & 255U), static_cast<int>((channelMaxima >> 16) & 255U)});
+    result.maximumChannelError =
+        std::max({static_cast<int>(channelMaxima & 255U), static_cast<int>((channelMaxima >> 8) & 255U),
+                  static_cast<int>((channelMaxima >> 16) & 255U)});
     return result;
 }
 
@@ -246,9 +234,7 @@ int Quantizer::FindColor(std::uint32_t color) const {
     color &= 0x00FFFFFFU;
     auto bucket = ColorBucket(color);
     while (lookupColors_[bucket] != 0xFFFFFFFFU) {
-        if (lookupColors_[bucket] == color) {
-            return lookupIndices_[bucket];
-        }
+        if (lookupColors_[bucket] == color) { return lookupIndices_[bucket]; }
         bucket = (bucket + 1) & 1023;
     }
     return -1;
@@ -257,9 +243,7 @@ int Quantizer::FindColor(std::uint32_t color) const {
 void Quantizer::AddColor(std::uint32_t color, std::uint8_t paletteIndex) {
     color &= 0x00FFFFFFU;
     auto bucket = ColorBucket(color);
-    while (lookupColors_[bucket] != 0xFFFFFFFFU && lookupColors_[bucket] != color) {
-        bucket = (bucket + 1) & 1023;
-    }
+    while (lookupColors_[bucket] != 0xFFFFFFFFU && lookupColors_[bucket] != color) { bucket = (bucket + 1) & 1023; }
     lookupColors_[bucket] = color;
     lookupIndices_[bucket] = paletteIndex;
 }
@@ -284,17 +268,15 @@ void Quantizer::ResetPalette() noexcept {
 }
 
 bool Quantizer::TryReusePalette(std::span<const std::uint32_t> pixels, IndexedImage& destination) {
-    if (!options_.reusePalette || previousPalette_.empty()) {
-        return false;
-    }
+    if (!options_.reusePalette || previousPalette_.empty()) { return false; }
     BuildPreviousLookup();
     int maximumError = 0;
     for (std::size_t pixelIndex = 0; pixelIndex < pixels.size(); ++pixelIndex) {
         const auto color = pixels[pixelIndex] & 0x00FFFFFFU;
         int paletteIndex = FindColor(color);
         if (paletteIndex < 0) {
-            const auto cell = static_cast<std::size_t>(((color >> 9) & 0x7C00U) |
-                ((color >> 6) & 0x03E0U) | ((color >> 3) & 0x001FU));
+            const auto cell = static_cast<std::size_t>(((color >> 9) & 0x7C00U) | ((color >> 6) & 0x03E0U) |
+                                                       ((color >> 3) & 0x001FU));
             paletteIndex = nearestLookup_[cell];
             if (paletteIndex < 0) {
                 const int red = static_cast<int>((color >> 19) & 31) * 8 + 4;
@@ -316,9 +298,7 @@ bool Quantizer::TryReusePalette(std::span<const std::uint32_t> pixels, IndexedIm
             }
         }
         const int error = ChannelError(color, previousPalette_[static_cast<std::size_t>(paletteIndex)]);
-        if (error > options_.maximumReuseChannelError) {
-            return false;
-        }
+        if (error > options_.maximumReuseChannelError) { return false; }
         maximumError = std::max(maximumError, error);
         destination.pixels[pixelIndex] = static_cast<std::uint8_t>(paletteIndex);
     }
@@ -359,13 +339,9 @@ void Quantizer::QuantizeTo(std::span<const std::uint32_t> pixels, IndexedImage& 
         }
         result.pixels[pixelIndex] = previousIndex;
     }
-    if (pixels.empty()) {
-        return;
-    }
+    if (pixels.empty()) { return; }
     if (needsQuantization) {
-        if (TryReusePalette(pixels, result)) {
-            return;
-        }
+        if (TryReusePalette(pixels, result)) { return; }
         // Seed only observed Wu bins. Unobserved bins retain the previous
         // nearest-centroid cache when the palette is unchanged, as before.
         std::vector<std::int16_t> reuseSeeds(options_.reusePalette ? 32768 : 0, -1);
@@ -390,9 +366,7 @@ void Quantizer::QuantizeTo(std::span<const std::uint32_t> pixels, IndexedImage& 
             remap[paletteIndex] = static_cast<std::uint8_t>(previous);
         }
         if (exactReuse) {
-            for (auto& paletteIndex : result.pixels) {
-                paletteIndex = remap[paletteIndex];
-            }
+            for (auto& paletteIndex : result.pixels) { paletteIndex = remap[paletteIndex]; }
             result.palette = previousPalette_;
             result.paletteReused = true;
         }
@@ -411,8 +385,8 @@ IndexedImage Quantize(std::span<const std::uint32_t> pixels) {
     return quantizer.Quantize(pixels);
 }
 
-void DitherFloydSteinberg(std::span<const std::uint32_t> source, int width,
-                        IndexedImage& image, int transparentColorIndex) {
+void DitherFloydSteinberg(std::span<const std::uint32_t> source, int width, IndexedImage& image,
+                          int transparentColorIndex) {
     if (width < 1 || source.empty() || source.size() % static_cast<std::size_t>(width) != 0 ||
         source.size() != image.pixels.size() || image.palette.empty() || image.palette.size() > 256 ||
         transparentColorIndex < -1 || transparentColorIndex >= static_cast<int>(image.palette.size())) {
@@ -436,7 +410,8 @@ void DitherFloydSteinberg(std::span<const std::uint32_t> source, int width,
             const auto errorColumn = static_cast<std::size_t>(column) + 1;
             for (unsigned channel = 0; channel < 3; ++channel) {
                 const auto original = static_cast<int>((source[pixel] >> (channel * 8)) & 255);
-                adjusted[channel] = std::clamp(static_cast<int>(std::lround(original + currentErrors[errorColumn][channel])), 0, 255);
+                adjusted[channel] =
+                    std::clamp(static_cast<int>(std::lround(original + currentErrors[errorColumn][channel])), 0, 255);
             }
             const auto key = static_cast<std::uint32_t>((adjusted[2] << 16) | (adjusted[1] << 8) | adjusted[0]);
             // An exact-key cache preserves distinct decisions for nearby colors
@@ -449,17 +424,22 @@ void DitherFloydSteinberg(std::span<const std::uint32_t> source, int width,
                     if (static_cast<int>(paletteIndex) == transparentColorIndex) { continue; }
                     int distance = 0;
                     for (unsigned channel = 0; channel < 3; ++channel) {
-                        const auto difference = adjusted[channel] - static_cast<int>((image.palette[paletteIndex] >> (channel * 8)) & 255);
+                        const auto difference =
+                            adjusted[channel] - static_cast<int>((image.palette[paletteIndex] >> (channel * 8)) & 255);
                         distance += difference * difference;
                     }
-                    if (distance < bestDistance) { bestDistance = distance; selected = static_cast<int>(paletteIndex); }
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        selected = static_cast<int>(paletteIndex);
+                    }
                 }
                 if (selected < 0) { throw std::invalid_argument("Dither palette has no opaque color"); }
                 cached = {key, static_cast<std::uint8_t>(selected)};
             }
             image.pixels[pixel] = static_cast<std::uint8_t>(selected);
             for (unsigned channel = 0; channel < 3; ++channel) {
-                const auto mapped = static_cast<int>((image.palette[static_cast<std::size_t>(selected)] >> (channel * 8)) & 255);
+                const auto mapped =
+                    static_cast<int>((image.palette[static_cast<std::size_t>(selected)] >> (channel * 8)) & 255);
                 const auto original = static_cast<int>((source[pixel] >> (channel * 8)) & 255);
                 maximumError = std::max(maximumError, std::abs(original - mapped));
                 const double error = static_cast<double>(adjusted[channel] - mapped) / 16.0;

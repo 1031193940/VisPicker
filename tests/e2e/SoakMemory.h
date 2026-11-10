@@ -39,33 +39,25 @@ public:
         const DWORD error = ReadSnapshot(current, totals);
         const auto countersAfter = PrivateUsage();
         output << "{\"cycle\":" << cycle << ",\"stage\":" << std::quoted(stage)
-               << ",\"private_usage_before\":" << countersBefore
-               << ",\"private_usage_after\":" << countersAfter;
+               << ",\"private_usage_before\":" << countersBefore << ",\"private_usage_after\":" << countersAfter;
         if (error) {
             output << ",\"error\":" << error << "}\n";
             return;
         }
-        output << ",\"mem_private_commit\":" << totals.privateCommit
-               << ",\"mapped_commit\":" << totals.mappedCommit
-               << ",\"image_commit\":" << totals.imageCommit
-               << ",\"sampler_commit\":" << totals.samplerCommit
-               << ",\"heap_base_commit\":" << totals.heapBaseCommit
-               << ",\"stack_commit\":" << totals.stackCommit
+        output << ",\"mem_private_commit\":" << totals.privateCommit << ",\"mapped_commit\":" << totals.mappedCommit
+               << ",\"image_commit\":" << totals.imageCommit << ",\"sampler_commit\":" << totals.samplerCommit
+               << ",\"heap_base_commit\":" << totals.heapBaseCommit << ",\"stack_commit\":" << totals.stackCommit
                << ",\"stack_candidate_commit\":" << totals.stackCandidateCommit
-               << ",\"other_private_commit\":" << totals.otherPrivateCommit
-               << ",\"heap_count\":" << totals.heapCount
+               << ",\"other_private_commit\":" << totals.otherPrivateCommit << ",\"heap_count\":" << totals.heapCount
                << ",\"default_heap_base\":" << reinterpret_cast<std::uintptr_t>(defaultHeap)
                << ",\"default_heap_walk_error\":" << heapError;
         if (!heapError) {
-            output << ",\"default_heap_busy\":" << heap.busyBytes
-                   << ",\"default_heap_busy_blocks\":" << heap.busyBlocks
+            output << ",\"default_heap_busy\":" << heap.busyBytes << ",\"default_heap_busy_blocks\":" << heap.busyBlocks
                    << ",\"default_heap_free\":" << heap.freeBytes
                    << ",\"default_heap_region_commit\":" << heap.regionCommit
                    << ",\"default_heap_regions_without_commit\":" << heap.regionsWithoutCommit;
         }
-        output
-               << ",\"private_allocations\":" << current.count
-               << ",\"changes\":[";
+        output << ",\"private_allocations\":" << current.count << ",\"changes\":[";
         if (hasPrevious_) { WriteChanges(output, workspace_->snapshots[1 - nextSnapshot_], current); }
         output << "]}\n";
         nextSnapshot_ = 1 - nextSnapshot_;
@@ -116,7 +108,9 @@ private:
         PROCESS_MEMORY_COUNTERS_EX counters{};
         counters.cb = sizeof(counters);
         return GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
-                                    sizeof(counters)) ? counters.PrivateUsage : 0;
+                                    sizeof(counters))
+                   ? counters.PrivateUsage
+                   : 0;
     }
 
     static DWORD ReadHeap(HANDLE heap, HeapTotals& totals) noexcept {
@@ -162,7 +156,9 @@ private:
         Allocation allocation{};
         bool hasGuard = false;
         while (address <= lastAddress) {
-            if (!VirtualQuery(reinterpret_cast<const void*>(address), &region, sizeof(region))) { return GetLastError(); }
+            if (!VirtualQuery(reinterpret_cast<const void*>(address), &region, sizeof(region))) {
+                return GetLastError();
+            }
             const auto next = reinterpret_cast<std::uintptr_t>(region.BaseAddress) + region.RegionSize;
             if (next <= address) { return ERROR_INVALID_DATA; }
             address = next;
@@ -225,10 +221,14 @@ private:
 
     static const char* KindName(Kind kind) noexcept {
         switch (kind) {
-        case Kind::HeapBase: return "heap_base";
-        case Kind::Stack: return "stack";
-        case Kind::StackCandidate: return "stack_candidate";
-        default: return "other";
+        case Kind::HeapBase:
+            return "heap_base";
+        case Kind::Stack:
+            return "stack";
+        case Kind::StackCandidate:
+            return "stack_candidate";
+        default:
+            return "other";
         }
     }
 
@@ -250,8 +250,8 @@ private:
             if (std::exchange(wroteChange, true)) { output << ','; }
             output << "{\"base\":" << allocation->base << ",\"kind\":\"" << KindName(allocation->kind)
                    << "\",\"before\":" << (before ? before->committed : 0)
-                   << ",\"after\":" << (after ? after->committed : 0)
-                   << ",\"reserved\":" << allocation->reserved << '}';
+                   << ",\"after\":" << (after ? after->committed : 0) << ",\"reserved\":" << allocation->reserved
+                   << '}';
         }
     }
 
