@@ -2,15 +2,15 @@
 
 面向 Windows 的便携截图、参考图和 GIF 工具。
 
-最新版本为 **0.6.0**，面向 Windows 11 x64，包内附有 x86 构建。 [下载便携包](https://github.com/1031193940/VisPicker/releases/download/v0.6.0/VisPick-0.6.0.zip) · [发布说明](https://github.com/1031193940/VisPicker/releases/tag/v0.6.0)
+最新版本为 **0.6.0**，面向 Windows 11 x64，Release 只提供一个独立的 `VisPick.exe`，下载后直接运行。x86 继续保留源码构建和 CI 验证。 [下载 VisPick.exe](https://github.com/1031193940/VisPicker/releases/download/v0.6.0/VisPick.exe) · [发布说明](https://github.com/1031193940/VisPicker/releases/tag/v0.6.0)
 
 双架构构建、静态分析和各 321 项单元测试已通过；部分前景/生命周期、双 4K 性能和 GIF 原型验收仍未通过。完整范围见 [0.6.0 发布说明](https://github.com/1031193940/VisPicker/releases/tag/v0.6.0)。Win10、Win7、干净系统、完整物理多屏兼容矩阵和第三方软件粘贴仍待验证。
 
 ## 使用
 
-以下流程对应 0.6.0。升级时先保存需要保留的参考图和 GIF，再从托盘退出旧版。将旧目录中的 `VisPick.ini` 复制到新版目录后启动，可保留自定义设置。
+以下流程对应 0.6.0。升级时先保存需要保留的参考图和 GIF，从托盘退出旧版，再替换原目录中的 exe。保留原有 `VisPick.ini` 即可继续使用自定义设置。
 
-双击适合系统架构的 exe，程序进入托盘并显示启动通知。首次启动生成带中文注释的 `VisPick.ini`；exe 所在目录不可写时使用 `%APPDATA%\VisPick\VisPick.ini`。编辑配置并保存后自动生效，不需要重启，也不会覆盖你的注释。
+双击 `VisPick.exe`，程序进入托盘并显示启动通知。Release 不附带配置文件；首次启动生成带中文注释的 `VisPick.ini`，exe 所在目录不可写时使用 `%APPDATA%\VisPick\VisPick.ini`。编辑配置并保存后自动生效，不需要重启，也不会覆盖你的注释。
 
 默认保留启动提醒和错误通知，成功操作静默。重复启动会重放运行提醒，启动时汇总热键冲突；GIF 错误显示在预览状态栏。`[General] Notify=errors` 为默认策略，`all` 也显示已有信息通知，`none` 只保留启动提醒。Windows 勿扰或系统通知设置可能影响气泡呈现。
 

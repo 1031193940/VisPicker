@@ -1,8 +1,10 @@
-# VisPick 0.6.0 Windows 便携版
+# VisPick 0.6.0 Windows 单文件便携版
 
-发布日期：2026-11-10。面向 Windows 11 x64 的便携版，包内同时提供 x86 构建；Win7/Win10 兼容性仍待实际验证。
+发布日期：2026-11-10。面向 Windows 11 x64，Release 仅提供一个独立的 `VisPick.exe`，不附带 ZIP、配置模板或其它文件。x86 继续保留源码构建和 CI 验证；Win7/Win10 兼容性仍待实际验证。
 
-[下载便携包](https://github.com/1031193940/VisPicker/releases/download/v0.6.0/VisPick-0.6.0.zip) · [SHA256 校验清单](https://github.com/1031193940/VisPicker/releases/download/v0.6.0/SHA256SUMS.txt)
+[下载 VisPick.exe](https://github.com/1031193940/VisPicker/releases/download/v0.6.0/VisPick.exe)
+
+文件大小：866,816 bytes。SHA256：`dacf215abea86782810edcca7216eb9ffb4179050604e9db5acecd7aea3de109`。
 
 ## 本版变化
 
@@ -14,9 +16,9 @@
 
 ## 使用
 
-解压整个目录。Windows 11 x64 使用 `VisPick.exe`；`VisPick-x86.exe` 是 32 位构建。程序无需安装，启动后驻留系统托盘，右键图标打开菜单。同一用户会话只运行一个实例。
+下载后双击 `VisPick.exe`。程序无需安装，启动后驻留系统托盘，右键图标打开菜单。同一用户会话只运行一个实例。
 
-升级前先保存需要保留的参考图和 GIF，从托盘退出旧版，再启动新版。将旧目录的 `VisPick.ini` 复制到新目录即可保留配置。程序不会自动保存退出前的参考图。
+升级前先保存需要保留的参考图和 GIF，从托盘退出旧版，再替换原目录中的 exe。保留原有 `VisPick.ini` 即可继续使用自定义设置。程序不会自动保存退出前的参考图。
 
 | 操作 | 入口 |
 |---|---|
@@ -62,7 +64,7 @@ GIF 剪贴板同时提供动画数据和文件引用（超过 64 MiB 时提供�
 
 ## 配置与通知
 
-首次运行生成 `VisPick.ini`；exe 目录不可写时使用 `%APPDATA%\VisPick\VisPick.ini`。编辑后自动重载，无效项保留上次有效值。包内 `res/default.ini` 是完整默认模板。
+Release 不附带默认配置，首次运行时程序自行生成 `VisPick.ini`；exe 目录不可写时使用 `%APPDATA%\VisPick\VisPick.ini`。编辑后自动重载，无效项保留上次有效值。需要查阅完整配置时见仓库中的 [默认配置模板](https://github.com/1031193940/VisPicker/blob/v0.6.0/res/default.ini)。
 
 默认保留启动提醒，恢复操作失败提示，成功操作保持静默。重复启动会重放运行提醒；启动时汇总快捷键冲突，托盘“关于”可查看详情。
 
@@ -79,7 +81,7 @@ Ctrl+1/Ctrl+2 保持原默认值，托盘显示当前配置的组合。在 `[Hot
 
 ## 已验证范围
 
-以下为本次发布所用 exe 的本地验证结果，使用 MSVC 14.42.34433。测试环境为 Windows 11 build 26200、RTX 5080、两块 3840×2160 显示器、175% DPI、60 Hz 的本地会话；x86 在该 64 位系统上运行。
+以下为 0.6.0 的本地验证结果，使用 MSVC 14.42.34433。Release 沿用已验证的 x64 exe，未重新编译；x86 仅列出开发构建的验证结果，不作为下载附件提供。测试环境为 Windows 11 build 26200、RTX 5080、两块 3840×2160 显示器、175% DPI、60 Hz 的本地会话；x86 在该 64 位系统上运行。
 
 | 检查 | x64 | x86 |
 |---|---|---|
@@ -117,4 +119,4 @@ x64 独立选区流程通过，100 次取消后 GDI +0 / USER +1。全桌面与�
 
 逐项证据与后续范围见 [实施与验证报告](https://github.com/1031193940/VisPicker/blob/v0.6.0/docs/reviews/Implementation-Optimization-2026-11-10.md)。
 
-源码采用 MIT 许可证，见包内 `LICENSE`；第三方测试素材保留各自许可。
+源码采用 MIT 许可证，见仓库中的 [LICENSE](https://github.com/1031193940/VisPicker/blob/v0.6.0/LICENSE)；第三方测试素材保留各自许可。

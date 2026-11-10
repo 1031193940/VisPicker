@@ -81,7 +81,7 @@ Remove-Item Env:\VISPICK_QUALITY_INPUT
 
 当前会话确认为 32 Hz 远程显示，不能用于 AC0-4～AC0-7 的物理显示性能验收，也不能据此决定切换 DXGI。须在本地双 4K、175% 会话重测；时长正确不等同于无丢帧。原始报告与 JSON 保留，结论修订和逐项处理见 [评审修正记录](reviews/P0-corrections-2026-11-06.md)。
 
-产品集成回归与打包：
+产品集成回归与本地归档：
 
 ```powershell
 .\tests\e2e\RunProductChecks.ps1 -Architecture x64 -FullRecording -IdleSeconds 600
@@ -89,7 +89,7 @@ Remove-Item Env:\VISPICK_QUALITY_INPUT
 .\scripts\Package.ps1
 ```
 
-桌面测试须串行运行。集成回归只对自身窗口发消息，剪贴板检查使用独立窗口站。便携包包含两个 exe、使用说明和配置模板。
+桌面测试须串行运行。集成回归只对自身窗口发消息，剪贴板检查使用独立窗口站。`Package.ps1` 可选生成包含两个 exe、使用说明和配置模板的本地归档；该归档不上传 Release。公开 Release 仅提供 `VisPick.exe` 单文件，不附带配置或其它文件。
 
 需要长时间资源诊断时，可选用 `.\tests\e2e\RunSoak.ps1 -Seconds 28800 -IntervalSeconds 30`。八小时浸泡已退出发布验收。 [诊断口径](P6_CHECKLIST.md#浸泡测试的覆盖与口径)
 
@@ -104,7 +104,7 @@ Remove-Item Env:\VISPICK_QUALITY_INPUT
 
 [Windows 工作流](../.github/workflows/windows.yml) 在 push/PR 上检查格式，并分别运行 x64/x86 Release `/analyze`、单元测试、导入白名单和 2 MiB 门禁。构建日志、测试输出、PDB 和源码指纹作为 CI 产物保留 14 天。GitHub 托管机不是物理显示兼容性验收环境。
 
-推送 `v<版本>` 标签后，两架构和格式检查全通过才会打包、生成 SHA256 并创建 Release。已有 Release 会跳过发布，保留其说明和附件；新 Release 使用 `docs/releases/VisPick-<版本>.md`。手工发布和标签发布均先核对 CMake 版本、产物指纹和说明。
+推送 `v<版本>` 标签后，两架构和格式检查全通过才会创建 Release，仅上传 x64 的 `VisPick.exe`。已有 Release 会跳过发布，保留其说明和附件；新 Release 使用 `docs/releases/VisPick-<版本>.md`。手工发布和标签发布均先核对版本、产物指纹和说明，SHA256 写入发布说明而不另附文件。GitHub 自动生成的源码归档由平台提供，不是产品附件。
 
 本机现有编译器仍是 14.42.34433；脚本放宽范围并不会安装 14.44。推荐安装 VS 2022 17.14 对应工具集后复建；Win7/Win10 的导入检查与真实运行验收仍分开记录。
 

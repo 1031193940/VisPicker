@@ -101,34 +101,59 @@ jobs:
             if ([int]$_.Exception.Response.StatusCode -ne 404) { throw }
             'exists=false' >> $env:GITHUB_OUTPUT
           }
-      - name: Download both verified architectures
+      - name: Download verified x64 binary
         if: steps.existing.outputs.exists == 'false'
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          pattern: binaries-*
-          merge-multiple: true
+          name: binaries-x64
           path: dist
-      - name: Package and calculate checksums
+      - name: Verify standalone executable
         if: steps.existing.outputs.exists == 'false'
         run: |
+          $ErrorActionPreference = 'Stop'
           $version = $env:GITHUB_REF_NAME.Substring(1)
-          & ./scripts/Package.ps1 -Version $version
-          $files = @("dist/VisPick-$version.zip", 'dist/VisPick.exe', 'dist/VisPick-x86.exe')
-          $checksums = foreach ($file in $files) {
-            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $([IO.Path]::GetFileName($file))"
+          $binaryPath = 'dist/VisPick.exe'
+          $manifestPath = "$binaryPath.build.json"
+          if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            throw 'The verified x64 executable and build manifest are required.'
           }
-          $checksums | Set-Content -LiteralPath dist/SHA256SUMS.txt -Encoding utf8NoBOM
+          . ./scripts/BuildSource.ps1
+          $buildSource = Get-VisPickBuildSource $env:GITHUB_WORKSPACE
+          $build = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          $binary = Get-Item -LiteralPath $binaryPath
+          if ($build.name -ne 'VisPick.exe' -or $build.architecture -ne 'x64' -or
+              $build.version -ne $version -or $binary.VersionInfo.ProductVersion -ne $version -or
+              $binary.Length -le 0 -or $binary.Length -gt 2MB -or $build.bytes -ne $binary.Length -or
+              $build.source_sha256 -ne $buildSource -or
+              $build.sha256 -ne (Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash) {
+            throw 'The release executable does not match the version, build manifest, source inputs, or 2 MiB size limit.'
+          }
       - name: Publish a new tagged release
         if: steps.existing.outputs.exists == 'false'
         run: |
+          $ErrorActionPreference = 'Stop'
           $tag = $env:GITHUB_REF_NAME
           $version = $tag.Substring(1)
           $notes = "docs/releases/VisPick-$version.md"
-          $arguments = @('release', 'create', $tag, "dist/VisPick-$version.zip",
-            'dist/VisPick.exe', 'dist/VisPick-x86.exe', 'dist/SHA256SUMS.txt',
-            '--repo', $env:GITHUB_REPOSITORY, '--verify-tag', '--title', "VisPick $version Windows portable")
-          if (Test-Path -LiteralPath $notes) { $arguments += @('--notes-file', $notes) }
-          else { $arguments += '--generate-notes' }
+          $hasVersionNotes = Test-Path -LiteralPath $notes -PathType Leaf
+          $releaseBody = if ($hasVersionNotes) { Get-Content -LiteralPath $notes -Raw } else { '' }
+          $binary = Get-Item -LiteralPath 'dist/VisPick.exe'
+          $binaryHash = (Get-FileHash -LiteralPath $binary.FullName -Algorithm SHA256).Hash
+          $assetDetails = @(
+            '', '## 本次发布附件', '',
+            ('文件：`{0}`（Windows x64）' -f $binary.Name), '',
+            ('大小：{0} 字节。' -f $binary.Length), '',
+            ('SHA256：`{0}`' -f $binaryHash), '',
+            '以上为本次上传文件的实际校验值；仓库文档中的历史构建校验值可能不同。'
+          )
+          New-Item -ItemType Directory -Force out | Out-Null
+          $releaseNotes = "out/release-$version.md"
+          (@($releaseBody.TrimEnd()) + $assetDetails) |
+            Set-Content -LiteralPath $releaseNotes -Encoding utf8NoBOM
+          $arguments = @('release', 'create', $tag, 'dist/VisPick.exe',
+            '--repo', $env:GITHUB_REPOSITORY, '--verify-tag', '--title', "VisPick $version Windows portable",
+            '--notes-file', $releaseNotes)
+          if (-not $hasVersionNotes) { $arguments += '--generate-notes' }
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release creation failed. Existing releases were not overwritten.' }
