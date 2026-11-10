@@ -1,6 +1,6 @@
 # 开发与验证
 
-当前公开版本为 **0.5.11**；当前源码为 **0.6.0 开发版**。新功能和本轮验证见 [审查实施记录](reviews/Implementation-Optimization-2026-11-10.md)，公开用户说明见 [README](../README.md)。下方历史记录中的旧目标不代表当前版本。
+当前公开版本与源码版本为 **0.6.0**。新功能和本轮验证见 [审查实施记录](reviews/Implementation-Optimization-2026-11-10.md)，公开用户说明见 [README](../README.md)。下方历史记录中的旧目标不代表当前版本。
 
 ## 构建
 
