@@ -110,6 +110,16 @@ Debug/ASan 是开发产物，依赖工具链中的 ASan DLL，不复制到 `dist
 .\out\build\x64-Debug\VisPickTest.exe --desktop-tests --output .\out\reports\x64-Debug
 ```
 
+## 产品演示
+
+用 30 秒看完 VisPick 0.5.9 的截图标注、桌面贴图和 GIF 录制。点击封面打开 MP4。界面来自 VisPick，画面中的 Frame Lab 是自制演示工作台。
+
+[![VisPick 宣传片封面](docs/media/vispick-poster.webp)](docs/media/vispick-promo.mp4)
+
+| 截图与标注 | 桌面贴图 | GIF 录制与预览 |
+|---|---|---|
+| [![框选并标注画面](docs/media/vispick-screenshot.webp)](docs/media/vispick-screenshot.webp) | [![将参考图置顶在演示桌面](docs/media/vispick-pin.webp)](docs/media/vispick-pin.webp) | [![带进度条及导出按钮的 GIF 预览](docs/media/vispick-gif.webp)](docs/media/vispick-gif.webp) |
+
 ## 运行原型与验收
 
 `--help` / `--version` 支持控制台、UTF-8 文件和管道输出。以下开发工具位于构建目录，不复制到 `dist/`：
