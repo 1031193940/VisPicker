@@ -34,6 +34,7 @@ private:
     void ApplyConfiguration(bool retryHotkeys);
     void RebindHotkeys(bool announceFailure = false);
     void Notify(std::wstring_view message, bool warning = false);
+    void NotifyStartup(std::wstring_view configurationNotice = {});
     void Queue(LaunchOptions options);
     void ProcessCommands();
     void BeginSelection(CaptureMode mode);
@@ -72,6 +73,7 @@ private:
     std::wstring configurationProblems_;
     std::wstring hotkeyProblems_;
     bool performanceLogging_ = false;
+    bool startupNotificationPending_ = true;
     bool stopping_ = false;
     unsigned modalDepth_ = 0;
     bool exitAfterRecording_ = false;

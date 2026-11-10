@@ -7,6 +7,7 @@
 #include "platform/Console.h"
 #include "platform/FileCommit.h"
 #include "platform/Gdi.h"
+#include "platform/ToolbarIcon.h"
 #include "platform/Window.h"
 
 #include <Windowsx.h>
@@ -29,6 +30,7 @@ namespace {
 using PreviewClock = std::chrono::steady_clock;
 constexpr UINT WorkerUpdated = WM_APP + 1;
 constexpr UINT_PTR PlaybackTimer = 1;
+enum class PreviewAction { None, Copy, Save, Discard };
 
 struct FrameTiming {
     std::int64_t begin = 0;
@@ -118,6 +120,8 @@ struct GifPreview::Implementation final : Window {
     bool ownsTemporary = true;
     int dpi = 96;
     UniqueGdiObject<HFONT> interfaceFont;
+    UniqueGdiObject<HPEN> iconPen;
+    PreviewAction hoveredAction = PreviewAction::None;
     std::optional<DibSection> paintBuffer;
     std::wstring durationText;
     std::wstring information;
@@ -286,11 +290,13 @@ struct GifPreview::Implementation final : Window {
         const auto version = GetWindowsVersion();
         const bool hasUiFont = version.major > 6 || (version.major == 6 && version.minor >= 2);
         const int targetDpi = static_cast<int>(requested);
+        auto pen = CreateToolbarIconPen(targetDpi);
         const auto font = CreateFontW(-MulDiv(14,targetDpi,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
             OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,
             english ? L"Segoe UI" : (hasUiFont ? L"Microsoft YaHei UI" : L"Microsoft YaHei"));
         if (!font) { throw std::runtime_error("Cannot create GIF preview font"); }
         interfaceFont.Reset(font);
+        iconPen = std::move(pen);
         dpi = targetDpi;
     }
     SIZE OuterSize(int clientWidth, int clientHeight) const {
@@ -307,6 +313,37 @@ struct GifPreview::Implementation final : Window {
         const LONG saveRight = discardLeft-Scale(8);
         return {{Scale(10),top,Scale(164),bottom}, {saveRight-Scale(76),top,saveRight,bottom},
             {discardLeft,top,right,bottom}};
+    }
+    PreviewAction ActionAt(POINT point) const noexcept {
+        const auto actions = LayoutActions();
+        if (PtInRect(&actions.clipboard,point)) { return PreviewAction::Copy; }
+        if (PtInRect(&actions.save,point)) { return PreviewAction::Save; }
+        if (PtInRect(&actions.discard,point)) { return PreviewAction::Discard; }
+        return PreviewAction::None;
+    }
+    void SetHoveredAction(PreviewAction action) noexcept {
+        if (hoveredAction == action) { return; }
+        hoveredAction = action;
+        RECT footer{};
+        GetClientRect(Handle(),&footer);
+        footer.top = std::max(0L,footer.bottom-FooterHeight());
+        InvalidateRect(Handle(),&footer,FALSE);
+    }
+    void UpdateActionHover(POINT point) noexcept {
+        const auto action = Busy() ? PreviewAction::None : ActionAt(point);
+        if (action != PreviewAction::None && hoveredAction == PreviewAction::None) {
+            TRACKMOUSEEVENT tracking{sizeof(tracking),TME_LEAVE,Handle(),0};
+            if (!TrackMouseEvent(&tracking)) { return; }
+        }
+        SetHoveredAction(action);
+    }
+    const wchar_t* ActionHint() const noexcept {
+        switch (hoveredAction) {
+        case PreviewAction::Copy: return english ? L"Copy GIF to clipboard (Ctrl+C)" : L"复制 GIF 到剪贴板 (Ctrl+C)";
+        case PreviewAction::Save: return english ? L"Save GIF to file (Ctrl+S)" : L"保存 GIF 到文件 (Ctrl+S)";
+        case PreviewAction::Discard: return english ? L"Discard GIF (Esc)" : L"放弃 GIF (Esc)";
+        default: return nullptr;
+        }
     }
     RECT ProgressArea() const noexcept {
         RECT client{}; GetClientRect(Handle(),&client);
@@ -473,6 +510,7 @@ struct GifPreview::Implementation final : Window {
     }
     void Discard(bool closePins = false) {
         if (Busy() || closed) { return; }
+        SetHoveredAction(PreviewAction::None);
         FinishScrub(false);
         const bool resume = !paused;
         SetPaused(true);
@@ -490,6 +528,7 @@ struct GifPreview::Implementation final : Window {
     }
     void Save() {
         if (Busy() || closed) { return; }
+        SetHoveredAction(PreviewAction::None);
         FinishScrub(false);
         const bool resume = !paused;
         SetPaused(true);
@@ -511,6 +550,7 @@ struct GifPreview::Implementation final : Window {
     }
     void Copy() {
         if (Busy() || closed) { return; }
+        SetHoveredAction(PreviewAction::None);
         FinishScrub(false);
         resumeAfterOutput = !paused;
         SetPaused(true);
@@ -615,20 +655,22 @@ struct GifPreview::Implementation final : Window {
         if (saving) { status = english ? L"Saving…" : L"正在保存…"; }
         else if (copying) { status = english ? L"Copying GIF…" : L"正在复制 GIF…"; }
         else if (pendingSeek) { status = english ? L"Seeking…" : L"正在跳转…"; }
+        else if (const auto hint = ActionHint()) { status = hint; }
         else if (!outputStatus.empty()) { status = outputStatus.c_str(); }
         else if (playbackUnavailable) { status = english ? L"Preview unavailable" : L"无法预览"; }
         DrawTextW(context,status,-1,&informationArea,
             DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
-        auto actions = LayoutActions();
-        SetDCBrushColor(context,RGB(60,65,75));
-        FillRect(context,&actions.save,brush);
-        FillRect(context,&actions.discard,brush);
-        SetDCBrushColor(context,RGB(33,90,173));
-        FillRect(context,&actions.clipboard,brush);
-        DrawTextW(context,english ? L"Save..." : L"保存…",-1,&actions.save,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        DrawTextW(context,english ? L"Discard" : L"放弃",-1,&actions.discard,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        DrawTextW(context,english ? L"Copy to Clipboard" : L"复制到剪贴板",-1,&actions.clipboard,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        const auto actions = LayoutActions();
+        const auto drawAction = [&](const RECT& bounds, ToolbarIcon icon, COLORREF color) {
+            if (!IntersectRect(&intersection,&dirty,&bounds)) { return; }
+            SetDCBrushColor(context,color);
+            FillRect(context,&bounds,brush);
+            DrawToolbarIcon(context,bounds,icon,dpi,iconPen.Get());
+        };
+        const auto neutral = [&](PreviewAction action) { return hoveredAction == action ? RGB(75,78,85) : RGB(60,65,75); };
+        drawAction(actions.clipboard,ToolbarIcon::Copy,hoveredAction == PreviewAction::Copy ? RGB(43,109,199) : RGB(33,90,173));
+        drawAction(actions.save,ToolbarIcon::Save,neutral(PreviewAction::Save));
+        drawAction(actions.discard,ToolbarIcon::Cancel,neutral(PreviewAction::Discard));
     }
     void Paint(HDC context, const RECT* update = nullptr) {
         RECT client{};
@@ -670,7 +712,10 @@ struct GifPreview::Implementation final : Window {
             case WM_PRINTCLIENT: Paint(reinterpret_cast<HDC>(parameter)); return 0;
             case WM_TIMER:
             case WorkerUpdated: Advance(); return 0;
-            case WM_SIZE: InvalidateRect(Handle(),nullptr,FALSE); return 0;
+            case WM_SIZE:
+                SetHoveredAction(PreviewAction::None);
+                InvalidateRect(Handle(),nullptr,FALSE);
+                return 0;
             case WM_GETMINMAXINFO: {
                 const auto minimum = OuterSize(Scale(360),Scale(180));
                 auto& sizes = *reinterpret_cast<MINMAXINFO*>(data);
@@ -679,6 +724,7 @@ struct GifPreview::Implementation final : Window {
                 return 0;
             }
             case WM_DPICHANGED: {
+                SetHoveredAction(PreviewAction::None);
                 UpdateDpi(HIWORD(parameter));
                 const auto& suggested = *reinterpret_cast<const RECT*>(data);
                 if (!SetWindowPos(Handle(),nullptr,suggested.left,suggested.top,suggested.right-suggested.left,
@@ -701,6 +747,7 @@ struct GifPreview::Implementation final : Window {
                 const POINT point{GET_X_LPARAM(data),GET_Y_LPARAM(data)};
                 const auto track = ProgressTrack();
                 if (!Busy() && !closed && !playbackUnavailable && PtInRect(&track,point)) {
+                    SetHoveredAction(PreviewAction::None);
                     resumeAfterScrub = !paused;
                     SetPaused(true);
                     scrubPosition = SeekPosition(point.x);
@@ -712,18 +759,25 @@ struct GifPreview::Implementation final : Window {
             }
             case WM_MOUSEMOVE:
                 if (scrubPosition) { scrubPosition = SeekPosition(GET_X_LPARAM(data)); InvalidateProgress(); }
+                else { UpdateActionHover({GET_X_LPARAM(data),GET_Y_LPARAM(data)}); }
+                return 0;
+            case WM_MOUSELEAVE:
+                SetHoveredAction(PreviewAction::None);
                 return 0;
             case WM_CANCELMODE:
             case WM_CAPTURECHANGED:
                 FinishScrub(false);
+                SetHoveredAction(PreviewAction::None);
                 break;
             case WM_LBUTTONUP: {
                 const POINT point{GET_X_LPARAM(data),GET_Y_LPARAM(data)};
                 if (scrubPosition) { scrubPosition = SeekPosition(point.x); FinishScrub(true); return 0; }
-                const auto actions = LayoutActions();
-                if (PtInRect(&actions.clipboard,point)) { Copy(); }
-                else if (PtInRect(&actions.save,point)) { Save(); }
-                else if (PtInRect(&actions.discard,point)) { Discard(); }
+                switch (ActionAt(point)) {
+                case PreviewAction::Copy: Copy(); break;
+                case PreviewAction::Save: Save(); break;
+                case PreviewAction::Discard: Discard(); break;
+                default: break;
+                }
                 return 0;
             }
             }

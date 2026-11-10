@@ -7,6 +7,7 @@
 #include "overlay/Selection.h"
 #include "platform/Compat.h"
 #include "platform/Gdi.h"
+#include "platform/ToolbarIcon.h"
 
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -15,7 +16,6 @@
 #include <chrono>
 #include <cwchar>
 #include <exception>
-#include <initializer_list>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -105,12 +105,10 @@ BOOL CALLBACK SnapshotWindow(const HWND window, const LPARAM parameter) noexcept
 }
 
 enum class ButtonKind { Tool, Save, Copy, Pin, Cancel, Confirm, Color, Width, Font, GifFrameRatePicker, GifFrameRate };
-enum class ToolbarIcon { None, Rectangle, Ellipse, Arrow, Pencil, Text, Mosaic, Save, Copy, Pin, Cancel, Check, Stroke, Font };
 struct Button {
     RECT bounds{};
     ButtonKind kind;
     int value = 0;
-    const wchar_t* label = L"";
     const wchar_t* hint = L"";
     ToolbarIcon icon = ToolbarIcon::None;
 };
@@ -234,8 +232,7 @@ struct Overlay::State {
         font.Reset(CreateFontW(-Scale(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei"));
         if (!font.Get()) { throw std::runtime_error("Create overlay font failed"); }
-        iconPen.Reset(CreatePen(PS_SOLID, std::max(1, MulDiv(3, static_cast<int>(dpi), 192)), RGB(245, 245, 245)));
-        if (!iconPen.Get()) { throw std::runtime_error("Create toolbar icon pen failed"); }
+        iconPen = CreateToolbarIconPen(static_cast<int>(dpi));
     }
 
     void UpdateSelectionDpi() {
@@ -340,10 +337,10 @@ struct Overlay::State {
         const LONG recordRight = left + width * 2 / 5;
         const LONG cancelRight = left + width * 3 / 5;
         buttons.push_back({{left, top, recordRight, bottom}, ButtonKind::Confirm, 0,
-            width < Scale(210) ? L"●" : Text(L"● 开始录制", L"● Record"), Text(L"开始录制 (Enter)", L"Start recording (Enter)")});
+            Text(L"开始录制 (Enter)", L"Start recording (Enter)"), ToolbarIcon::Record});
         buttons.push_back({{recordRight, top, cancelRight, bottom}, ButtonKind::Cancel, 0,
-            width < Scale(210) ? L"×" : Text(L"取消", L"Cancel"), Text(L"取消 (Esc)", L"Cancel (Esc)")});
-        buttons.push_back({{cancelRight, top, right, bottom}, ButtonKind::GifFrameRatePicker, 0, L"",
+            Text(L"取消 (Esc)", L"Cancel (Esc)"), ToolbarIcon::Cancel});
+        buttons.push_back({{cancelRight, top, right, bottom}, ButtonKind::GifFrameRatePicker, 0,
             Text(L"选择录制帧率", L"Choose recording frame rate")});
         if (!choosingGifFrameRate) { return; }
 
@@ -384,12 +381,12 @@ struct Overlay::State {
         static constexpr std::array toolIcons{ToolbarIcon::Rectangle, ToolbarIcon::Ellipse, ToolbarIcon::Arrow,
             ToolbarIcon::Pencil, ToolbarIcon::Text, ToolbarIcon::Mosaic};
         for (int index = 0; index < 6; ++index) {
-            buttons.push_back({{left, top, left + slot, bottom}, ButtonKind::Tool, index + 1, L"",
+            buttons.push_back({{left, top, left + slot, bottom}, ButtonKind::Tool, index + 1,
                 english ? EnglishHints[index] : ChineseHints[index], toolIcons[index]});
             left += slot;
         }
         const auto add = [&](const ButtonKind kind, const ToolbarIcon icon, const wchar_t* hint, const int slots = 1) {
-            buttons.push_back({{left, top, left + slot * slots, bottom}, kind, 0, L"", hint, icon});
+            buttons.push_back({{left, top, left + slot * slots, bottom}, kind, 0, hint, icon});
             left += slot * slots;
         };
         add(ButtonKind::Save, ToolbarIcon::Save, Text(L"保存到文件 (Ctrl+S)", L"Save to file (Ctrl+S)"));
@@ -417,88 +414,8 @@ struct Overlay::State {
             const auto icon = kind == ButtonKind::Width ? ToolbarIcon::Stroke : kind == ButtonKind::Font ? ToolbarIcon::Font : ToolbarIcon::None;
             const auto hint = kind == ButtonKind::Color ? Text(L"标注颜色", L"Annotation color") : kind == ButtonKind::Width ?
                 Text(ChineseWidths[value], EnglishWidths[value]) : Text(ChineseFonts[value], EnglishFonts[value]);
-            buttons.push_back({{left, toolbar.top + Scale(38), left + propertySlot, toolbar.bottom - margin}, kind, value, L"", hint, icon});
+            buttons.push_back({{left, toolbar.top + Scale(38), left + propertySlot, toolbar.bottom - margin}, kind, value, hint, icon});
             left += propertySlot;
-        }
-    }
-
-    void DrawToolbarIcon(const HDC context, const RECT bounds, const Button& button) const {
-        // Draw each glyph on the same centered 24-unit grid, including in the wider confirm button.
-        const LONG size = std::min({static_cast<LONG>(Scale(22)), bounds.right - bounds.left - Scale(4), bounds.bottom - bounds.top - Scale(4)});
-        if (size <= 0) { return; }
-        const LONG left = (bounds.left + bounds.right - size) / 2;
-        const LONG top = (bounds.top + bounds.bottom - size) / 2;
-        const auto x = [&](LONG unit) { return left + MulDiv(unit, size, 24); };
-        const auto y = [&](LONG unit) { return top + MulDiv(unit, size, 24); };
-        const auto path = [&](std::initializer_list<POINT> points) {
-            auto point = points.begin();
-            MoveToEx(context, x(point->x), y(point->y), nullptr);
-            for (++point; point != points.end(); ++point) { LineTo(context, x(point->x), y(point->y)); }
-        };
-        const SelectObjectGuard pen(context, iconPen.Get());
-        const SelectObjectGuard brush(context, GetStockObject(NULL_BRUSH));
-        switch (button.icon) {
-        case ToolbarIcon::Rectangle:
-            Rectangle(context, x(3), y(6), x(21), y(18));
-            break;
-        case ToolbarIcon::Ellipse:
-            Ellipse(context, x(3), y(6), x(21), y(18));
-            break;
-        case ToolbarIcon::Arrow:
-            path({{5,19},{19,5},{19,12}});
-            path({{12,5},{19,5}});
-            break;
-        case ToolbarIcon::Pencil:
-            path({{4,20},{5,15},{15,5},{19,9},{9,19},{4,20}});
-            path({{12,8},{16,12}});
-            break;
-        case ToolbarIcon::Text:
-            path({{5,6},{19,6}});
-            path({{12,6},{12,20}});
-            break;
-        case ToolbarIcon::Mosaic:
-            Fill(context, {x(4),y(4),x(11),y(11)}, RGB(245, 245, 245));
-            Fill(context, {x(13),y(4),x(20),y(11)}, RGB(132, 138, 148));
-            Fill(context, {x(4),y(13),x(11),y(20)}, RGB(132, 138, 148));
-            Fill(context, {x(13),y(13),x(20),y(20)}, RGB(245, 245, 245));
-            break;
-        case ToolbarIcon::Save:
-            path({{4,4},{16,4},{20,8},{20,20},{4,20},{4,4}});
-            path({{8,4},{8,10},{15,10},{15,4}});
-            path({{8,20},{8,14},{16,14},{16,20}});
-            break;
-        case ToolbarIcon::Copy:
-            Rectangle(context, x(8), y(8), x(21), y(21));
-            path({{5,16},{4,16},{4,4},{16,4},{16,5}});
-            break;
-        case ToolbarIcon::Pin:
-            path({{15,4},{21,10},{17,11},{13,15},{12,19},{5,12},{9,11},{13,7},{15,4}});
-            path({{9,16},{4,21}});
-            break;
-        case ToolbarIcon::Cancel:
-            path({{6,6},{18,18}});
-            path({{18,6},{6,18}});
-            break;
-        case ToolbarIcon::Check:
-            path({{4,12},{9,17},{20,6}});
-            break;
-        case ToolbarIcon::Stroke: {
-            const LONG height = Scale(StrokeWidths[button.value]);
-            Fill(context, {x(4), y(12)-height/2, x(20), y(12)+(height+1)/2}, RGB(245, 245, 245));
-            break;
-        }
-        case ToolbarIcon::Font: {
-            const LONG inset = 3 - button.value;
-            const LONG apex = 4 + inset;
-            const LONG baseline = 20 - inset;
-            const LONG halfWidth = 8 - inset;
-            const LONG crossbar = MulDiv(halfWidth, 14 - apex, baseline - apex);
-            path({{12-halfWidth,baseline},{12,apex},{12+halfWidth,baseline}});
-            path({{12-crossbar,14},{12+crossbar,14}});
-            break;
-        }
-        case ToolbarIcon::None:
-            break;
         }
     }
 
@@ -521,7 +438,10 @@ struct Overlay::State {
             if (button.kind == ButtonKind::Save) {
                 Fill(context, {local.left, local.top + Scale(5), local.left + Scale(1), local.bottom - Scale(5)}, RGB(79, 83, 91));
             }
-            if (button.icon != ToolbarIcon::None) { DrawToolbarIcon(context, local, button); }
+            if (button.icon != ToolbarIcon::None) {
+                const int detail = button.kind == ButtonKind::Width ? StrokeWidths[button.value] : button.value;
+                DrawToolbarIcon(context, local, button.icon, static_cast<int>(dpi), iconPen.Get(), detail);
+            }
             else if (button.kind == ButtonKind::Color) {
                 RECT swatch = local; InflateRect(&swatch, -Scale(6), -Scale(6));
                 Fill(context, swatch, Rgb(PresetColors[button.value]));
@@ -532,7 +452,7 @@ struct Overlay::State {
                     swprintf_s(rateLabel, local.right - local.left < Scale(65) ? L"%d ▾" : L"%d fps ▾", gifFramesPerSecond);
                 } else if (button.kind == ButtonKind::GifFrameRate) { swprintf_s(rateLabel, L"%d", button.value); }
                 SetTextColor(context, RGB(245, 245, 245));
-                DrawTextW(context, *rateLabel ? rateLabel : button.label, -1, &text,
+                DrawTextW(context, rateLabel, -1, &text,
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
             }
         }

@@ -292,6 +292,8 @@ user32.dll!RegisterWindowMessageW
 user32.dll!SetForegroundWindow
 # GetCursorPos: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getcursorpos
 user32.dll!GetCursorPos
+# TrackMouseEvent: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackmouseevent
+user32.dll!TrackMouseEvent
 # UnregisterHotKey: Windows 2000 Professional; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-unregisterhotkey
 user32.dll!UnregisterHotKey
 # RegisterHotKey: Windows Vista; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey

@@ -5,6 +5,7 @@
 #include "platform/Compat.h"
 #include "platform/Console.h"
 #include "platform/Gdi.h"
+#include "platform/ToolbarIcon.h"
 #include "platform/Window.h"
 
 #include <Windowsx.h>
@@ -157,7 +158,7 @@ public:
         Create({L"VisPick.RecordBar",0,IDC_ARROW}, english_ ? L"VisPick Recording" : L"VisPick 录制", WS_POPUP,
             WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST, bar, WindowActivation::Passive, owner);
         dpi_ = static_cast<int>(DpiForWindow(Handle()));
-        CreateFontForDpi();
+        CreateResourcesForDpi();
         const bool excluded = TryExcludeFromCapture(Handle());
         sessionRegistered_ = WTSRegisterSessionNotification(Handle(), NOTIFY_FOR_THIS_SESSION) != FALSE;
         if (!sessionRegistered_) { throw std::runtime_error("Cannot register recording lock-screen notifications"); }
@@ -187,7 +188,7 @@ protected:
         }
         if (message == WM_DPICHANGED) {
             dpi_ = HIWORD(parameter);
-            CreateFontForDpi();
+            CreateResourcesForDpi();
             const auto& rectangle = *reinterpret_cast<const RECT*>(data);
             SetWindowPos(Handle(),nullptr,rectangle.left,rectangle.top,rectangle.right-rectangle.left,
                 rectangle.bottom-rectangle.top,SWP_NOACTIVATE | SWP_NOZORDER);
@@ -223,11 +224,25 @@ private:
         const auto text = twoDigits(seconds/60) + L":" + twoDigits(seconds%60);
         auto rectangles = Layout();
         DrawTextW(context,text.c_str(),static_cast<int>(text.size()),&rectangles[0],DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-        SetDCBrushColor(context,RGB(65,69,79));
-        FillRect(context,&rectangles[1],static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-        FillRect(context,&rectangles[2],static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-        DrawTextW(context,english_ ? L"Stop" : L"停止",-1,&rectangles[1],DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        DrawTextW(context,english_ ? L"Cancel" : L"取消",-1,&rectangles[2],DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        POINT pointer{};
+        const bool hovering = GetCursorPos(&pointer) && WindowFromPoint(pointer) == Handle() && ScreenToClient(Handle(),&pointer);
+        const bool stopHovered = hovering && PtInRect(&rectangles[1],pointer);
+        const bool cancelHovered = hovering && PtInRect(&rectangles[2],pointer);
+        const auto brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
+        SetDCBrushColor(context,stopHovered ? RGB(87,92,105) : RGB(65,69,79));
+        FillRect(context,&rectangles[1],brush);
+        SetDCBrushColor(context,cancelHovered ? RGB(87,92,105) : RGB(65,69,79));
+        FillRect(context,&rectangles[2],brush);
+        DrawToolbarIcon(context,rectangles[1],ToolbarIcon::Stop,dpi_,iconPen_.Get());
+        DrawToolbarIcon(context,rectangles[2],ToolbarIcon::Cancel,dpi_,iconPen_.Get());
+        if (stopHovered || cancelHovered) {
+            RECT hint = rectangles[0];
+            hint.left += MulDiv(50,dpi_,96);
+            SetTextColor(context,RGB(207,211,220));
+            const auto label = stopHovered ? (english_ ? L"Stop recording" : L"停止录制") :
+                (english_ ? L"Cancel recording" : L"取消录制");
+            DrawTextW(context,label,-1,&hint,DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
     }
     std::array<RECT,3> Layout() const noexcept {
         RECT client{}; GetClientRect(Handle(),&client);
@@ -238,7 +253,7 @@ private:
         const RECT timer{margin,margin,stop.left-margin,client.bottom-margin};
         return {timer,stop,cancel};
     }
-    void CreateFontForDpi() {
+    void CreateResourcesForDpi() {
         const auto version = GetWindowsVersion();
         const bool hasUiFont = version.major > 6 || (version.major == 6 && version.minor >= 2);
         const auto font = CreateFontW(-MulDiv(14,dpi_,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
@@ -246,6 +261,7 @@ private:
             english_ ? L"Segoe UI" : (hasUiFont ? L"Microsoft YaHei UI" : L"Microsoft YaHei"));
         if (font == nullptr) { throw std::runtime_error("Cannot create recording toolbar font"); }
         font_.Reset(font);
+        iconPen_ = CreateToolbarIconPen(dpi_);
     }
     std::function<void(bool)> stop_;
     std::function<void(bool)> session_;
@@ -254,6 +270,7 @@ private:
     bool english_;
     int dpi_ = 96;
     UniqueGdiObject<HFONT> font_;
+    UniqueGdiObject<HPEN> iconPen_;
     bool sessionRegistered_ = false;
 };
 

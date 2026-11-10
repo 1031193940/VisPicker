@@ -106,6 +106,29 @@ void App::Notify(std::wstring_view message, bool warning) {
     if (tray_) { (void)tray_->Notify(L"VisPick", message, warning); }
 }
 
+void App::NotifyStartup(std::wstring_view configurationNotice) {
+    if (!startupNotificationPending_) { return; }
+    startupNotificationPending_ = false;
+    auto message = Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已启动。右键系统托盘图标打开菜单。",
+        L"VisPick " VISPICK_PRODUCT_VERSION_W L" started. Right-click its system tray icon for commands.");
+    const bool hasDiagnostics = !configurationProblems_.empty() || !hotkeyProblems_.empty();
+    if (hasDiagnostics) {
+        if (!configurationProblems_.empty()) {
+            message += Text(L"\n部分配置未能加载。", L"\nSome configuration settings could not be loaded.");
+        }
+        if (!hotkeyProblems_.empty()) {
+            message += Text(L"\n部分热键无法注册。", L"\nSome shortcuts could not be registered.");
+        }
+        message += Text(L"请在托盘的「关于 VisPick」中查看。", L" See About VisPick in the tray for details.");
+        if (!hotkeyProblems_.empty()) {
+            message += L'\n';
+            message += std::wstring_view(hotkeyProblems_).substr(0, hotkeyProblems_.find(L'\n'));
+        }
+    }
+    if (!configurationNotice.empty()) { message += L"\n"; message += configurationNotice; }
+    Notify(message, hasDiagnostics || !configurationNotice.empty());
+}
+
 void App::WindowFailed(const WindowException& error) noexcept {
     if (exceptionOwner && error.message != WindowFailure) { PostMessageW(exceptionOwner, WindowFailure, error.message, 0); }
 }
@@ -143,11 +166,8 @@ int App::Run(const LaunchOptions& options, const std::wstring& instanceWindowTit
     if (!trayAdded) { log_.Write(LogLevel::Warning, L"tray_add_failed; waiting for TaskbarCreated"); }
     try { (void)autostart_->RepairIfEnabled(executable_); }
     catch (const std::exception& error) { Notify(ExceptionMessage(error), true); }
-    if (selectedPath.usedFallback) { Notify(selectedPath.notice, true); }
-    if (selectedPath.created && hotkeyProblems_.empty()) {
-        Notify(Text(L"VisPick 已启动。Ctrl+1 截图后可贴图、复制或保存。Ctrl+2 录制 GIF。",
-            L"VisPick is running. Ctrl+1 opens a screenshot to pin, copy or save. Ctrl+2 records GIFs."));
-    }
+    if (trayAdded) { NotifyStartup(selectedPath.notice); }
+    else if (selectedPath.usedFallback) { log_.Write(LogLevel::Warning, selectedPath.notice); }
     log_.Write(LogLevel::Info, L"ready config=" + configPath_.native());
     if (options.command != AppCommand::None) { Queue(options); }
     MSG message{};
@@ -176,8 +196,10 @@ void App::ReloadConfiguration(bool announce, bool retry, bool retryHotkeys) {
         configurationProblems_ += line + L"\n";
     }
     if (!loaded.diagnostics.empty()) {
-        Notify(configurationProblems_.substr(0, 180) + Text(L"\n无效项沿用上次有效值。关于窗口可查看全部错误。",
-            L"\nInvalid values retain their last valid settings. About shows all errors."), true);
+        if (!startupNotificationPending_) {
+            Notify(configurationProblems_.substr(0, 180) + Text(L"\n无效项沿用上次有效值。关于窗口可查看全部错误。",
+                L"\nInvalid values retain their last valid settings. About shows all errors."), true);
+        }
     } else if (announce && hotkeyProblems_.empty()) {
         Notify(Text(L"配置已重新加载。", L"Configuration reloaded."));
     }
@@ -228,8 +250,10 @@ void App::RebindHotkeys(bool announceFailure) {
     const bool changed = hotkeyProblems_ != problems;
     hotkeyProblems_ = std::move(problems);
     if (!hotkeyProblems_.empty() && (changed || announceFailure)) {
-        Notify(Text(L"以下热键无法注册。请在托盘的「关于」中查看。\n",
-            L"These shortcuts could not be registered. See About in the tray.\n") + hotkeyProblems_, true);
+        const auto message = Text(L"以下热键无法注册。请在托盘的「关于」中查看。\n",
+            L"These shortcuts could not be registered. See About in the tray.\n") + hotkeyProblems_;
+        if (startupNotificationPending_) { log_.Write(LogLevel::Warning, message); }
+        else { Notify(message, true); }
     }
 }
 
@@ -418,7 +442,8 @@ void App::Dispatch(AppCommand command, const std::filesystem::path& file) {
     log_.Write(LogLevel::Info, std::wstring(L"command=") + CommandName(command));
     switch (command) {
     case AppCommand::None:
-        Notify(Text(L"VisPick 已在运行。右键托盘图标可打开菜单。", L"VisPick is already running. Right-click its tray icon for commands."));
+        Notify(Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已在运行。右键系统托盘图标打开菜单。",
+            L"VisPick " VISPICK_PRODUCT_VERSION_W L" is already running. Right-click its system tray icon for commands."));
         break;
     case AppCommand::Screenshot:
         BeginSelection(CaptureMode::Screenshot);
@@ -490,8 +515,10 @@ void App::Dispatch(AppCommand command, const std::filesystem::path& file) {
 
 LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
     if (taskbarCreated_ && message == taskbarCreated_) {
+        if (stopping_) { return 0; }
         const bool restored = tray_->Restore();
         log_.Write(restored ? LogLevel::Info : LogLevel::Warning, restored ? L"tray_restored" : L"tray_restore_failed");
+        if (restored) { NotifyStartup(); }
         return 0;
     }
     switch (message) {

@@ -28,6 +28,7 @@ P0 评审时，下节审查了开发工具新增 API，并将确认兼容 Win7 �
 - **P1 常驻框架**：[白名单](../scripts/Win7-Imports.txt) 的 `P1 resident framework additions` 段逐条保留 Microsoft Learn 最低客户端和 URL，覆盖热键/托盘、注册表、配置目录通知、文件和同步等实际新增导入。
 - **P2/P3 截图与编辑**：[API 原始审查记录](reports/data/p23-api-review.json) 保存符号、最低客户端及官方 SDK 文档来源；已核准静态符号在白名单对应段。GDI+、IME、WIC/COM 的可用性不能等同于所有字体、输入法和系统组件配置已实测。
 - **P4/P5 贴图与录制**：[API 原始审查记录](reports/data/p45-api-review.json) 与白名单 `P4/P5 Win32 imports` 段，包含绘制、文件提交、计时器、剪贴板、会话通知等实际增量。
+- **GIF 预览悬停**：用 `TrackMouseEvent` 接收 `WM_MOUSELEAVE`。微软文档列出的最低桌面客户端为 Windows 2000。 [TrackMouseEvent](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackmouseevent)
 - **动态路径**：`Compat` 动态探测 DPI/窗口捕获接口；可选 `shcore.dll` 与崩溃时的 `dbghelp.dll` 使用系统目录绝对路径。新 API 或新标志在旧系统不可用时需保留回退。动态 API 不因为已有运行成功记录就自动加入 Win7 静态白名单；具体路径与未测边界见 [P6 审计](reports/P6-code-audit.md)。
 
 ## P0 评审新增 API 审查（历史基线）

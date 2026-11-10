@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(VisPick VERSION 0.5.8 LANGUAGES CXX RC)
+project(VisPick VERSION 0.5.9 LANGUAGES CXX RC)
 set(VISPICK_PRODUCT_VERSION "${PROJECT_VERSION}")
 
 if(NOT WIN32 OR NOT MSVC)
@@ -63,7 +63,7 @@ add_library(vispick_core STATIC
     src/recording/FrameChange.cpp src/recording/Recorder.cpp
     src/recording/RecordingFiles.cpp src/recording/GifPreview.cpp
     src/imaging/Bitmap.cpp src/platform/Gdi.cpp src/platform/Compat.cpp
-    src/platform/Window.cpp src/platform/Console.cpp
+    src/platform/Window.cpp src/platform/Console.cpp src/platform/ToolbarIcon.cpp
     src/capture/ScreenGrab.cpp
     src/gif/Lzw.cpp src/gif/Quantizer.cpp src/gif/GifWriter.cpp
     src/gif/GifReader.cpp src/gif/Timing.cpp)

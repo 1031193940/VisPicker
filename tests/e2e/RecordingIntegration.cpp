@@ -386,7 +386,7 @@ void CheckPreviewDpi(Report& report, HWND window, const std::filesystem::path& o
         constexpr std::uint32_t copyFill = 0xFF215AADU;
         const RECT copy{scale(10),client.bottom-scale(36),scale(164),client.bottom-scale(6)};
         const auto buttonEdge = rendered.Row(copy.top+scale(3));
-        const auto hasLabel = [&] {
+        const auto hasIcon = [&] {
             for (LONG row = copy.top+scale(5); row < copy.bottom-scale(5); ++row) {
                 const auto pixels = rendered.Row(row);
                 for (LONG column = copy.left+scale(5); column < copy.right-scale(5); ++column) {
@@ -397,7 +397,7 @@ void CheckPreviewDpi(Report& report, HWND window, const std::filesystem::path& o
             return false;
         };
         report.Require(buttonEdge[copy.left+scale(3)] == copyFill && buttonEdge[copy.right-scale(3)] == copyFill &&
-            buttonEdge[copy.right+scale(3)] != copyFill && hasLabel(),"preview_192dpi_clipboard_button_visible_at_minimum_size");
+            buttonEdge[copy.right+scale(3)] != copyFill && hasIcon(),"preview_192dpi_clipboard_icon_visible_at_minimum_size");
         vispick::SaveImage(output/L"preview-dpi192-client.png",rendered,vispick::SaveFormat::Png);
     } catch (...) {
         SendMessageW(window,WM_DPICHANGED,MAKELONG(originalDpi,originalDpi),reinterpret_cast<LPARAM>(&original));
