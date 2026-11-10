@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(VisPick VERSION 0.5.10 LANGUAGES CXX RC)
+project(VisPick VERSION 0.5.11 LANGUAGES CXX RC)
 set(VISPICK_PRODUCT_VERSION "${PROJECT_VERSION}")
 
 if(NOT WIN32 OR NOT MSVC)
@@ -56,7 +56,7 @@ add_library(vispick_core STATIC
     src/platform/ConfigWatcher.cpp src/platform/HotkeyRegistration.cpp
     src/platform/SingleInstance.cpp src/platform/Tray.cpp src/platform/Autostart.cpp
     src/imaging/ImageCodec.cpp src/imaging/Clipboard.cpp
-    src/output/SaveDialog.cpp src/output/ImageSaver.cpp src/output/CopyToast.cpp
+    src/output/SaveDialog.cpp src/output/ImageSaver.cpp
     src/overlay/Overlay.cpp src/overlay/Selection.cpp
     src/editor/Annotation.cpp src/editor/Renderer.cpp src/editor/TextInput.cpp
     src/pin/PinManager.cpp src/pin/PinGeometry.cpp

@@ -267,6 +267,8 @@ BOOL CALLBACK ReadDialogChild(HWND window, LPARAM data) noexcept {
 
 void DetachedCase(const std::wstring& product) {
     // A detached helper is essential: AttachConsole must not find our main runner's console.
+    auto invalid = Start(product, L"--invalid-option", DETACHED_PROCESS, true);
+    Require(Finish(invalid, 3000) == 2, "No-console argument error must exit without a blocking notification");
     auto child = Start(product, L"--help", DETACHED_PROCESS, true);
     // EnumWindows can find the dialog before MessageBox initializes its STATIC
     // text. Wait for its input loop, then still poll the content with a deadline.

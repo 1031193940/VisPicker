@@ -783,9 +783,9 @@ struct GifPreview::Implementation final : Window {
             }
         } catch (const std::exception& error) {
             SetPaused(true);
-            const BusyScope busy(*this);
-            const auto description = ExceptionMessage(error);
-            MessageBoxW(Handle(),description.c_str(),L"VisPick GIF",MB_OK | MB_ICONERROR);
+            outputStatus = ExceptionMessage(error);
+            // A persistent paint failure must not schedule an endless repaint loop.
+            if (message != WM_PAINT && message != WM_PRINTCLIENT) { InvalidateRect(Handle(),nullptr,FALSE); }
             return 0;
         }
         return Window::OnMessage(message,parameter,data);

@@ -11,7 +11,6 @@
 #include "platform/Console.h"
 #include "imaging/Clipboard.h"
 #include "imaging/ImageCodec.h"
-#include "output/CopyToast.h"
 #include "output/ImageSaver.h"
 #include "output/SaveDialog.h"
 #include "pin/PinManager.h"
@@ -81,7 +80,6 @@ App::~App() {
     preview_.reset();
     overlay_.reset();
     pins_.reset();
-    copyToast_.reset();
     imageSaver_.reset();
     hotkeys_.reset();
     tray_.reset();
@@ -100,33 +98,17 @@ std::wstring App::Text(const wchar_t* chinese, const wchar_t* english) const {
     return English() ? english : chinese;
 }
 
-void App::Notify(std::wstring_view message, bool warning) {
-    notificationFile_.clear();
+void App::Report(std::wstring_view message, bool warning) {
     log_.Write(warning ? LogLevel::Warning : LogLevel::Info, message);
-    if (tray_) { (void)tray_->Notify(L"VisPick", message, warning); }
 }
 
-void App::NotifyStartup(std::wstring_view configurationNotice) {
+void App::NotifyStartup() {
     if (!startupNotificationPending_) { return; }
     startupNotificationPending_ = false;
-    auto message = Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已启动。右键系统托盘图标打开菜单。",
+    const auto message = Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已启动。右键系统托盘图标打开菜单。",
         L"VisPick " VISPICK_PRODUCT_VERSION_W L" started. Right-click its system tray icon for commands.");
-    const bool hasDiagnostics = !configurationProblems_.empty() || !hotkeyProblems_.empty();
-    if (hasDiagnostics) {
-        if (!configurationProblems_.empty()) {
-            message += Text(L"\n部分配置未能加载。", L"\nSome configuration settings could not be loaded.");
-        }
-        if (!hotkeyProblems_.empty()) {
-            message += Text(L"\n部分热键无法注册。", L"\nSome shortcuts could not be registered.");
-        }
-        message += Text(L"请在托盘的「关于 VisPick」中查看。", L" See About VisPick in the tray for details.");
-        if (!hotkeyProblems_.empty()) {
-            message += L'\n';
-            message += std::wstring_view(hotkeyProblems_).substr(0, hotkeyProblems_.find(L'\n'));
-        }
-    }
-    if (!configurationNotice.empty()) { message += L"\n"; message += configurationNotice; }
-    Notify(message, hasDiagnostics || !configurationNotice.empty());
+    Report(message);
+    if (tray_) { (void)tray_->Notify(L"VisPick", message); }
 }
 
 void App::WindowFailed(const WindowException& error) noexcept {
@@ -155,9 +137,8 @@ int App::Run(const LaunchOptions& options, const std::wstring& instanceWindowTit
     hotkeys_ = std::make_unique<HotkeyRegistration>(Handle());
     overlay_ = std::make_unique<Overlay>(Handle());
     imageSaver_ = std::make_unique<ImageSaver>();
-    copyToast_ = std::make_unique<CopyToast>(Handle());
     pins_ = std::make_unique<PinManager>(Handle(), [this](Bitmap image) { (void)SaveBitmap(std::move(image)); },
-        [this](std::wstring message, bool warning) { Notify(message, warning); });
+        [this](std::wstring message, bool warning) { Report(message, warning); });
     watcher_ = std::make_unique<ConfigWatcher>(configPath_, Handle(), ConfigurationChanged);
     watcher_->Start(); // Arm before reading again, including changes during initial startup.
     ReloadConfiguration(false);
@@ -165,9 +146,9 @@ int App::Run(const LaunchOptions& options, const std::wstring& instanceWindowTit
     catch (const std::exception& error) { log_.Write(LogLevel::Warning, ExceptionMessage(error)); }
     if (!trayAdded) { log_.Write(LogLevel::Warning, L"tray_add_failed; waiting for TaskbarCreated"); }
     try { (void)autostart_->RepairIfEnabled(executable_); }
-    catch (const std::exception& error) { Notify(ExceptionMessage(error), true); }
-    if (trayAdded) { NotifyStartup(selectedPath.notice); }
-    else if (selectedPath.usedFallback) { log_.Write(LogLevel::Warning, selectedPath.notice); }
+    catch (const std::exception& error) { Report(ExceptionMessage(error), true); }
+    if (!selectedPath.notice.empty()) { Report(selectedPath.notice, true); }
+    if (trayAdded) { NotifyStartup(); }
     log_.Write(LogLevel::Info, L"ready config=" + configPath_.native());
     if (options.command != AppCommand::None) { Queue(options); }
     MSG message{};
@@ -197,11 +178,11 @@ void App::ReloadConfiguration(bool announce, bool retry, bool retryHotkeys) {
     }
     if (!loaded.diagnostics.empty()) {
         if (!startupNotificationPending_) {
-            Notify(configurationProblems_.substr(0, 180) + Text(L"\n无效项沿用上次有效值。关于窗口可查看全部错误。",
+            Report(configurationProblems_.substr(0, 180) + Text(L"\n无效项沿用上次有效值。关于窗口可查看全部错误。",
                 L"\nInvalid values retain their last valid settings. About shows all errors."), true);
         }
     } else if (announce && hotkeyProblems_.empty()) {
-        Notify(Text(L"配置已重新加载。", L"Configuration reloaded."));
+        Report(Text(L"配置已重新加载。", L"Configuration reloaded."));
     }
     log_.Write(LogLevel::Info, L"config_reload accepted=" + std::to_wstring(loaded.accepted) +
         L" diagnostics=" + std::to_wstring(loaded.diagnostics.size()));
@@ -210,16 +191,16 @@ void App::ReloadConfiguration(bool announce, bool retry, bool retryHotkeys) {
 void App::ApplyConfiguration(bool retryHotkeys) {
     const auto logging = log_.Configure(config_.general.log || performanceLogging_);
     if (logging.error != 0) {
-        (void)tray_->Notify(L"VisPick", Text(L"无法打开日志文件，错误 ", L"Cannot open log file, error ") +
+        Report(Text(L"无法打开日志文件，错误 ", L"Cannot open log file, error ") +
             std::to_wstring(logging.error), true);
     } else if (logging.enabled && logging.usingFallback) {
-        (void)tray_->Notify(L"VisPick", Text(L"日志写入备用位置：", L"Log uses fallback location: ") + logging.path.native());
+        Report(Text(L"日志写入备用位置：", L"Log uses fallback location: ") + logging.path.native());
     }
     tray_->SetLanguage(English());
     tray_->SetLeftClickCommand(TrayCommand(config_.general.trayClick));
     if (pins_) {
         try { pins_->Configure(config_.pin, English()); }
-        catch (const std::exception& error) { Notify(ExceptionMessage(error), true); }
+        catch (const std::exception& error) { Report(ExceptionMessage(error), true); }
     }
     if (!retryHotkeys && appliedHotkeys_ == config_.hotkeys) { return; }
     RebindHotkeys(retryHotkeys);
@@ -253,7 +234,7 @@ void App::RebindHotkeys(bool announceFailure) {
         const auto message = Text(L"以下热键无法注册。请在托盘的「关于」中查看。\n",
             L"These shortcuts could not be registered. See About in the tray.\n") + hotkeyProblems_;
         if (startupNotificationPending_) { log_.Write(LogLevel::Warning, message); }
-        else { Notify(message, true); }
+        else { Report(message, true); }
     }
 }
 
@@ -278,16 +259,16 @@ void App::ProcessCommands() {
         (void)log_.Configure(true);
     }
     try { Dispatch(request.command, request.pinFile); }
-    catch (const std::exception& error) { Notify(ExceptionMessage(error), true); }
+    catch (const std::exception& error) { Report(ExceptionMessage(error), true); }
     if (!commands_.empty() && !stopping_) { PostMessageW(Handle(), ProcessQueue, 0, 0); }
 }
 
 void App::BeginSelection(CaptureMode mode) {
     if (!selections_.empty()) { return; } // A completed selection still owns the next action.
-    if (recorder_) { Notify(Text(L"请先停止当前 GIF 录制。", L"Please stop the current GIF recording first.")); return; }
+    if (recorder_) { Report(Text(L"请先停止当前 GIF 录制。", L"Please stop the current GIF recording first.")); return; }
     if (mode == CaptureMode::Gif && preview_ && !preview_->Closed()) {
         SetForegroundWindow(preview_->Handle());
-        Notify(Text(L"请先保存或放弃当前 GIF 预览。", L"Please save or discard the current GIF preview first."));
+        Report(Text(L"请先保存或放弃当前 GIF 预览。", L"Please save or discard the current GIF preview first."));
         return;
     }
     if (overlay_->Active()) { overlay_->SwitchMode(mode); return; }
@@ -299,7 +280,7 @@ void App::BeginSelection(CaptureMode mode) {
 
 bool App::SaveBitmap(Bitmap image, HWND dialogOwner) {
     if (stopping_) { return false; }
-    if (imageSaver_->Busy()) { Notify(Text(L"正在保存上一张图片，请稍后重试。", L"The previous image is still being saved. Please try again."), true); return false; }
+    if (imageSaver_->Busy()) { Report(Text(L"正在保存上一张图片，请稍后重试。", L"The previous image is still being saved. Please try again."), true); return false; }
     const ModalScope modal(modalDepth_, Handle());
     const auto settings = config_.save; // Config may reload inside the native dialog's message loop.
     const auto destination = ChooseSavePath(dialogOwner ? dialogOwner : Handle(), settings,
@@ -325,7 +306,6 @@ void App::ProcessSelection() {
         switch (result.action) {
         case OverlayAction::Copy:
             CopyImage(Handle(), result.image.View());
-            copyToast_->Show(result.selection, English());
             log_.Write(LogLevel::Info, L"image_copied width=" + std::to_wstring(result.image.Width()) + L" height=" + std::to_wstring(result.image.Height()));
             break;
         case OverlayAction::Save: // saveRequested already accepted ownership.
@@ -336,7 +316,7 @@ void App::ProcessSelection() {
         case OverlayAction::Record:
             {
                 if (recorder_ || (preview_ && !preview_->Closed())) {
-                    Notify(Text(L"请先结束当前录制或预览。", L"Please finish the current recording or preview first."), true);
+                    Report(Text(L"请先结束当前录制或预览。", L"Please finish the current recording or preview first."), true);
                     break;
                 }
                 auto settings = config_.gif;
@@ -347,7 +327,7 @@ void App::ProcessSelection() {
             }
             break;
         }
-    } catch (const std::exception& error) { Notify(ExceptionMessage(error), true); }
+    } catch (const std::exception& error) { Report(ExceptionMessage(error), true); }
 }
 
 void App::RecordingFinished() {
@@ -365,11 +345,11 @@ void App::RecordingFinished() {
         L" cursor_failures=" + std::to_wstring(result->cursorFailures) +
         L" cancelled=" + std::to_wstring(result->cancelled));
     if (result->captureInterrupted) {
-        Notify(Text(L"屏幕采集中断，已保留之前录到的画面。", L"Capture was interrupted. The recorded frames were preserved."), true);
+        Report(Text(L"屏幕采集中断，已保留之前录到的画面。", L"Capture was interrupted. The recorded frames were preserved."), true);
     }
-    if (!result->error.empty()) { Notify(result->error, true); }
+    if (!result->error.empty()) { Report(result->error, true); }
     else if (!result->cancelled && result->path.empty()) {
-        Notify(Text(L"没有捕获到可保存的 GIF 帧。", L"No GIF frames were captured."), true);
+        Report(Text(L"没有捕获到可保存的 GIF 帧。", L"No GIF frames were captured."), true);
     } else if (!result->cancelled) {
         auto preview = std::make_unique<GifPreview>(std::move(*result), config_.save, Handle(), PreviewClosed,
         [this](HWND owner, int width, int height) -> std::optional<std::filesystem::path> {
@@ -442,7 +422,7 @@ void App::Dispatch(AppCommand command, const std::filesystem::path& file) {
     log_.Write(LogLevel::Info, std::wstring(L"command=") + CommandName(command));
     switch (command) {
     case AppCommand::None:
-        Notify(Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已在运行。右键系统托盘图标打开菜单。",
+        Report(Text(L"VisPick " VISPICK_PRODUCT_VERSION_W L" 已在运行。右键系统托盘图标打开菜单。",
             L"VisPick " VISPICK_PRODUCT_VERSION_W L" is already running. Right-click its system tray icon for commands."));
         break;
     case AppCommand::Screenshot:
@@ -457,7 +437,7 @@ void App::Dispatch(AppCommand command, const std::filesystem::path& file) {
         break;
     case AppCommand::PinClipboard:
         if (auto image = ReadClipboardImage(Handle())) { PinAtCursor(std::move(*image)); }
-        else { Notify(Text(L"剪贴板中没有可读取的图片。", L"The clipboard contains no readable image."), true); }
+        else { Report(Text(L"剪贴板中没有可读取的图片。", L"The clipboard contains no readable image."), true); }
         break;
     case AppCommand::PinFile:
         PinAtCursor(ReadImage(file));
@@ -492,12 +472,12 @@ void App::Dispatch(AppCommand command, const std::filesystem::path& file) {
         try { enabled = autostart_->Enabled(); }
         catch (const std::exception&) {
             autostart_->SetEnabled(false, executable_);
-            Notify(Text(L"已移除损坏的自启设置。", L"Removed the invalid start-at-sign-in entry."));
+            Report(Text(L"已移除损坏的自启设置。", L"Removed the invalid start-at-sign-in entry."));
             break;
         }
         const bool enable = !enabled;
         autostart_->SetEnabled(enable, executable_, explicitConfigPath_);
-        Notify(enable ? Text(L"已开启当前用户的开机自启。", L"Start at sign-in is enabled for the current user.") :
+        Report(enable ? Text(L"已开启当前用户的开机自启。", L"Start at sign-in is enabled for the current user.") :
             Text(L"已关闭开机自启。", L"Start at sign-in is disabled."));
         break;
     }
@@ -549,11 +529,6 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
     }
     case TrayMessage: {
         if (!tray_ || !autostart_) { return 0; }
-        if (LOWORD(data) == NIN_BALLOONUSERCLICK && !notificationFile_.empty()) {
-            const auto file = notificationFile_;
-            ShowSavedFile(Handle(), file);
-            return 0;
-        }
         bool autostartEnabled = false;
         try { autostartEnabled = autostart_->Enabled(); }
         catch (const std::exception& error) { log_.Write(LogLevel::Warning, ExceptionMessage(error)); }
@@ -562,7 +537,7 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
         return 0;
     }
     case ConfigurationChanged:
-        if (parameter != 0) { Notify(Text(L"配置监控已停止，错误 ", L"Configuration watching stopped, error ") + std::to_wstring(parameter), true); }
+        if (parameter != 0) { Report(Text(L"配置监控已停止，错误 ", L"Configuration watching stopped, error ") + std::to_wstring(parameter), true); }
         else if (!stopping_) { SetTimer(Handle(), ConfigurationDebounce, 150, nullptr); }
         return 0;
     case WM_TIMER:
@@ -590,10 +565,9 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
     case ImageSaved:
         if (const auto saved = imageSaver_->TakeResult()) {
             if (stopping_) { FinishExitIfReady(); return 0; }
-            if (saved->failed) { Notify(saved->error.empty() ? Text(L"图片保存失败。", L"Image save failed.") : saved->error, true); }
+            if (saved->failed) { Report(saved->error.empty() ? Text(L"图片保存失败。", L"Image save failed.") : saved->error, true); }
             else {
-                Notify(Text(L"已保存：", L"Saved: ") + saved->path.native() + Text(L"\n点击打开文件夹。", L"\nClick to open the folder."));
-                notificationFile_ = saved->path;
+                Report(Text(L"已保存：", L"Saved: ") + saved->path.native());
             }
         }
         return 0;
@@ -613,7 +587,7 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
         if (pins_) { pins_->DisplayChanged(); }
         return 0;
     case WindowFailure:
-        Notify(Text(L"窗口操作失败，已保留错误计数。", L"A window operation failed; the error was recorded."), true);
+        Report(Text(L"窗口操作失败，已保留错误计数。", L"A window operation failed; the error was recorded."), true);
         return 0;
     case WM_CLOSE:
         Dispatch(AppCommand::Exit);
