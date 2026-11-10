@@ -2,7 +2,7 @@
 
 ## 0.6.0 — 2026-11-10
 
-- Release 标题为 `VisPick 0.6.0`，仅提供 x64 `VisPick.0.6.0.exe` 单文件，下载后直接运行；不附带配置，x86 保留源码构建和 CI 验证。
+- Release 标题为 `VisPick 0.6.0`，仅提供 x64 `VisPick_0.6.0.exe` 单文件，下载后直接运行；不附带配置，x86 保留源码构建和 CI 验证。
 - 默认恢复错误通知，成功操作保持静默；支持 `[General] Notify=errors/all/none`，启动合并热键冲突摘要，重复启动重放提醒。
 - 浮层窗口回调异常时取消选区，释放冻结画面和鼠标捕获。
 - 托盘显示当前配置快捷键；新增 Ctrl+A 当前显示器、Tab/Shift+Tab 候选窗口、Ctrl+方向键调整尺寸、C/Shift+C 复制 HEX/RGB。

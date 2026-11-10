@@ -138,8 +138,7 @@ jobs:
           $notes = "docs/releases/VisPick-$version.md"
           $hasVersionNotes = Test-Path -LiteralPath $notes -PathType Leaf
           $releaseBody = if ($hasVersionNotes) { Get-Content -LiteralPath $notes -Raw } else { '' }
-          # GitHub replaces spaces in asset filenames with dots; retain spaces in the display label.
-          $releaseBinary = "dist/VisPick.$version.exe"
+          $releaseBinary = "dist/VisPick_$version.exe"
           Copy-Item -LiteralPath 'dist/VisPick.exe' -Destination $releaseBinary
           $binary = Get-Item -LiteralPath $releaseBinary
           $binaryHash = (Get-FileHash -LiteralPath $binary.FullName -Algorithm SHA256).Hash
@@ -154,7 +153,7 @@ jobs:
           $releaseNotes = "out/release-$version.md"
           (@($releaseBody.TrimEnd()) + $assetDetails) |
             Set-Content -LiteralPath $releaseNotes -Encoding utf8NoBOM
-          $arguments = @('release', 'create', $tag, "$releaseBinary#VisPick $version.exe",
+          $arguments = @('release', 'create', $tag, $releaseBinary,
             '--repo', $env:GITHUB_REPOSITORY, '--verify-tag', '--title', "VisPick $version",
             '--notes-file', $releaseNotes)
           if (-not $hasVersionNotes) { $arguments += '--generate-notes' }

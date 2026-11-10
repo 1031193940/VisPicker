@@ -1,8 +1,8 @@
 # VisPick 0.6.0
 
-发布日期：2026-11-10。面向 Windows 11 x64，Release 仅提供一个独立的 `VisPick.0.6.0.exe`，不附带 ZIP、配置模板或其它文件。x86 继续保留源码构建和 CI 验证；Win7/Win10 兼容性仍待实际验证。
+发布日期：2026-11-10。面向 Windows 11 x64，Release 仅提供一个独立的 `VisPick_0.6.0.exe`，不附带 ZIP、配置模板或其它文件。x86 继续保留源码构建和 CI 验证；Win7/Win10 兼容性仍待实际验证。
 
-[下载 VisPick 0.6.0.exe](https://github.com/1031193940/VisPicker/releases/download/v0.6.0/VisPick.0.6.0.exe)
+[下载 VisPick_0.6.0.exe](https://github.com/1031193940/VisPicker/releases/download/v0.6.0/VisPick_0.6.0.exe)
 
 文件大小：866,816 bytes。SHA256：`dacf215abea86782810edcca7216eb9ffb4179050604e9db5acecd7aea3de109`。
 
@@ -16,7 +16,7 @@
 
 ## 使用
 
-下载后双击 `VisPick.0.6.0.exe`。程序无需安装，启动后驻留系统托盘，右键图标打开菜单。同一用户会话只运行一个实例。
+下载后双击 `VisPick_0.6.0.exe`。程序无需安装，启动后驻留系统托盘，右键图标打开菜单。同一用户会话只运行一个实例。
 
 升级前先保存需要保留的参考图和 GIF，从托盘退出旧版，将新 exe 放到原目录并运行，保留原有 `VisPick.ini` 即可继续使用自定义设置。若曾启用开机自启，请在新版托盘菜单中关闭再开启一次，以更新启动路径。程序不会自动保存退出前的参考图。
 
