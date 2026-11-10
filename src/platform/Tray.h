@@ -17,7 +17,8 @@ public:
     void Remove() noexcept;
     void SetLeftClickCommand(AppCommand command) noexcept;
     void SetLanguage(bool english) noexcept;
-    [[nodiscard]] AppCommand HandleCallback(WPARAM parameter, LPARAM data, bool autostartEnabled);
+    [[nodiscard]] AppCommand HandleCallback(WPARAM parameter, LPARAM data, bool autostartEnabled,
+                                          bool pinsAcrossDesktops = false);
     [[nodiscard]] bool Notify(std::wstring_view title, std::wstring_view text, bool warning = false) noexcept;
     [[nodiscard]] static UINT TaskbarCreatedMessage();
     [[nodiscard]] static AppCommand CommandFromMenuId(UINT identifier) noexcept;

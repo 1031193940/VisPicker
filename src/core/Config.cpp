@@ -3,9 +3,11 @@
 
 #include <windows.h>
 #include <algorithm>
+#include <atomic>
 #include <fstream>
 #include <limits>
 #include <set>
+#include <system_error>
 
 namespace vispick {
 namespace {
@@ -156,6 +158,7 @@ ConfigLoadResult ParseConfig(std::span<const std::uint8_t> bytes, const Config* 
         } else if (entry.section == L"pin") {
             if (key == L"instant") { boolean(config.pin.instant, retained.pin.instant); }
             else if (key == L"topmost") { boolean(config.pin.topmost, retained.pin.topmost); }
+            else if (key == L"acrossdesktops") { boolean(config.pin.acrossDesktops, retained.pin.acrossDesktops); }
             else if (key == L"border") { boolean(config.pin.border, retained.pin.border); }
             else if (key == L"bordercolor") { color(config.pin.borderColor, retained.pin.borderColor); }
             else if (key == L"shadow") { boolean(config.pin.shadow, retained.pin.shadow); }
@@ -215,6 +218,123 @@ ConfigLoadResult LoadConfig(const std::filesystem::path& path, const Config* pre
         return failure;
     }
     return ParseConfig(bytes, previous);
+}
+
+void SavePinAcrossDesktops(const std::filesystem::path& path, const bool enabled) {
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    const std::streamoff size = input ? static_cast<std::streamoff>(input.tellg()) : -1;
+    if (size < 0 || size > 1024 * 1024) { throw std::runtime_error("Cannot read configuration to save reference desktop setting"); }
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
+    input.seekg(0);
+    if (size && !input.read(reinterpret_cast<char*>(bytes.data()), size)) { throw std::runtime_error("Incomplete configuration read"); }
+    input.close();
+    const auto document = ParseIni(bytes, CP_ACP);
+    if (!document.valid || document.sections.empty()) { throw std::runtime_error("Cannot modify an empty or malformed configuration"); }
+
+    const bool utf16 = bytes.size() >= 2 && ((bytes[0] == 0xFF && bytes[1] == 0xFE) || (bytes[0] == 0xFE && bytes[1] == 0xFF));
+    const bool littleEndian = utf16 && bytes[0] == 0xFF;
+    const bool utf8Bom = bytes.size() >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+    const std::size_t stride = utf16 ? 2 : 1;
+    const std::size_t firstByte = utf16 ? 2 : utf8Bom ? 3 : 0;
+    const UINT codePage = !utf16 && !utf8Bom && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        reinterpret_cast<const char*>(bytes.data()), static_cast<int>(bytes.size()), nullptr, 0) ? CP_ACP : CP_UTF8;
+    const auto encode = [&](const std::wstring_view text) {
+        std::vector<std::uint8_t> result;
+        if (utf16) {
+            for (const wchar_t character : text) {
+                result.push_back(static_cast<std::uint8_t>(littleEndian ? character & 255 : character >> 8));
+                result.push_back(static_cast<std::uint8_t>(littleEndian ? character >> 8 : character & 255));
+            }
+        } else if (!text.empty()) {
+            const int count = WideCharToMultiByte(codePage, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+            if (!count) { throw std::runtime_error("Cannot encode reference desktop setting"); }
+            result.resize(static_cast<std::size_t>(count));
+            if (WideCharToMultiByte(codePage, 0, text.data(), static_cast<int>(text.size()),
+                reinterpret_cast<char*>(result.data()), count, nullptr, nullptr) != count) {
+                throw std::runtime_error("Cannot encode reference desktop setting");
+            }
+        }
+        return result;
+    };
+    const auto characterAt = [&](const std::size_t offset) -> unsigned {
+        if (!utf16) { return bytes[offset]; }
+        return littleEndian ? bytes[offset] | (static_cast<unsigned>(bytes[offset + 1]) << 8) :
+            (static_cast<unsigned>(bytes[offset]) << 8) | bytes[offset + 1];
+    };
+    struct Line { std::size_t start; std::size_t end; std::size_t next; };
+    std::vector<Line> lines;
+    std::wstring newline = L"\r\n";
+    bool foundNewline = false;
+    for (std::size_t start = firstByte; start < bytes.size();) {
+        std::size_t end = start;
+        while (end < bytes.size() && characterAt(end) != '\r' && characterAt(end) != '\n') { end += stride; }
+        std::size_t next = end;
+        if (next < bytes.size()) {
+            const auto first = characterAt(next); next += stride;
+            if (first == '\r' && next < bytes.size() && characterAt(next) == '\n') { next += stride; }
+            if (!foundNewline) { newline = first == '\n' ? L"\n" : next - end == stride ? L"\r" : L"\r\n"; foundNewline = true; }
+        }
+        lines.push_back({start, end, next}); start = next;
+    }
+    std::size_t replaceStart = bytes.size(), replaceEnd = bytes.size();
+    std::wstring replacement;
+    const auto entry = std::find_if(document.entries.rbegin(), document.entries.rend(), [](const IniEntry& item) {
+        return item.section == L"pin" && item.key == L"acrossdesktops";
+    });
+    if (entry != document.entries.rend()) {
+        const auto line = lines.at(entry->line - 1);
+        replaceStart = line.start;
+        while (replaceStart < line.end && characterAt(replaceStart) != '=') { replaceStart += stride; }
+        replaceStart += stride;
+        const auto oldValue = encode(entry->value);
+        // Locate the parsed value in its original bytes so spacing, casing and
+        // comments survive without transcoding the rest of the INI document.
+        while (replaceStart + oldValue.size() <= line.end &&
+            !std::equal(oldValue.begin(), oldValue.end(), bytes.begin() + static_cast<std::ptrdiff_t>(replaceStart))) { replaceStart += stride; }
+        if (replaceStart + oldValue.size() > line.end) { throw std::runtime_error("Cannot locate the existing reference desktop setting"); }
+        replaceEnd = replaceStart + oldValue.size();
+        replacement = enabled ? L"true" : L"false";
+    } else {
+        const auto section = std::find_if(document.sections.rbegin(), document.sections.rend(), [](const IniSection& item) { return item.name == L"pin"; });
+        if (section != document.sections.rend()) {
+            const auto line = lines.at(section->line - 1);
+            replaceStart = replaceEnd = line.next;
+            if (line.end == line.next) { replacement += newline; }
+        } else {
+            if (bytes.size() > firstByte && characterAt(bytes.size() - stride) != '\r' && characterAt(bytes.size() - stride) != '\n') { replacement += newline; }
+            replacement += L"[Pin]" + newline;
+        }
+        replacement += enabled ? L"AcrossDesktops=true" : L"AcrossDesktops=false";
+        replacement += newline;
+    }
+    const auto inserted = encode(replacement);
+    bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(replaceStart), bytes.begin() + static_cast<std::ptrdiff_t>(replaceEnd));
+    bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(replaceStart), inserted.begin(), inserted.end());
+
+    struct StagedFile {
+        std::filesystem::path path;
+        HANDLE handle = INVALID_HANDLE_VALUE;
+        ~StagedFile() { if (handle != INVALID_HANDLE_VALUE) { CloseHandle(handle); } if (!path.empty()) { DeleteFileW(path.c_str()); } }
+    } staged;
+    static std::atomic<unsigned> serial{0};
+    for (unsigned attempt = 0; attempt < 100; ++attempt) {
+        staged.path = path.native() + L".save-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(serial.fetch_add(1));
+        staged.handle = CreateFileW(staged.path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (staged.handle != INVALID_HANDLE_VALUE) { break; }
+        const DWORD error = GetLastError();
+        staged.path.clear(); // Never remove an existing file whose name collided.
+        if (error != ERROR_FILE_EXISTS && error != ERROR_ALREADY_EXISTS) { throw std::system_error(static_cast<int>(error), std::system_category(), "Stage reference desktop setting"); }
+    }
+    if (staged.handle == INVALID_HANDLE_VALUE) { throw std::runtime_error("Cannot stage reference desktop setting"); }
+    DWORD written = 0;
+    if (!WriteFile(staged.handle, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr) || written != bytes.size() || !FlushFileBuffers(staged.handle)) {
+        throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Write reference desktop setting");
+    }
+    CloseHandle(staged.handle); staged.handle = INVALID_HANDLE_VALUE;
+    if (!ReplaceFileW(path.c_str(), staged.path.c_str(), nullptr, 0, nullptr, nullptr)) {
+        throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Save reference desktop setting");
+    }
+    staged.path.clear();
 }
 
 } // namespace vispick

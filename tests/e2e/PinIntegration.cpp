@@ -1,3 +1,6 @@
+// Expose the optional Windows 10 COM interface in this test only. Product
+// binaries retain their Windows 7 target and do not depend on this service.
+#define NTDDI_VERSION 0x0A000000
 #include "pin/PinManager.h"
 #include "capture/ScreenGrab.h"
 #include "platform/Compat.h"
@@ -5,6 +8,8 @@
 
 #include <dwmapi.h>
 #include <psapi.h>
+#include <shobjidl.h>
+#include <wrl/client.h>
 #include <windowsx.h>
 #include <algorithm>
 #include <array>
@@ -47,7 +52,9 @@ protected:
 struct PinSearch { HWND owner; std::vector<HWND> handles; bool failed = false; };
 BOOL CALLBACK FindPins(const HWND window, const LPARAM data) noexcept {
     auto& search = *reinterpret_cast<PinSearch*>(data);
-    if (GetWindow(window, GW_OWNER) != search.owner) { return TRUE; }
+    DWORD process = 0;
+    const DWORD thread = GetWindowThreadProcessId(window, &process);
+    if (process != GetCurrentProcessId() || thread != GetWindowThreadProcessId(search.owner, nullptr)) { return TRUE; }
     wchar_t name[64]{}; GetClassNameW(window, name, 64);
     if (std::wcscmp(name, L"VisPick.Pin") == 0) {
         try { search.handles.push_back(window); }
@@ -63,6 +70,23 @@ std::vector<HWND> Handles(const HWND owner) {
 }
 
 RECT Bounds(const HWND window) { RECT bounds{}; Require(GetWindowRect(window, &bounds) != FALSE, "Get pin bounds failed"); return bounds; }
+
+struct OtherDesktopSearch {
+    IVirtualDesktopManager* manager;
+    GUID current{};
+    GUID other{};
+};
+
+BOOL CALLBACK FindOtherDesktop(const HWND window, const LPARAM data) noexcept {
+    auto& search = *reinterpret_cast<OtherDesktopSearch*>(data);
+    GUID desktop{};
+    if (SUCCEEDED(search.manager->GetWindowDesktopId(window, &desktop)) &&
+        desktop != GUID_NULL && desktop != search.current) {
+        search.other = desktop;
+        return FALSE;
+    }
+    return TRUE;
+}
 
 void CheckPattern(HWND pin, const char* stage, const RECT rectangle) {
     const BOOL gdiFlush = GdiFlush();
@@ -92,9 +116,13 @@ void CheckPattern(HWND pin, const char* stage, const RECT rectangle) {
 
 class ThreadKeys {
 public:
-    explicit ThreadKeys(const int modifier) {
+    explicit ThreadKeys(const int modifier = 0) {
         Require(GetKeyboardState(previous_.data()) != FALSE, "Get thread keyboard state failed");
-        auto keys = previous_; keys[modifier] = 0x80;
+        auto keys = previous_;
+        for (const int key : {VK_CONTROL, VK_LCONTROL, VK_RCONTROL, VK_SHIFT, VK_LSHIFT, VK_RSHIFT, VK_MENU, VK_LMENU, VK_RMENU}) {
+            keys[key] = 0;
+        }
+        if (modifier) { keys[modifier] = 0x80; }
         Require(SetKeyboardState(keys.data()) != FALSE, "Set thread keyboard state failed");
     }
     ~ThreadKeys() { SetKeyboardState(previous_.data()); }
@@ -140,8 +168,94 @@ void Run() {
     Require(origin.y - window.top == margin && margin >= 0, "Pin decoration changed physical image alignment");
     CheckPattern(pin, "initial native pin", {origin.x, origin.y, origin.x + 128, origin.y + 96});
 
+    // Query the real Shell, not just style bits: a TOOLWINDOW owner can still
+    // exclude an otherwise ordinary pin from virtual desktop management.
+    const HRESULT apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    Require(SUCCEEDED(apartment), "Initialize virtual desktop test COM failed");
+    struct ApartmentScope { ~ApartmentScope() { CoUninitialize(); } } apartmentScope;
+    Microsoft::WRL::ComPtr<IVirtualDesktopManager> desktops;
+    const HRESULT desktopService = CoCreateInstance(__uuidof(VirtualDesktopManager), nullptr, CLSCTX_ALL,
+        IID_PPV_ARGS(desktops.GetAddressOf()));
+    GUID initialDesktop{};
+    const auto waitForDesktop = [&](const bool assigned, const GUID* expectedDesktop = nullptr) {
+        const auto started = GetTickCount64();
+        do {
+            vispick::PumpWindowMessages();
+            GUID desktop{};
+            BOOL current = FALSE;
+            DWORD cloaked = 1;
+            if (SUCCEEDED(desktops->GetWindowDesktopId(pin, &desktop)) &&
+                (desktop != GUID_NULL) == assigned &&
+                (!expectedDesktop || desktop == *expectedDesktop) &&
+                SUCCEEDED(desktops->IsWindowOnCurrentVirtualDesktop(pin, &current)) && (assigned || current) &&
+                SUCCEEDED(DwmGetWindowAttribute(pin, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+                (cloaked == 0) == (current != FALSE)) { return true; }
+            MsgWaitForMultipleObjectsEx(0, nullptr, 20, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        } while (GetTickCount64() - started < 4000);
+        return false;
+    };
+    if (SUCCEEDED(desktopService)) {
+        Require(waitForDesktop(true), "Default pin is not assigned to a virtual desktop");
+        OtherDesktopSearch search{desktops.Get()};
+        Require(SUCCEEDED(desktops->GetWindowDesktopId(pin, &search.current)), "Read pin desktop failed");
+        initialDesktop = search.current;
+        EnumWindows(FindOtherDesktop, reinterpret_cast<LPARAM>(&search));
+        if (search.other != GUID_NULL) {
+            // Move only this test's window. The user's active desktop and
+            // application windows stay untouched; no global keys are sent.
+            Require(SUCCEEDED(desktops->MoveWindowToDesktop(pin, search.other)), "Move test pin to other desktop failed");
+            const auto waitForOtherDesktop = [&] {
+                const auto started = GetTickCount64();
+                do {
+                    vispick::PumpWindowMessages();
+                    BOOL current = TRUE;
+                    DWORD cloaked = 0;
+                    if (SUCCEEDED(desktops->IsWindowOnCurrentVirtualDesktop(pin, &current)) && !current &&
+                        SUCCEEDED(DwmGetWindowAttribute(pin, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) { return true; }
+                    MsgWaitForMultipleObjectsEx(0, nullptr, 20, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                } while (GetTickCount64() - started < 4000);
+                return false;
+            };
+            Require(waitForOtherDesktop(), "Pin on another desktop remains onscreen");
+            manager.HideAll(); manager.ShowAll();
+            Require(waitForOtherDesktop(), "Hide/show moved the pin onto the current desktop");
+            std::puts("Pin on another desktop: Shell cloak and hide/show membership passed");
+        } else { std::puts("No other desktop with a window found; cross-desktop cloak check skipped"); }
+    } else { std::puts("Virtual desktop service unavailable; desktop membership check skipped"); }
+
+    const HWND foreground = GetForegroundWindow();
+    const RECT beforeDesktopToggle = Bounds(pin);
+    const auto beforeDesktopMemory = manager.Memory();
+    config.acrossDesktops = true; manager.Configure(config);
+    Require(IsWindowVisible(pin) != FALSE, "Enabling across desktops hid the pin");
+    if (desktops) { Require(waitForDesktop(false), "Across-desktop pin remains bound to one desktop"); }
+    config.acrossDesktops = false; manager.Configure(config);
+    if (desktops) { Require(waitForDesktop(true), "Disabling across desktops did not reassign the pin"); }
+    const RECT afterDesktopToggle = Bounds(pin);
+    Require(EqualRect(&beforeDesktopToggle, &afterDesktopToggle) != FALSE &&
+        manager.Memory().sourceBytes == beforeDesktopMemory.sourceBytes &&
+        manager.Memory().renderContentBytes == beforeDesktopMemory.renderContentBytes,
+        "Changing desktop mode lost pin position or image storage");
+    Require(GetForegroundWindow() == foreground, "Changing desktop mode stole foreground focus");
+    if (desktops) {
+        // The Shell may retain the previous desktop across a quick toggle.
+        // Bring only the test pin back before the remaining pixel checks.
+        Require(SUCCEEDED(desktops->MoveWindowToDesktop(pin, initialDesktop)), "Return test pin to its initial desktop failed");
+        Require(waitForDesktop(true, &initialDesktop), "Returned pin did not settle on its initial desktop");
+    }
+    manager.HideAll();
+    config.acrossDesktops = true; manager.Configure(config);
+    Require(!IsWindowVisible(pin), "Changing desktop mode revealed a hidden pin");
+    config.acrossDesktops = false; manager.Configure(config);
+    Require(!IsWindowVisible(pin), "Disabling across desktops revealed a hidden pin");
+    manager.ShowAll();
+    if (desktops) { Require(waitForDesktop(true), "Showing a hidden pin lost desktop membership"); }
+    CheckPattern(pin, "after virtual desktop options", {origin.x, origin.y, origin.x + 128, origin.y + 96});
+    std::puts("Pin desktop mode: default, enable, disable and hidden-window updates passed");
+
     // Direct window messages only. Keyboard state changes are private to this
     // test's UI thread and are restored by RAII; no global input is injected.
+    const ThreadKeys neutralKeys;
     SendMessageW(pin, WM_KEYDOWN, VK_RIGHT, 0); ++origin.x;
     {
         const ThreadKeys shift(VK_SHIFT);

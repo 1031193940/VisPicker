@@ -42,6 +42,7 @@ struct Config {
     struct Pin {
         bool instant = false;
         bool topmost = true;
+        bool acrossDesktops = false;
         bool border = true;
         std::uint32_t borderColor = 0x3A7AFE;
         bool shadow = true;
@@ -87,5 +88,9 @@ struct ConfigLoadResult {
     const Config* previous = nullptr);
 [[nodiscard]] ConfigLoadResult LoadConfig(const std::filesystem::path& path,
     const Config* previous = nullptr);
+
+// Atomically update just this preference, preserving the user's other INI bytes.
+// Throws on an unreadable, malformed, read-only, or unwritable configuration.
+void SavePinAcrossDesktops(const std::filesystem::path& path, bool enabled);
 
 } // namespace vispick

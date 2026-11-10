@@ -8,6 +8,7 @@
 #include "platform/Gdi.h"
 #include "platform/Window.h"
 
+#include <dwmapi.h>
 #include <windowsx.h>
 #include <algorithm>
 #include <array>
@@ -69,6 +70,17 @@ private:
     HMENU handle_;
 };
 
+class PinDesktopOwner final : public Window {
+public:
+    ~PinDesktopOwner() override { Destroy(); }
+    void Open() {
+        // A hidden ordinary owner keeps the pin off the taskbar without the
+        // TOOLWINDOW owner chain that would exclude it from virtual desktops.
+        Create({L"VisPick.PinOwner", 0, IDC_ARROW}, L"", WS_OVERLAPPED, 0,
+            {0, 0, 0, 0}, WindowActivation::Interactive);
+    }
+};
+
 class PinWindow final : public Window {
 public:
     PinWindow(PinRecord& record, const Config::Pin& configuration,
@@ -78,12 +90,13 @@ public:
         : record_(std::move(record)), config_(configuration), request_(std::move(request)), snapTargets_(std::move(snapTargets)),
           availableBytes_(std::move(availableBytes)) {}
 
-    void Open(const HWND owner) {
+    void Open() {
         if (record_.image.Empty()) { throw std::invalid_argument("Cannot pin an empty image"); }
+        desktopOwner_.Open();
         Create({L"VisPick.Pin", CS_DBLCLKS, IDC_SIZEALL}, L"VisPick reference image", WS_POPUP,
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | (record_.topmost ? WS_EX_TOPMOST : 0UL) |
+            WS_EX_LAYERED | (config_.acrossDesktops ? WS_EX_TOOLWINDOW : 0UL) | (record_.topmost ? WS_EX_TOPMOST : 0UL) |
             (record_.passthrough ? WS_EX_TRANSPARENT : 0UL),
-            {record_.origin.x, record_.origin.y, record_.origin.x + 1, record_.origin.y + 1}, WindowActivation::Interactive, owner);
+            {record_.origin.x, record_.origin.y, record_.origin.x + 1, record_.origin.y + 1}, WindowActivation::Interactive, desktopOwner_.Handle());
         DisableWindowAnimations(Handle());
         dpi_ = DpiForWindow(Handle());
         Render(false); // Preserve the native pixel size or report insufficient budget.
@@ -118,12 +131,20 @@ public:
     }
     [[nodiscard]] PinRecord TakeRecord() noexcept { ready_ = false; return std::move(record_); }
     [[nodiscard]] bool Visible() const noexcept { return IsWindowVisible(Handle()) != FALSE; }
+    [[nodiscard]] bool OnScreen() const noexcept {
+        if (!Visible()) { return false; }
+        DWORD cloaked = 0;
+        // IsWindowVisible remains true when the shell hides a different
+        // virtual desktop. Such pins must not become invisible snap targets.
+        return FAILED(DwmGetWindowAttribute(Handle(), DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) || cloaked == 0;
+    }
     void Visible(const bool visible) { ShowWindow(Handle(), visible ? SW_SHOWNOACTIVATE : SW_HIDE); }
     void CenterAt(const POINT center) {
         const SIZE size = ContentSize(); Move({center.x - size.cx / 2, center.y - size.cy / 2});
     }
 
     void Configure(const Config::Pin& config) {
+        if (config.acrossDesktops != config_.acrossDesktops) { AcrossDesktops(config.acrossDesktops); }
         const bool topmostChanged = config.topmost != config_.topmost;
         const bool needsComposition = config.shadow != config_.shadow || config.border != config_.border ||
             config.smooth != config_.smooth || (record_.compact &&
@@ -295,6 +316,25 @@ protected:
     }
 
 private:
+    void AcrossDesktops(const bool enabled) {
+        const auto style = GetWindowLongPtrW(Handle(), GWL_EXSTYLE);
+        const auto updatedStyle = enabled ? style | WS_EX_TOOLWINDOW : style & ~static_cast<LONG_PTR>(WS_EX_TOOLWINDOW);
+        const bool wasVisible = Visible();
+        // The shell re-evaluates desktop membership when a hidden window is
+        // shown after this style change. Disabling restores Shell-managed
+        // membership; the Shell may retain the previous desktop.
+        if (wasVisible) { ShowWindow(Handle(), SW_HIDE); }
+        SetLastError(ERROR_SUCCESS);
+        if (SetWindowLongPtrW(Handle(), GWL_EXSTYLE, updatedStyle) == 0 && GetLastError() != ERROR_SUCCESS) {
+            if (wasVisible) { ShowWindow(Handle(), SW_SHOWNOACTIVATE); }
+            throw std::runtime_error("Change reference image desktop mode failed");
+        }
+        const BOOL refreshed = SetWindowPos(Handle(), nullptr, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        if (wasVisible) { ShowWindow(Handle(), SW_SHOWNOACTIVATE); }
+        if (!refreshed) { throw std::runtime_error("Refresh reference image desktop mode failed"); }
+    }
+
     [[nodiscard]] std::uint64_t AvailableSurfacePixels() const {
         const auto available = availableBytes_(Handle());
         const auto sourceBytes = record_.image.StorageBytes();
@@ -543,6 +583,7 @@ private:
     }
 
     PinRecord record_;
+    PinDesktopOwner desktopOwner_;
     Config::Pin config_;
     std::function<void(HWND, PinAction, POINT)> request_;
     std::function<std::vector<RECT>(HWND)> snapTargets_;
@@ -600,7 +641,7 @@ struct PinManager::State {
     std::vector<RECT> SnapTargets(const HWND excluded) const {
         std::vector<RECT> targets = monitorTargets;
         targets.reserve(targets.size() + pins.size());
-        for (const auto& pin : pins) { if (pin->Handle() != excluded && pin->Visible()) { targets.push_back(pin->ContentBounds()); } }
+        for (const auto& pin : pins) { if (pin->Handle() != excluded && pin->OnScreen()) { targets.push_back(pin->ContentBounds()); } }
         return targets;
     }
 
@@ -622,7 +663,7 @@ struct PinManager::State {
             [this](const HWND window) { return AvailableBytes(window); });
         auto& created = *pin;
         try {
-            pin->Open(owner);
+            pin->Open();
             pins.push_back(std::move(pin));
         } catch (...) { record = pin->TakeRecord(); throw; }
         return created;

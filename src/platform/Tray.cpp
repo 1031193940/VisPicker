@@ -59,7 +59,8 @@ void Separator(const HMENU menu) {
     if (!AppendMenuW(menu, MF_SEPARATOR, 0, nullptr)) { throw std::runtime_error("AppendMenuW failed"); }
 }
 
-AppCommand ShowMenu(const HWND owner, POINT position, const bool autostart, const bool english) {
+AppCommand ShowMenu(const HWND owner, POINT position, const bool autostart, const bool english,
+                    const bool pinsAcrossDesktops) {
     MenuOwner menu;
     AddCommand(menu.Get(), AppCommand::Screenshot, L"截图", L"Screenshot", english);
     AddCommand(menu.Get(), AppCommand::Gif, L"录制 GIF", L"Record GIF", english);
@@ -72,6 +73,9 @@ AppCommand ShowMenu(const HWND owner, POINT position, const bool autostart, cons
     AddCommand(pins.Get(), AppCommand::ClosePins, L"关闭全部", L"Close all", english);
     AddCommand(pins.Get(), AppCommand::ResetPinPassthrough, L"取消全部鼠标穿透", L"Disable click-through for all", english);
     AddCommand(pins.Get(), AppCommand::RestorePin, L"恢复最近关闭", L"Restore last closed", english);
+    Separator(pins.Get());
+    AddCommand(pins.Get(), AppCommand::TogglePinsAcrossDesktops, L"参考图跨桌面",
+        L"Show reference images on all desktops", english, pinsAcrossDesktops);
     if (!AppendMenuW(menu.Get(), MF_POPUP, reinterpret_cast<UINT_PTR>(pins.Get()), english ? L"Reference images" : L"参考图")) {
         throw std::runtime_error("Append reference submenu failed");
     }
@@ -141,7 +145,8 @@ void Tray::SetLanguage(const bool english) noexcept {
     }
 }
 
-AppCommand Tray::HandleCallback(const WPARAM parameter, const LPARAM data, const bool autostartEnabled) {
+AppCommand Tray::HandleCallback(const WPARAM parameter, const LPARAM data, const bool autostartEnabled,
+                               const bool pinsAcrossDesktops) {
     const UINT identifier = version4_ ? HIWORD(data) : static_cast<UINT>(parameter);
     if (identifier != IconId) { return AppCommand::None; }
     const UINT event = LOWORD(data);
@@ -151,7 +156,7 @@ AppCommand Tray::HandleCallback(const WPARAM parameter, const LPARAM data, const
     if (event == WM_CONTEXTMENU || (!version4_ && event == WM_RBUTTONUP)) {
         POINT position{-1, -1};
         if (version4_) { position = {GET_X_LPARAM(parameter), GET_Y_LPARAM(parameter)}; }
-        return ShowMenu(owner_, position, autostartEnabled, english_);
+        return ShowMenu(owner_, position, autostartEnabled, english_, pinsAcrossDesktops);
     }
     return AppCommand::None;
 }
@@ -173,6 +178,9 @@ UINT Tray::TaskbarCreatedMessage() {
 }
 
 AppCommand Tray::CommandFromMenuId(const UINT identifier) noexcept {
+    if (identifier == FirstMenuId + static_cast<UINT>(AppCommand::TogglePinsAcrossDesktops)) {
+        return AppCommand::TogglePinsAcrossDesktops;
+    }
     if (identifier <= FirstMenuId || identifier > FirstMenuId + static_cast<UINT>(AppCommand::Exit)) { return AppCommand::None; }
     const auto command = static_cast<AppCommand>(identifier - FirstMenuId);
     return command == AppCommand::PinFile ? AppCommand::None : command;

@@ -21,6 +21,8 @@ TEST_CASE("Tray dispatch uses configured left click command without shell regist
 }
 
 TEST_CASE("Tray menu command mapping rejects unknown IDs and file command without path") {
+    CHECK(vispick::Tray::CommandFromMenuId(1000 + static_cast<UINT>(vispick::AppCommand::TogglePinsAcrossDesktops)) ==
+        vispick::AppCommand::TogglePinsAcrossDesktops);
     CHECK(vispick::Tray::CommandFromMenuId(0) == vispick::AppCommand::None);
     CHECK(vispick::Tray::CommandFromMenuId(1000) == vispick::AppCommand::None);
     CHECK(vispick::Tray::CommandFromMenuId(0xFFFFFFFFU) == vispick::AppCommand::None);

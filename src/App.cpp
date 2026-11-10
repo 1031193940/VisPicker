@@ -475,6 +475,10 @@ void App::Dispatch(AppCommand command, const std::filesystem::path& file) {
     case AppCommand::RestorePin:
         pins_->RestoreLast();
         break;
+    case AppCommand::TogglePinsAcrossDesktops:
+        SavePinAcrossDesktops(configPath_, !config_.pin.acrossDesktops);
+        ReloadConfiguration(false);
+        break;
     case AppCommand::OpenConfig: {
         const auto opened = reinterpret_cast<INT_PTR>(ShellExecuteW(Handle(), L"open", configPath_.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
         if (opened <= 32) { throw std::runtime_error("Cannot open configuration file in its associated editor"); }
@@ -553,7 +557,7 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
         bool autostartEnabled = false;
         try { autostartEnabled = autostart_->Enabled(); }
         catch (const std::exception& error) { log_.Write(LogLevel::Warning, ExceptionMessage(error)); }
-        const auto command = tray_->HandleCallback(parameter, data, autostartEnabled);
+        const auto command = tray_->HandleCallback(parameter, data, autostartEnabled, config_.pin.acrossDesktops);
         if (command != AppCommand::None) { LaunchOptions request; request.command = command; Queue(std::move(request)); }
         return 0;
     }

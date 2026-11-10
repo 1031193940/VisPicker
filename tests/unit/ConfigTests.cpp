@@ -2,9 +2,50 @@
 #include "core/Config.h"
 #include "core/Paths.h"
 
+#include <atomic>
+#include <fstream>
+#include <stdexcept>
+
 namespace {
 vispick::ConfigLoadResult ParseSettings(std::string_view text, const vispick::Config* previous = nullptr) {
     return vispick::ParseConfig({reinterpret_cast<const std::uint8_t*>(text.data()), text.size()}, previous);
+}
+
+class ConfigurationFile {
+public:
+    ConfigurationFile() {
+        static std::atomic<unsigned> serial{0};
+        for (unsigned attempt = 0; attempt < 100; ++attempt) {
+            directory_ = std::filesystem::temp_directory_path() /
+                (L"VisPick-Config-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(serial.fetch_add(1)));
+            if (std::filesystem::create_directory(directory_)) { path = directory_ / L"settings.ini"; return; }
+        }
+        throw std::runtime_error("Cannot create configuration test directory");
+    }
+    ~ConfigurationFile() { SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL); std::error_code ignored; std::filesystem::remove_all(directory_, ignored); }
+    void Write(const std::string_view text) const {
+        std::ofstream output(path, std::ios::binary); output.write(text.data(), static_cast<std::streamsize>(text.size()));
+        if (!output) { throw std::runtime_error("Cannot write configuration fixture"); }
+    }
+    [[nodiscard]] std::string Read() const {
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+    [[nodiscard]] std::size_t FileCount() const {
+        return static_cast<std::size_t>(std::distance(std::filesystem::directory_iterator(directory_), std::filesystem::directory_iterator()));
+    }
+    std::filesystem::path path;
+private:
+    std::filesystem::path directory_;
+};
+
+std::string Utf16Bytes(const std::wstring_view text, const bool littleEndian) {
+    std::string bytes = littleEndian ? "\xFF\xFE" : "\xFE\xFF";
+    for (const wchar_t character : text) {
+        bytes += static_cast<char>(littleEndian ? character & 255 : character >> 8);
+        bytes += static_cast<char>(littleEndian ? character >> 8 : character & 255);
+    }
+    return bytes;
 }
 }
 
@@ -20,6 +61,7 @@ TEST_CASE("Config embedded default template is complete and valid") {
     CHECK(result.config.editor.color == 0xFF3B30); CHECK(result.config.editor.strokeWidth == 4); CHECK(result.config.editor.fontSize == 20);
     CHECK(result.config.editor.fontName == L"Microsoft YaHei"); CHECK(result.config.editor.mosaicSize == 10);
     CHECK_FALSE(result.config.pin.instant); CHECK(result.config.pin.topmost); CHECK(result.config.pin.border); CHECK(result.config.pin.borderColor == 0x3A7AFE);
+    CHECK_FALSE(result.config.pin.acrossDesktops);
     CHECK(result.config.pin.shadow); CHECK(result.config.pin.opacity == 100); CHECK(result.config.pin.inactiveOpacity == 100);
     CHECK(result.config.pin.wheel == vispick::PinWheel::Zoom); CHECK(result.config.pin.zoomStep == 10); CHECK(result.config.pin.smooth);
     CHECK(result.config.pin.snapDistance == 10); CHECK(result.config.pin.dustBox == 5); CHECK(result.config.pin.compactMode == vispick::CompactMode::Crop);
@@ -60,6 +102,84 @@ TEST_CASE("Layered-window capture is an explicit GIF opt-in") {
     const auto result = ParseSettings("[Advanced]\ncapture_layered_gif=true");
     REQUIRE(result.diagnostics.empty()); CHECK(result.config.gif.captureLayeredWindows);
     CHECK(ParseSettings("[Gif]\nFps=20", &result.config).config.gif.captureLayeredWindows);
+}
+TEST_CASE("Reference images stay on their desktop by default and accept an explicit opt-in") {
+    CHECK_FALSE(vispick::Config{}.pin.acrossDesktops);
+    const auto enabled = ParseSettings("[Pin]\nAcrossDesktops=TRUE");
+    REQUIRE(enabled.accepted); REQUIRE(enabled.diagnostics.empty()); CHECK(enabled.config.pin.acrossDesktops);
+    CHECK(ParseSettings("[Pin]\nOpacity=80", &enabled.config).config.pin.acrossDesktops);
+    for (const auto* value : {"1", "yes", ""}) {
+        const auto invalid = ParseSettings(std::string("[Pin]\nAcrossDesktops=") + value, &enabled.config);
+        CHECK(invalid.config.pin.acrossDesktops); CHECK_FALSE(invalid.diagnostics.empty());
+    }
+    CHECK_FALSE(ParseSettings("[Pin]\nAcrossDesktops=false", &enabled.config).config.pin.acrossDesktops);
+}
+
+TEST_CASE("Saving the desktop preference changes only its last value and preserves comments") {
+    const ConfigurationFile file;
+    const std::string before = "\xEF\xBB\xBF; 用户配置\r\n[Pin]\r\nAcrossDesktops=false\r\n aCrOsSdEsKtOpS \t=  false  ; 保留说明\r\nOpacity=72\r\n[General]\r\nLog=true";
+    file.Write(before);
+    vispick::SavePinAcrossDesktops(file.path, true);
+    auto expected = before; expected.replace(expected.find("false  ;"), 5, "true");
+    CHECK(file.Read() == expected); CHECK(vispick::LoadConfig(file.path).config.pin.acrossDesktops);
+    CHECK(vispick::LoadConfig(file.path).config.pin.opacity == 72);
+    vispick::SavePinAcrossDesktops(file.path, false);
+    CHECK(file.Read() == before); CHECK_FALSE(vispick::LoadConfig(file.path).config.pin.acrossDesktops);
+    CHECK(file.FileCount() == 1);
+}
+
+TEST_CASE("Saving the desktop preference inserts missing keys and sections without replacing other settings") {
+    const ConfigurationFile file;
+    for (const auto* before : {"[General]\nLog=true", "[Pin]\nOpacity=72\n[General]\nLog=true", "[Pin]", "[Pin]\rOpacity=72\r", "[Pin]\nAcrossDesktops=  ; empty value\n"}) {
+        file.Write(before);
+        vispick::SavePinAcrossDesktops(file.path, true);
+        const auto loaded = vispick::LoadConfig(file.path);
+        REQUIRE(loaded.accepted); CHECK(loaded.diagnostics.empty()); CHECK(loaded.config.pin.acrossDesktops);
+        CHECK(file.Read().find("[Pin]") != std::string::npos);
+        if (std::string_view(before).find("Log=true") != std::string_view::npos) { CHECK(loaded.config.general.log); }
+        if (std::string_view(before).find("Opacity=72") != std::string_view::npos) { CHECK(loaded.config.pin.opacity == 72); }
+        if (std::string_view(before).find("; empty value") != std::string_view::npos) { CHECK(file.Read().find("; empty value") != std::string::npos); }
+    }
+}
+
+TEST_CASE("Saving the desktop preference preserves both UTF16 byte orders and Unicode whitespace") {
+    const ConfigurationFile file;
+    for (const bool littleEndian : {true, false}) {
+        const std::wstring before = L"; 中文说明\r\n[Pin]\r\nAcrossDesktops=\u3000false\u00A0; 注释\r\nOpacity=63";
+        file.Write(Utf16Bytes(before, littleEndian));
+        vispick::SavePinAcrossDesktops(file.path, true);
+        auto expected = before; expected.replace(expected.find(L"false"), 5, L"true");
+        CHECK(file.Read() == Utf16Bytes(expected, littleEndian));
+        CHECK(vispick::LoadConfig(file.path).config.pin.acrossDesktops);
+        file.Write(Utf16Bytes(L"[General]\nLog=true", littleEndian));
+        vispick::SavePinAcrossDesktops(file.path, false);
+        CHECK(file.Read() == Utf16Bytes(L"[General]\nLog=true\n[Pin]\nAcrossDesktops=false\n", littleEndian));
+    }
+}
+
+TEST_CASE("Saving the desktop preference preserves legacy code page bytes") {
+    const ConfigurationFile file;
+    const std::wstring text = L"; 用户说明\n[Pin]\nAcrossDesktops=false ; 保留注释\n";
+    const int length = WideCharToMultiByte(CP_ACP, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+    REQUIRE(length > 0);
+    std::string before(static_cast<std::size_t>(length), '\0');
+    REQUIRE(WideCharToMultiByte(CP_ACP, 0, text.data(), static_cast<int>(text.size()), before.data(), length, nullptr, nullptr) == length);
+    file.Write(before); vispick::SavePinAcrossDesktops(file.path, true);
+    auto expected = before; expected.replace(expected.find("false"), 5, "true");
+    CHECK(file.Read() == expected); CHECK(vispick::LoadConfig(file.path).config.pin.acrossDesktops);
+}
+
+TEST_CASE("Saving the desktop preference preserves malformed and read-only files on failure") {
+    const ConfigurationFile file;
+    CHECK_THROWS(vispick::SavePinAcrossDesktops(file.path, true));
+    CHECK(file.FileCount() == 0);
+    for (const auto* invalid : {"", "; unfinished", "[Pin]\n[broken", "\xEF\xBB\xBF[Pin]\n\xFF"}) {
+        file.Write(invalid); CHECK_THROWS(vispick::SavePinAcrossDesktops(file.path, true)); CHECK(file.Read() == invalid);
+    }
+    const std::string original = "[Pin]\nAcrossDesktops=false\n";
+    file.Write(original); REQUIRE(SetFileAttributesW(file.path.c_str(), FILE_ATTRIBUTE_READONLY) != FALSE);
+    CHECK_THROWS(vispick::SavePinAcrossDesktops(file.path, true));
+    CHECK(file.Read() == original); CHECK(file.FileCount() == 1);
 }
 TEST_CASE("Config first invalid field retains its documented default") {
     const auto result = ParseSettings("[Capture]\nMaskOpacity=-1"); CHECK(result.config.capture.maskOpacity == 45); CHECK_FALSE(result.diagnostics.empty());
