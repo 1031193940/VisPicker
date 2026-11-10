@@ -335,6 +335,7 @@ void App::RecordingFinished() {
     const bool exitRequested = std::exchange(exitAfterRecording_, false);
     log_.Write(LogLevel::Info, L"recording_frames=" + std::to_wstring(result->frameCount) +
         L" captured=" + std::to_wstring(result->capturedFrames) + L" dropped=" + std::to_wstring(result->droppedTicks) +
+        L" width=" + std::to_wstring(result->width) + L" height=" + std::to_wstring(result->height) +
         L" duration_cs=" + std::to_wstring(result->durationCentiseconds) + L" pipeline_bound_bytes=" + std::to_wstring(result->peakPipelineBytes) +
         L" capture_layered=" + std::to_wstring(result->captureLayeredWindows) + L" capture_failures=" + std::to_wstring(result->captureFailures) +
         L" cursor_failures=" + std::to_wstring(result->cursorFailures) +

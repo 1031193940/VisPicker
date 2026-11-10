@@ -49,6 +49,40 @@ TEST_CASE("Recording memory plans include workers in flight and adapt to archite
     CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanMemory(100, 100, 100, 100, 4, 16)), std::invalid_argument);
 }
 
+TEST_CASE("Recording plans keep the requested scale when it fits") {
+    const auto original = vispick::recording::PlanRecording(1920,1080,100,8,32);
+    CHECK(original.width == 1920);
+    CHECK(original.height == 1080);
+    const auto reduced = vispick::recording::PlanRecording(3840,2160,50,8,64);
+    CHECK(reduced.width == 1920);
+    CHECK(reduced.height == 1080);
+    const auto pixel = vispick::recording::PlanRecording(1,1,1,1,32);
+    CHECK(pixel.width == 1);
+    CHECK(pixel.height == 1);
+}
+
+TEST_CASE("Full-screen 4K recording uses the largest scale within the memory budget") {
+    struct FullScreenCase { int sourceWidth; unsigned pointerBits; int scale; };
+    constexpr int sourceHeight = 2160;
+    for (const auto& screen : {FullScreenCase{3840,64,81}, FullScreenCase{3840,32,52},
+             FullScreenCase{7680,64,53}, FullScreenCase{7680,32,30}}) {
+        const auto recording = vispick::recording::PlanRecording(screen.sourceWidth,sourceHeight,100,8,screen.pointerBits);
+        CHECK(recording.width == screen.sourceWidth * screen.scale / 100);
+        CHECK(recording.height == sourceHeight * screen.scale / 100);
+        CHECK(recording.memory.maximumBytes <= recording.memory.memoryLimit);
+        CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanMemory(screen.sourceWidth,sourceHeight,
+            screen.sourceWidth*(screen.scale+1)/100,sourceHeight*(screen.scale+1)/100,8,screen.pointerBits)),std::length_error);
+    }
+}
+
+TEST_CASE("Recording fallback still rejects impossible and invalid plans") {
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(7680,4320,100,8,32)),std::length_error);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(0,1080,100,8,64)),std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920,1080,0,8,64)),std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920,1080,101,8,64)),std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::recording::PlanRecording(1920,1080,100,8,16)),std::invalid_argument);
+}
+
 TEST_CASE("Recording changes ignore capture alpha and include boundary pixels") {
     vispick::Bitmap previous(4, 3);
     std::fill(previous.Pixels().begin(), previous.Pixels().end(), 0xFF123456U);

@@ -24,6 +24,12 @@ struct MemoryPlan {
     std::uint64_t maximumBytes = 0;
 };
 
+struct RecordingPlan {
+    int width;
+    int height;
+    MemoryPlan memory;
+};
+
 // Elapsed nanoseconds are relative to recording start, not wall-clock dates.
 // The caller serializes access with control-state transitions.
 class ActiveTimeline final {
@@ -38,6 +44,9 @@ private:
 };
 
 [[nodiscard]] MemoryPlan PlanMemory(int sourceWidth, int sourceHeight, int outputWidth, int outputHeight,
+    unsigned processorCount, unsigned pointerBits = sizeof(void*) * 8);
+// Keep the requested scale when it fits. Otherwise try smaller percentages without cropping the source.
+[[nodiscard]] RecordingPlan PlanRecording(int sourceWidth, int sourceHeight, int requestedScale,
     unsigned processorCount, unsigned pointerBits = sizeof(void*) * 8);
 [[nodiscard]] std::optional<RECT> ChangedRectangle(BitmapView current, BitmapView previous);
 void CopyRectangle(BitmapView source, RECT rectangle, std::vector<std::uint32_t>& destination);

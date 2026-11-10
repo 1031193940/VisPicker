@@ -344,11 +344,13 @@ struct Recorder::Implementation {
             UINT dpi = 96;
             const POINT center{bounds.left+static_cast<LONG>(sourceWidth/2),bounds.top+static_cast<LONG>(sourceHeight/2)};
             for (const auto& monitor : EnumerateMonitors()) { if (PtInRect(&monitor.bounds,center)) { dpi = monitor.dpiX; break; } }
-            scale = static_cast<int>(std::min(100U,9600U/std::max(96U,dpi)));
+            scale = static_cast<int>(std::clamp(9600U/std::max(96U,dpi),1U,100U));
         }
-        width = std::max(1,static_cast<int>(sourceWidth*scale/100));
-        height = std::max(1,static_cast<int>(sourceHeight*scale/100));
-        plan = recording::PlanMemory(static_cast<int>(sourceWidth),static_cast<int>(sourceHeight),width,height,std::thread::hardware_concurrency());
+        const auto recordingPlan = recording::PlanRecording(static_cast<int>(sourceWidth),static_cast<int>(sourceHeight),
+            scale,std::thread::hardware_concurrency());
+        width = recordingPlan.width;
+        height = recordingPlan.height;
+        plan = recordingPlan.memory;
         result.width = width;
         result.height = height;
         result.peakPipelineBytes = plan.maximumBytes;

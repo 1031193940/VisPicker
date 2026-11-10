@@ -29,19 +29,17 @@ std::int64_t ActiveTimeline::Elapsed(std::int64_t elapsedNanoseconds) const {
     return elapsedNanoseconds - pausedNanoseconds_ - (paused_ ? elapsedNanoseconds - pauseBegan_ : 0);
 }
 
-MemoryPlan PlanMemory(int sourceWidth, int sourceHeight, int outputWidth, int outputHeight,
-                      unsigned processorCount, unsigned pointerBits) {
-    if (sourceWidth < 1 || sourceHeight < 1 || outputWidth < 1 || outputHeight < 1 ||
-        outputWidth > 65535 || outputHeight > 65535 || (pointerBits != 32 && pointerBits != 64)) {
-        throw std::invalid_argument("Invalid recording dimensions or architecture");
-    }
-    const auto sourcePixels = static_cast<std::uint64_t>(sourceWidth) * sourceHeight;
-    const auto pixels = static_cast<std::uint64_t>(outputWidth) * outputHeight;
+namespace {
+constexpr int MaximumGifDimension = std::numeric_limits<std::uint16_t>::max();
+
+constexpr std::uint64_t RecordingMemoryLimit(unsigned pointerBits) noexcept {
+    return (pointerBits == 64 ? 256ULL : 128ULL) * 1024 * 1024;
+}
+
+std::optional<MemoryPlan> TryPlanMemory(std::uint64_t sourcePixels, std::uint64_t pixels, int outputWidth,
+                                        unsigned processorCount, std::uint64_t memoryLimit) {
     MemoryPlan plan;
-    plan.memoryLimit = (pointerBits == 64 ? 256ULL : 128ULL) * 1024 * 1024;
-    if (sourcePixels > plan.memoryLimit / 4 || pixels > plan.memoryLimit / 10) {
-        throw std::length_error("Recording dimensions exceed the memory budget");
-    }
+    plan.memoryLimit = memoryLimit;
     // Capture + scaled DIB + previous submitted frame + pending and currently
     // transferred writer output. A freed slot can refill during disk I/O.
     const auto persistent = sourcePixels * 4 + pixels * 12 + 65536;
@@ -62,7 +60,46 @@ MemoryPlan PlanMemory(int sourceWidth, int sourceHeight, int outputWidth, int ou
             }
         }
     }
+    return std::nullopt;
+}
+} // namespace
+
+MemoryPlan PlanMemory(int sourceWidth, int sourceHeight, int outputWidth, int outputHeight,
+                      unsigned processorCount, unsigned pointerBits) {
+    if (sourceWidth < 1 || sourceHeight < 1 || outputWidth < 1 || outputHeight < 1 ||
+        outputWidth > MaximumGifDimension || outputHeight > MaximumGifDimension || (pointerBits != 32 && pointerBits != 64)) {
+        throw std::invalid_argument("Invalid recording dimensions or architecture");
+    }
+    const auto memoryLimit = RecordingMemoryLimit(pointerBits);
+    const auto sourcePixels = static_cast<std::uint64_t>(sourceWidth) * sourceHeight;
+    const auto pixels = static_cast<std::uint64_t>(outputWidth) * outputHeight;
+    if (sourcePixels > memoryLimit / 4 || pixels > memoryLimit / 10) {
+        throw std::length_error("Recording dimensions exceed the memory budget");
+    }
+    if (const auto plan = TryPlanMemory(sourcePixels,pixels,outputWidth,processorCount,memoryLimit)) { return *plan; }
     throw std::length_error("Recording region exceeds the bounded pipeline memory budget; reduce region or scale");
+}
+
+RecordingPlan PlanRecording(int sourceWidth, int sourceHeight, int requestedScale,
+                            unsigned processorCount, unsigned pointerBits) {
+    if (sourceWidth < 1 || sourceHeight < 1 || sourceWidth > MaximumGifDimension || sourceHeight > MaximumGifDimension ||
+        requestedScale < 1 || requestedScale > 100 || (pointerBits != 32 && pointerBits != 64)) {
+        throw std::invalid_argument("Invalid recording dimensions, scale or architecture");
+    }
+    const auto memoryLimit = RecordingMemoryLimit(pointerBits);
+    const auto sourcePixels = static_cast<std::uint64_t>(sourceWidth) * sourceHeight;
+    if (sourcePixels <= memoryLimit / 4) {
+        for (int scale = requestedScale; scale > 0; --scale) {
+            const int width = std::max(1, sourceWidth * scale / 100);
+            const int height = std::max(1, sourceHeight * scale / 100);
+            const auto pixels = static_cast<std::uint64_t>(width) * height;
+            if (pixels > memoryLimit / 10) { continue; }
+            if (const auto plan = TryPlanMemory(sourcePixels,pixels,width,processorCount,memoryLimit)) {
+                return {width,height,*plan};
+            }
+        }
+    }
+    throw std::length_error("Recording region exceeds the memory budget even at the minimum scale; choose a smaller region");
 }
 
 std::optional<RECT> ChangedRectangle(BitmapView current, BitmapView previous) {

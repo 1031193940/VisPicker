@@ -25,6 +25,7 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -560,6 +561,143 @@ std::size_t OwnTemporaryFiles() {
     return count;
 }
 
+constexpr std::array<std::uint32_t,4> FullscreenColors{0xFF193C5B,0xFFFFD166,0xFF63A375,0xFF6D486D};
+
+class FullscreenPattern final : public vispick::Window {
+public:
+    explicit FullscreenPattern(RECT bounds) : bounds_(bounds) {
+        Create({L"VisPick.FullscreenRecordingPattern",0,IDC_ARROW},L"VisPick fullscreen recording test pattern",WS_POPUP,
+            WS_EX_TOOLWINDOW | WS_EX_TOPMOST,bounds,vispick::WindowActivation::Passive);
+        if (!SetWindowPos(Handle(),HWND_TOPMOST,0,0,0,0,SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
+            throw std::runtime_error("Cannot show the owned fullscreen pattern");
+        }
+        UpdateWindow(Handle());
+        static_cast<void>(DwmFlush());
+    }
+    ~FullscreenPattern() override { Destroy(); }
+
+    [[nodiscard]] bool CoversCapture() const noexcept {
+        RECT actual{};
+        if (!IsWindowVisible(Handle()) || !GetWindowRect(Handle(),&actual) || !EqualRect(&actual,&bounds_)) { return false; }
+        // Only a fully covered display may be captured. Our own recorder
+        // controls are allowed above the opaque pattern, foreign windows are not.
+        unsigned inspected = 0;
+        for (HWND above = GetWindow(Handle(),GW_HWNDPREV); above; above = GetWindow(above,GW_HWNDPREV)) {
+            if (++inspected > 512) { return false; }
+            if (!IsWindowVisible(above) || IsIconic(above)) { continue; }
+            DWORD process = 0;
+            GetWindowThreadProcessId(above,&process);
+            if (process == GetCurrentProcessId()) { continue; }
+            DWORD cloaked = 0;
+            if (SUCCEEDED(DwmGetWindowAttribute(above,DWMWA_CLOAKED,&cloaked,sizeof(cloaked))) && cloaked) { continue; }
+            RECT foreign{}, intersection{};
+            if (!GetWindowRect(above,&foreign) || IntersectRect(&intersection,&foreign,&bounds_)) { return false; }
+        }
+        return true;
+    }
+protected:
+    LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override {
+        if (message == WM_ERASEBKGND) { return 1; }
+        if (message != WM_PAINT) { return Window::OnMessage(message,parameter,data); }
+        PAINTSTRUCT paint{};
+        const auto context = BeginPaint(Handle(),&paint);
+        const LONG width = bounds_.right-bounds_.left;
+        const LONG height = bounds_.bottom-bounds_.top;
+        const std::array<RECT,4> quadrants{{{0,0,width/2,height/2},{width/2,0,width,height/2},
+            {0,height/2,width/2,height},{width/2,height/2,width,height}}};
+        for (std::size_t quadrant = 0; quadrant < quadrants.size(); ++quadrant) {
+            const auto color = FullscreenColors[quadrant];
+            SetDCBrushColor(context,RGB((color>>16)&255,(color>>8)&255,color&255));
+            FillRect(context,&quadrants[quadrant],static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+        }
+        EndPaint(Handle(),&paint);
+        return 0;
+    }
+private:
+    RECT bounds_;
+};
+
+void CheckFullscreenRecording(Report& report, RECT bounds, const std::string& label) {
+    Owner owner;
+    FullscreenPattern pattern(bounds);
+    const auto requireCoverage = [&] {
+        if (!pattern.CoversCapture()) { throw std::runtime_error("Owned fullscreen test pattern is obscured; capture stopped"); }
+    };
+    requireCoverage();
+    const int sourceWidth = bounds.right-bounds.left;
+    const int sourceHeight = bounds.bottom-bounds.top;
+    vispick::Config::Gif options;
+    options.maxSeconds = 2;
+    options.showCursor = false;
+    const auto plan = vispick::recording::PlanRecording(sourceWidth,sourceHeight,options.scale,std::thread::hardware_concurrency());
+    auto recorder = std::make_unique<vispick::Recorder>(bounds,options,owner.Handle(),RecordingDone,true);
+    recorder->Start();
+    auto result = Finish(owner,recorder,std::chrono::seconds(20),requireCoverage);
+    // Keep recorded pixels out of the report, even when a validation fails.
+    struct RemoveFixture {
+        const std::filesystem::path& path;
+        ~RemoveFixture() { if (!path.empty()) { std::error_code ignored; std::filesystem::remove(path,ignored); } }
+    } removeFixture{result.path};
+    report.values.emplace_back(label+"_source_width",sourceWidth);
+    report.values.emplace_back(label+"_source_height",sourceHeight);
+    report.values.emplace_back(label+"_encoded_width",result.width);
+    report.values.emplace_back(label+"_encoded_height",result.height);
+    report.values.emplace_back(label+"_planned_pipeline_bytes",static_cast<double>(result.peakPipelineBytes));
+    report.values.emplace_back(label+"_captured_frames",static_cast<double>(result.capturedFrames));
+    report.values.emplace_back(label+"_dropped_ticks",static_cast<double>(result.droppedTicks));
+    report.values.emplace_back(label+"_duration_centiseconds",static_cast<double>(result.durationCentiseconds));
+    if (!result.error.empty()) { throw std::runtime_error(vispick::WideToUtf8(result.error)); }
+    report.Require(!result.cancelled && !result.path.empty() && result.capturedFrames > 0 &&
+        !result.captureInterrupted && result.captureFailures == 0,label+"_captures_without_errors");
+    report.Require(result.width == plan.width && result.height == plan.height &&
+        result.peakPipelineBytes == plan.memory.maximumBytes && result.peakPipelineBytes <= plan.memory.memoryLimit,
+        label+"_uses_budgeted_dimensions");
+    vispick::gif::GifReader reader(result.path);
+    const auto& metadata = reader.Metadata();
+    report.Require(metadata.width == static_cast<unsigned>(plan.width) && metadata.height == static_cast<unsigned>(plan.height) &&
+        metadata.frameCount == result.frameCount,label+"_file_metadata_matches_plan");
+    vispick::gif::GifCanvas canvas(metadata);
+    std::uint64_t duration = 0;
+    bool hasCorners = true;
+    for (unsigned frameIndex = 0; frameIndex < metadata.frameCount; ++frameIndex) {
+        const auto frame = reader.ReadFrame(frameIndex);
+        canvas.Compose(frame);
+        duration += frame.metadata.delayCentiseconds;
+        const vispick::BitmapView image(result.width,result.height,canvas.Pixels());
+        const int left = result.width/10;
+        const int right = result.width-1-left;
+        const int top = result.height/10;
+        const int bottom = result.height-1-top;
+        const std::array samples{image.Row(top)[left],image.Row(top)[right],image.Row(bottom)[left],image.Row(bottom)[right]};
+        for (std::size_t index = 0; index < samples.size(); ++index) {
+            hasCorners = hasCorners && (((samples[index]^FullscreenColors[index])&0xFFFFFFU) == 0);
+        }
+    }
+    report.Require(hasCorners,label+"_all_four_screen_corners_are_preserved");
+    const auto elapsed = result.stopNanoseconds-result.firstFrameCompletionNanoseconds;
+    const auto encoded = static_cast<std::int64_t>(duration)*10000000;
+    report.Require(duration > 0 && duration == result.durationCentiseconds &&
+        result.stopNanoseconds == static_cast<std::int64_t>(options.maxSeconds)*1000000000LL &&
+        elapsed >= encoded && elapsed-encoded < 10000000,label+"_automatic_stop_and_duration_match");
+}
+
+void RunFullscreenOnly(Report& report) {
+    vispick::InitializeDpiAwareness();
+    if (FindWindowW(L"VisPick.Main",nullptr) != nullptr) { throw std::runtime_error("Existing product instance detected; no test windows were created"); }
+    MONITORINFO primary{sizeof(primary)};
+    if (!GetMonitorInfoW(MonitorFromPoint({0,0},MONITOR_DEFAULTTOPRIMARY),&primary)) { throw std::runtime_error("Cannot locate the primary monitor"); }
+    CheckFullscreenRecording(report,primary.rcMonitor,"primary_fullscreen");
+    const auto monitors = vispick::EnumerateMonitors();
+    if (monitors.size() == 2) {
+        const auto& first = monitors[0].bounds;
+        const auto& second = monitors[1].bounds;
+        const bool adjacent = (first.top == second.top && first.bottom == second.bottom && (first.right == second.left || second.right == first.left)) ||
+            (first.left == second.left && first.right == second.right && (first.bottom == second.top || second.bottom == first.top));
+        if (adjacent) { CheckFullscreenRecording(report,vispick::VirtualDesktopBounds(),"dual_fullscreen"); }
+    }
+    report.Require(vispick::Window::ExceptionCount() == 0,"no_window_callback_exceptions");
+}
+
 class EscapeReservation final {
 public:
     explicit EscapeReservation(HWND window) : window_(window), acquired_(RegisterHotKey(window_,0x1600,MOD_NOREPEAT,VK_ESCAPE) != FALSE) {}
@@ -711,10 +849,12 @@ int wmain() {
     auto output = std::filesystem::current_path()/L"out/reports/recording-integration";
     try {
         bool previewOnly = false;
+        bool fullscreenOnly = false;
         const auto arguments = vispick::ProcessArguments();
         for (std::size_t argument = 0; argument < arguments.size(); ++argument) {
             const auto name = arguments[argument];
             if (name == L"--preview-only") { previewOnly = true; continue; }
+            if (name == L"--fullscreen-only") { fullscreenOnly = true; continue; }
             if (++argument >= arguments.size()) { throw std::invalid_argument("Missing recording fixture option value"); }
             if (name == L"--output") { output = arguments[argument]; continue; }
             std::size_t consumed = 0;
@@ -723,11 +863,13 @@ int wmain() {
             if (name == L"--seconds" && value >= 1 && value <= vispick::Config::Gif::MaximumSeconds) { recordingSeconds = static_cast<unsigned>(value); }
             else if (name == L"--width" && value >= 320 && value <= 7680) { patternWidth = static_cast<int>(value); }
             else if (name == L"--height" && value >= 120 && value <= 4320) { patternHeight = static_cast<int>(value); }
-            else { throw std::invalid_argument("Usage: VisPickRecordingIntegration [--output DIR] [--preview-only] [--seconds 1..300] [--width N] [--height N]"); }
+            else { throw std::invalid_argument("Usage: VisPickRecordingIntegration [--output DIR] [--preview-only | --fullscreen-only] [--seconds 1..300] [--width N] [--height N]"); }
         }
         output = std::filesystem::absolute(output);
         std::filesystem::create_directories(output);
-        if (previewOnly) {
+        if (previewOnly && fullscreenOnly) { throw std::invalid_argument("Choose one isolated recording fixture mode"); }
+        if (fullscreenOnly) { RunFullscreenOnly(report); }
+        else if (previewOnly) {
             vispick::InitializeDpiAwareness();
             Owner owner;
             CheckPreviewTimeline(report,owner,output);
