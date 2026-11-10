@@ -2,13 +2,13 @@
 
 面向 Windows 的便携截图、参考图和 GIF 工具。
 
-已发布的 Windows 11 x64 便携版为 0.5.3，可下载 `VisPick-0.5.3.zip`。 [GitHub 0.5.3 发布页](https://github.com/1031193940/VisPicker/releases/tag/v0.5.3)
+最新版本为 **0.5.11**，面向 Windows 11 x64，包内附有 x86 构建。 [下载便携包](https://github.com/1031193940/VisPicker/releases/download/v0.5.11/VisPick-0.5.11.zip) · [发布说明](https://github.com/1031193940/VisPicker/releases/tag/v0.5.11)
 
-功能回归在 Windows 11 x64 的单屏 RDP 会话完成。Win10、Win7、干净系统、物理多屏和第三方软件粘贴等项目仍待验证。
+双架构构建与单元测试已通过，已验证范围和待验收项目见 [0.5.11 发布说明](https://github.com/1031193940/VisPicker/releases/tag/v0.5.11)。Win10、Win7、干净系统、完整物理多屏兼容矩阵和第三方软件粘贴仍待验证。
 
 ## 使用
 
-以下流程对应当前源码的本地 0.5.11 构建。升级时先从托盘退出旧版，再运行新版。
+以下流程对应 0.5.11。升级时先保存需要保留的参考图和 GIF，再从托盘退出旧版。将旧目录中的 `VisPick.ini` 复制到新版目录后启动，可保留自定义设置。
 
 双击适合系统架构的 exe，程序进入托盘并显示启动通知。首次启动生成带中文注释的 `VisPick.ini`；exe 所在目录不可写时使用 `%APPDATA%\VisPick\VisPick.ini`。编辑配置并保存后自动生效，不需要重启，也不会覆盖你的注释。
 
