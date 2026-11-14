@@ -34,6 +34,7 @@ constexpr std::array<std::uint32_t, 8> PresetColors{0xFF3B30, 0xFF9500, 0xFFCC00
                                                     0x00C7BE, 0x007AFF, 0xAF52DE, 0xFFFFFF};
 constexpr std::array<int, 3> StrokeWidths{2, 4, 6};
 constexpr std::array<int, 3> FontSizes{14, 20, 28};
+constexpr std::array<int, 3> MosaicSizes{6, 10, 16};
 
 class PaintScope {
 public:
@@ -120,7 +121,20 @@ BOOL CALLBACK SnapshotWindow(const HWND window, const LPARAM parameter) noexcept
     }
 }
 
-enum class ButtonKind { Tool, Save, Copy, Pin, Cancel, Confirm, Color, Width, Font, GifFrameRatePicker, GifFrameRate };
+enum class ButtonKind {
+    Tool,
+    Save,
+    Copy,
+    Pin,
+    Cancel,
+    Confirm,
+    Color,
+    Width,
+    Font,
+    MosaicSize,
+    GifFrameRatePicker,
+    GifFrameRate
+};
 struct Button {
     RECT bounds{};
     ButtonKind kind;
@@ -234,6 +248,20 @@ struct Overlay::State {
     }
     [[nodiscard]] RECT VisualSelection() const noexcept {
         return selection.HasSelection() ? selection.Bounds() : hover;
+    }
+    [[nodiscard]] AnnotationTool PropertyTool() const noexcept {
+        if (!annotations || mode == CaptureMode::Gif) { return AnnotationTool::None; }
+        if (textInput && textInput->Active()) { return AnnotationTool::Text; }
+        if (const auto* selected = annotations->Selected()) { return selected->tool; }
+        return annotations->Tool();
+    }
+    [[nodiscard]] AnnotationStyle PropertyStyle() const {
+        if (annotations->Selected() && !(textInput && textInput->Active())) { return annotations->SelectedStyle(); }
+        return annotations->Style();
+    }
+    [[nodiscard]] RECT AnnotationUiBounds() const noexcept {
+        if (!annotations || mode == CaptureMode::Gif || (textInput && textInput->Active())) { return {}; }
+        return annotations->SelectedBounds();
     }
     [[nodiscard]] COLORREF Accent() const noexcept {
         return mode == CaptureMode::Screenshot ? RGB(58, 122, 254)
@@ -372,9 +400,10 @@ struct Overlay::State {
         RECT toolbar;
         RECT magnifier;
         RECT tooltip;
+        RECT annotation;
     };
     [[nodiscard]] UiSnapshot Snapshot() const noexcept {
-        return {VisualSelection(), LabelBounds(), toolbar, MagnifierBounds(), TooltipBounds()};
+        return {VisualSelection(), LabelBounds(), toolbar, MagnifierBounds(), TooltipBounds(), AnnotationUiBounds()};
     }
 
     void Changed(const UiSnapshot& old) {
@@ -386,6 +415,8 @@ struct Overlay::State {
         }
         AddBorder(old.selection);
         AddBorder(next.selection);
+        AddBorder(old.annotation);
+        AddBorder(next.annotation);
         for (const RECT rectangle : {old.label, next.label, old.toolbar, next.toolbar, old.magnifier, next.magnifier,
                                      old.tooltip, next.tooltip}) {
             AddDamage(rectangle);
@@ -443,7 +474,8 @@ struct Overlay::State {
         if (!selection.HasSelection() || selection.Dragging()) { return; }
         const RECT selected = selection.Bounds();
         const RECT monitor = MonitorAt({selected.right - 1, selected.bottom - 1});
-        const bool properties = mode != CaptureMode::Gif && annotations && annotations->Tool() != AnnotationTool::None;
+        const auto propertyTool = PropertyTool();
+        const bool properties = propertyTool != AnnotationTool::None;
         const LONG width = std::min<LONG>(Scale(mode == CaptureMode::Gif ? 320 : 400), monitor.right - monitor.left);
         toolbar = PlaceToolbar(selected, {width, Scale(properties ? 70 : 36)}, monitor, Scale(6));
         const LONG margin = Scale(4);
@@ -490,17 +522,25 @@ struct Overlay::State {
         static constexpr std::array EnglishWidths{L"Stroke width 2 px", L"Stroke width 4 px", L"Stroke width 6 px"};
         static constexpr std::array ChineseFonts{L"字号 14 px", L"字号 20 px", L"字号 28 px"};
         static constexpr std::array EnglishFonts{L"Font size 14 px", L"Font size 20 px", L"Font size 28 px"};
-        const LONG propertySlot = (width - margin * 2) / 14;
+        static constexpr std::array ChineseMosaics{L"马赛克块 6 px", L"马赛克块 10 px", L"马赛克块 16 px"};
+        static constexpr std::array EnglishMosaics{L"Mosaic block 6 px", L"Mosaic block 10 px", L"Mosaic block 16 px"};
+        const bool mosaic = propertyTool == AnnotationTool::Mosaic;
+        const int propertyCount = mosaic ? 3 : 11;
+        const LONG propertySlot = (width - margin * 2) / propertyCount;
         left = toolbar.left + margin;
-        for (int index = 0; index < 14; ++index) {
-            const auto kind = index < 8 ? ButtonKind::Color : index < 11 ? ButtonKind::Width : ButtonKind::Font;
-            const int value = index < 8 ? index : index < 11 ? index - 8 : index - 11;
+        for (int index = 0; index < propertyCount; ++index) {
+            const auto kind = mosaic                                 ? ButtonKind::MosaicSize
+                              : index < 8                            ? ButtonKind::Color
+                              : propertyTool == AnnotationTool::Text ? ButtonKind::Font
+                                                                     : ButtonKind::Width;
+            const int value = mosaic || index < 8 ? index : index - 8;
             const auto icon = kind == ButtonKind::Width  ? ToolbarIcon::Stroke
                               : kind == ButtonKind::Font ? ToolbarIcon::Font
                                                          : ToolbarIcon::None;
             const auto hint = kind == ButtonKind::Color   ? Text(L"标注颜色", L"Annotation color")
                               : kind == ButtonKind::Width ? Text(ChineseWidths[value], EnglishWidths[value])
-                                                          : Text(ChineseFonts[value], EnglishFonts[value]);
+                              : kind == ButtonKind::Font  ? Text(ChineseFonts[value], EnglishFonts[value])
+                                                          : Text(ChineseMosaics[value], EnglishMosaics[value]);
             buttons.push_back({{left, toolbar.top + Scale(38), left + propertySlot, toolbar.bottom - margin},
                                kind,
                                value,
@@ -517,11 +557,12 @@ struct Overlay::State {
             const RECT local = Local(button.bounds);
             bool selected = false;
             if (annotations) {
-                const auto& style = annotations->Style();
-                selected = (button.kind == ButtonKind::Tool && static_cast<int>(annotations->Tool()) == button.value) ||
+                const auto style = PropertyStyle();
+                selected = (button.kind == ButtonKind::Tool && static_cast<int>(PropertyTool()) == button.value) ||
                            (button.kind == ButtonKind::Color && style.color == PresetColors[button.value]) ||
                            (button.kind == ButtonKind::Width && style.strokeWidth == StrokeWidths[button.value]) ||
-                           (button.kind == ButtonKind::Font && style.fontSize == FontSizes[button.value]);
+                           (button.kind == ButtonKind::Font && style.fontSize == FontSizes[button.value]) ||
+                           (button.kind == ButtonKind::MosaicSize && style.mosaicSize == MosaicSizes[button.value]);
             }
             if (selected || button.kind == ButtonKind::Confirm ||
                 (button.kind == ButtonKind::GifFrameRate && button.value == gifFramesPerSecond)) {
@@ -548,6 +589,8 @@ struct Overlay::State {
                                gifFramesPerSecond);
                 } else if (button.kind == ButtonKind::GifFrameRate) {
                     swprintf_s(rateLabel, L"%d", button.value);
+                } else if (button.kind == ButtonKind::MosaicSize) {
+                    swprintf_s(rateLabel, L"%d px", MosaicSizes[button.value]);
                 }
                 SetTextColor(context, RGB(245, 245, 245));
                 DrawTextW(context, rateLabel, -1, &text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
@@ -607,6 +650,27 @@ struct Overlay::State {
         }
     }
 
+    void DrawAnnotationSelection(const HDC context) const {
+        const RECT bounds = AnnotationUiBounds();
+        if (IsRectEmpty(&bounds)) { return; }
+        const SavedDc saved(context);
+        const RECT clip = Local(selection.Bounds());
+        IntersectClipRect(context, clip.left, clip.top, clip.right, clip.bottom);
+        if (annotations->Selected()->tool != AnnotationTool::Arrow) {
+            const RECT outline = Local(bounds);
+            SetDCBrushColor(context, Accent());
+            FrameRect(context, &outline, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+        }
+        for (const auto& handle : annotations->Handles()) {
+            const POINT point = Local(handle.point);
+            const LONG radius = Scale(3);
+            const RECT rectangle{point.x - radius, point.y - radius, point.x + radius + 1, point.y + radius + 1};
+            Fill(context, rectangle, RGB(250, 250, 250));
+            SetDCBrushColor(context, Accent());
+            FrameRect(context, &rectangle, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+        }
+    }
+
     void Compose(const RECT screenDirty) {
         const HDC context = backBuffer->DeviceContext();
         const SavedDc saved(context);
@@ -630,7 +694,8 @@ struct Overlay::State {
             const RECT outline = Local(selected);
             SetDCBrushColor(context, Accent());
             FrameRect(context, &outline, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-            if (selection.HasSelection() && !selection.Creating()) {
+            if (selection.HasSelection() && !selection.Creating() &&
+                (mode == CaptureMode::Gif || !annotations || !annotations->Selected())) {
                 for (const POINT point : SelectionHandles(outline)) {
                     const LONG radius = Scale(3);
                     const RECT handle{point.x - radius, point.y - radius, point.x + radius + 1, point.y + radius + 1};
@@ -645,6 +710,7 @@ struct Overlay::State {
                                     std::to_wstring(selected.bottom - selected.top);
             DrawTextW(context, dimensions.c_str(), -1, &label, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
+        DrawAnnotationSelection(context);
         DrawToolbar(context);
         DrawMagnifier(context);
         const Button* hovered = HoverButton();
@@ -790,10 +856,45 @@ struct Overlay::State {
 
     void SetTool(const AnnotationTool tool) {
         if (mode == CaptureMode::Gif || !annotations || !selection.HasSelection()) { return; }
+        CancelGesture();
+        if (GetCapture() == window.Handle()) { ReleaseCapture(); }
         const auto old = Snapshot();
         if (!CommitText()) { return; }
         AddDamage(annotations->CancelPreview());
-        annotations->SetTool(annotations->Tool() == tool ? AnnotationTool::None : tool);
+        const bool turnOff = !annotations->Selected() && annotations->Tool() == tool;
+        annotations->SetTool(turnOff ? AnnotationTool::None : tool);
+        Changed(old);
+    }
+
+    void BeginTextEdit() {
+        if (!annotations || !annotations->Selected() || annotations->Selected()->tool != AnnotationTool::Text) {
+            return;
+        }
+        const auto old = Snapshot();
+        annotations->SetStyle(annotations->SelectedStyle());
+        textInput->BeginEdit(*annotations->SelectedIndex());
+        AddDamage(annotations->Selected()->bounds);
+        Changed(old);
+    }
+
+    void ChangeProperty(const Button button) {
+        if (!annotations) { return; }
+        const auto old = Snapshot();
+        auto style = PropertyStyle();
+        if (button.kind == ButtonKind::Color) { style.color = PresetColors[button.value]; }
+        if (button.kind == ButtonKind::Width) { style.strokeWidth = StrokeWidths[button.value]; }
+        if (button.kind == ButtonKind::Font) { style.fontSize = FontSizes[button.value]; }
+        if (button.kind == ButtonKind::MosaicSize) { style.mosaicSize = MosaicSizes[button.value]; }
+        if (textInput && textInput->Active()) {
+            textInput->ApplyStyle(style);
+        } else if (annotations->Selected() && annotations->Selected()->tool == AnnotationTool::Text) {
+            BeginTextEdit();
+            textInput->ApplyStyle(style);
+            AddDamage(textInput->Commit());
+        } else if (annotations->Selected()) {
+            AddDamage(annotations->ApplySelectedStyle(style));
+        }
+        annotations->SetStyle(style);
         Changed(old);
     }
 
@@ -804,6 +905,11 @@ struct Overlay::State {
     }
 
     void Activate(const Button button) {
+        if (button.kind == ButtonKind::Color || button.kind == ButtonKind::Width || button.kind == ButtonKind::Font ||
+            button.kind == ButtonKind::MosaicSize) {
+            ChangeProperty(button);
+            return;
+        }
         if (!CommitText()) { return; }
         switch (button.kind) {
         case ButtonKind::Tool:
@@ -830,15 +936,8 @@ struct Overlay::State {
         case ButtonKind::GifFrameRatePicker:
             ToggleGifFrameRatePicker();
             break;
-        default: {
-            auto style = annotations->Style();
-            if (button.kind == ButtonKind::Color) { style.color = PresetColors[button.value]; }
-            if (button.kind == ButtonKind::Width) { style.strokeWidth = StrokeWidths[button.value]; }
-            if (button.kind == ButtonKind::Font) { style.fontSize = FontSizes[button.value]; }
-            annotations->SetStyle(style);
-            AddDamage(toolbar);
+        default:
             break;
-        }
         }
     }
 
@@ -847,6 +946,8 @@ struct Overlay::State {
         pointer = point;
         if (drawing) {
             AddDamage(annotations->PointerMove(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
+        } else if (annotations && annotations->Editing()) {
+            AddDamage(annotations->UpdateEdit(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
         } else if (selection.Dragging()) {
             selection.Drag(point);
             if (annotations) { annotations->SetSelection(selection.Bounds()); }
@@ -869,16 +970,25 @@ struct Overlay::State {
         }
         const auto old = Snapshot();
         if (!CommitText()) { return; }
+        if (mode != CaptureMode::Gif && annotations && selection.HasSelection() &&
+            annotations->BeginEdit(point, Scale(5))) {
+            SetCapture(window.Handle());
+            Changed(old);
+            return;
+        }
+        if (annotations) { annotations->ClearSelected(); }
         const auto hit = HitSelection(selection.Bounds(), point, Scale(5));
         const bool toolActive = mode != CaptureMode::Gif && annotations && annotations->Tool() != AnnotationTool::None;
         if (selection.HasSelection() && hit == SelectionHandle::None && annotations &&
             (toolActive || annotations->CanUndo() || annotations->CanRedo())) {
+            Changed(old);
             return;
         }
         if (toolActive && hit == SelectionHandle::Move) {
             const UINT toolDpi = DpiAt(point);
             if (annotations->Tool() == AnnotationTool::Text) {
                 textInput->Begin(point, toolDpi);
+                Changed(old);
                 return;
             }
             drawing = true;
@@ -896,6 +1006,9 @@ struct Overlay::State {
         if (drawing) {
             AddDamage(annotations->PointerUp(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
             drawing = false;
+        } else if (annotations && annotations->Editing()) {
+            AddDamage(annotations->UpdateEdit(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
+            AddDamage(annotations->CommitEdit());
         } else if (selection.Dragging()) {
             selection.End(point, SnapAt(point));
             if (annotations) { annotations->SetSelection(selection.Bounds()); }
@@ -909,12 +1022,13 @@ struct Overlay::State {
     }
 
     void CancelGesture() {
-        if (!drawing && !selection.Dragging()) { return; }
+        if (!drawing && !selection.Dragging() && !(annotations && annotations->Editing())) { return; }
         const auto old = Snapshot();
         if (drawing) {
             drawing = false;
             AddDamage(annotations->CancelPreview());
         }
+        if (annotations && annotations->Editing()) { AddDamage(annotations->CancelEdit()); }
         selection.CancelDrag();
         if (annotations) { annotations->SetSelection(selection.Bounds()); }
         UpdateSelectionDpi();
@@ -932,6 +1046,14 @@ struct Overlay::State {
         }
         if (textInput && textInput->Active()) {
             CommitText();
+            return;
+        }
+        if (mode != CaptureMode::Gif && annotations && annotations->Selected()) {
+            CancelGesture();
+            if (GetCapture() == window.Handle()) { ReleaseCapture(); }
+            const auto old = Snapshot();
+            annotations->ClearSelected();
+            Changed(old);
             return;
         }
         if (mode != CaptureMode::Gif && annotations && annotations->Tool() != AnnotationTool::None) {
@@ -953,11 +1075,28 @@ struct Overlay::State {
         Changed(old);
     }
 
+    void DoubleClick(const POINT point) {
+        pointer = point;
+        if (HoverButton() || !selection.HasSelection()) { return; }
+        const auto old = Snapshot();
+        if (!CommitText()) { return; }
+        if (mode != CaptureMode::Gif && annotations && annotations->SelectAt(point, Scale(5))) {
+            if (annotations->Selected()->tool == AnnotationTool::Text) { BeginTextEdit(); }
+            Changed(old);
+            return;
+        }
+        const auto bounds = selection.Bounds();
+        if (PtInRect(&bounds, point)) { Finish(DefaultAction()); }
+    }
+
     void SelectBounds(const RECT bounds) {
-        if (selection.Dragging() || drawing || !CommitText()) { return; }
+        if (selection.Dragging() || drawing || (annotations && annotations->Editing()) || !CommitText()) { return; }
         const auto old = Snapshot();
         selection.Set(bounds);
-        if (annotations) { annotations->SetSelection(selection.Bounds()); }
+        if (annotations) {
+            annotations->SetSelection(selection.Bounds());
+            annotations->ClearSelected();
+        }
         choosingGifFrameRate = false;
         UpdateSelectionDpi();
         Changed(old);
@@ -969,12 +1108,26 @@ struct Overlay::State {
                 ToggleGifFrameRatePicker();
             } else if (textInput && textInput->Active()) {
                 CommitText();
+            } else if (selection.Dragging()) {
+                Finish(OverlayAction::Cancel);
+            } else if (drawing || (annotations && annotations->Editing())) {
+                CancelGesture();
+                if (GetCapture() == window.Handle()) { ReleaseCapture(); }
+            } else if (annotations && annotations->Selected() && mode != CaptureMode::Gif) {
+                const auto old = Snapshot();
+                annotations->ClearSelected();
+                Changed(old);
             } else {
                 Finish(OverlayAction::Cancel);
             }
             return;
         }
         if (key == VK_RETURN) {
+            if (mode != CaptureMode::Gif && annotations && annotations->Selected() &&
+                annotations->Selected()->tool == AnnotationTool::Text) {
+                BeginTextEdit();
+                return;
+            }
             Finish(DefaultAction());
             return;
         }
@@ -1014,26 +1167,44 @@ struct Overlay::State {
             }
             if (!CommitText()) { return; }
             if (key == 'Z') {
+                CancelGesture();
+                if (GetCapture() == window.Handle()) { ReleaseCapture(); }
+                const auto old = Snapshot();
                 AddDamage(annotations->Undo());
+                Changed(old);
                 return;
             }
             if (key == 'Y') {
+                CancelGesture();
+                if (GetCapture() == window.Handle()) { ReleaseCapture(); }
+                const auto old = Snapshot();
                 AddDamage(annotations->Redo());
+                Changed(old);
                 return;
             }
         }
+        if (key == VK_DELETE && annotations && annotations->Selected() && mode != CaptureMode::Gif) {
+            CancelGesture();
+            if (GetCapture() == window.Handle()) { ReleaseCapture(); }
+            const auto old = Snapshot();
+            AddDamage(annotations->RemoveSelected());
+            Changed(old);
+            return;
+        }
         if (key >= VK_LEFT && key <= VK_DOWN) {
-            if (selection.Dragging() || drawing || !CommitText()) { return; }
+            if (selection.Dragging() || drawing || (annotations && annotations->Editing()) || !CommitText()) { return; }
             const auto old = Snapshot();
             const LONG step = shift ? 10 : 1;
             const LONG horizontal = key == VK_LEFT ? -step : key == VK_RIGHT ? step : 0;
             const LONG vertical = key == VK_UP ? -step : key == VK_DOWN ? step : 0;
-            if (control) {
+            if (mode != CaptureMode::Gif && annotations && annotations->Selected()) {
+                AddDamage(annotations->NudgeSelected(horizontal, vertical));
+            } else if (control) {
                 selection.ResizeBy(horizontal, vertical);
             } else {
                 selection.Nudge(horizontal, vertical);
             }
-            if (annotations) { annotations->SetSelection(selection.Bounds()); }
+            if (annotations && !annotations->Selected()) { annotations->SetSelection(selection.Bounds()); }
             UpdateSelectionDpi();
             Changed(old);
             return;
@@ -1067,6 +1238,23 @@ struct Overlay::State {
         LPCWSTR cursor = IDC_CROSS;
         if (HoverButton()) {
             cursor = IDC_HAND;
+        } else if (mode != CaptureMode::Gif && annotations &&
+                   (annotations->HitSelected(pointer, Scale(5)) != AnnotationHandle::None ||
+                    annotations->HitTest(pointer, Scale(5)))) {
+            const auto handle = annotations->HitSelected(pointer, Scale(5));
+            if (handle == AnnotationHandle::TopLeft || handle == AnnotationHandle::BottomRight) {
+                cursor = IDC_SIZENWSE;
+            } else if (handle == AnnotationHandle::TopRight || handle == AnnotationHandle::BottomLeft) {
+                cursor = IDC_SIZENESW;
+            } else if (handle == AnnotationHandle::Top || handle == AnnotationHandle::Bottom) {
+                cursor = IDC_SIZENS;
+            } else if (handle == AnnotationHandle::Left || handle == AnnotationHandle::Right) {
+                cursor = IDC_SIZEWE;
+            } else if (handle == AnnotationHandle::Start || handle == AnnotationHandle::End) {
+                cursor = IDC_CROSS;
+            } else {
+                cursor = IDC_SIZEALL;
+            }
         } else if (selection.HasSelection()) {
             const auto handle = HitSelection(selection.Bounds(), pointer, Scale(5));
             if (handle == SelectionHandle::TopLeft || handle == SelectionHandle::BottomRight) {
@@ -1235,9 +1423,7 @@ LRESULT Overlay::OnMessage(const UINT message, const WPARAM parameter, const LPA
         state_->PointerUp(point);
         return 0;
     case WM_LBUTTONDBLCLK:
-        if (const auto bounds = state_->selection.Bounds(); PtInRect(&bounds, point) && !state_->HoverButton()) {
-            state_->Finish(state_->DefaultAction());
-        }
+        state_->DoubleClick(point);
         return 0;
     case WM_RBUTTONUP:
         state_->RightClick();
@@ -1258,7 +1444,11 @@ LRESULT Overlay::OnMessage(const UINT message, const WPARAM parameter, const LPA
         state_->CancelGesture();
         return 0;
     case CommitTextMessage:
-        if (state_->textInput) { state_->AddDamage(state_->textInput->CommitRequested(parameter)); }
+        if (state_->textInput) {
+            const auto old = state_->Snapshot();
+            state_->AddDamage(state_->textInput->CommitRequested(parameter));
+            state_->Changed(old);
+        }
         return 0;
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORSTATIC:

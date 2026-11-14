@@ -17,6 +17,9 @@ public:
     void Draw(HDC destination, POINT destinationScreenOrigin, RECT screenClip, bool preview = true);
     [[nodiscard]] Bitmap Flatten(RECT screenSelection);
     [[nodiscard]] std::uint64_t CacheBuildCount() const noexcept;
+    // The native EDIT replaces this annotation until it commits or cancels.
+    // Flatten also honors the exclusion when capturing the EDIT's background.
+    void SetHiddenAnnotation(std::optional<std::size_t> annotationIndex) noexcept;
 
 private:
     struct State;

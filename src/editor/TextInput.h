@@ -13,8 +13,12 @@ public:
     TextInput(const TextInput&) = delete;
     TextInput& operator=(const TextInput&) = delete;
     void Begin(POINT screenPoint, unsigned dpi = 96);
+    void BeginEdit(std::size_t annotationIndex);
+    // Uses the current text's creation DPI so color changes do not change its size.
+    void ApplyStyle(const AnnotationStyle& style);
     [[nodiscard]] bool Active() const noexcept;
     [[nodiscard]] HWND Handle() const noexcept;
+    [[nodiscard]] std::optional<std::size_t> EditingIndex() const noexcept;
     RECT Commit(); // May leave EDIT active while waiting for IME completion.
     RECT CommitRequested(WPARAM generation);
     void Cancel() noexcept;

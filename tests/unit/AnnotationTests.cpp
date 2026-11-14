@@ -393,3 +393,264 @@ TEST_CASE("Annotation smoothed pen dirty regions match complete preview redraws"
     }
     CHECK(renderer.CacheBuildCount() == 0);
 }
+
+TEST_CASE("Annotation hit testing respects stacking and passes through shape interiors") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Rectangle, {10, 10}, {70, 50});
+    Draw(model, vispick::AnnotationTool::Ellipse, {10, 10}, {70, 50});
+    CHECK(model.HitTest({10, 10}, 1) == 0);
+    CHECK(model.HitTest({40, 10}, 1) == 1);
+    CHECK_FALSE(model.HitTest({40, 30}, 1));
+    CHECK(model.SelectAt({10, 10}, 1));
+    REQUIRE(model.Selected());
+    CHECK(model.Selected()->tool == vispick::AnnotationTool::Rectangle);
+    model.SetSelection({20, 20, 60, 40});
+    CHECK_FALSE(model.HitTest({10, 10}, 1));
+}
+
+TEST_CASE("Annotation drag is one reversible edit and does not reorder objects") {
+    const auto image = Pattern(160, 100);
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Rectangle, {10, 10}, {70, 50});
+    Draw(model, vispick::AnnotationTool::Arrow, {90, 20}, {140, 60});
+    REQUIRE(model.BeginEdit({25, 10}, 2));
+    CHECK(model.SelectedIndex() == std::size_t{0});
+    for (LONG delta = 1; delta <= 20; ++delta) { model.UpdateEdit({25 + delta, 10 + delta}); }
+    model.CommitEdit();
+    CHECK(model.Committed()[0].points.front().x == 30);
+    CHECK(model.Committed()[0].points.front().y == 30);
+    CHECK(model.Committed()[1].tool == vispick::AnnotationTool::Arrow);
+    model.Undo();
+    CHECK(model.Committed().size() == 2);
+    CHECK(model.Committed()[0].points.front().x == 10);
+    model.Redo();
+    CHECK(model.Committed()[0].points.front().x == 30);
+    model.Undo();
+    model.Undo();
+    CHECK(model.Committed().size() == 1);
+}
+
+TEST_CASE("Annotation resize uses geometric handles and keeps negative screen coordinates") {
+    const auto image = Pattern(120, 90);
+    vispick::AnnotationModel model(image.View(), {-100, -50});
+    for (const auto tool : {vispick::AnnotationTool::Rectangle, vispick::AnnotationTool::Ellipse}) {
+        Draw(model, tool, {-50, -20}, {-90, -40});
+        REQUIRE(model.Handles().size() == 8);
+        CHECK(model.HitSelected({-50, -20}, 2) == vispick::AnnotationHandle::BottomRight);
+        REQUIRE(model.BeginEdit({-50, -20}, 2));
+        model.UpdateEdit({-35, -5});
+        model.CommitEdit();
+        REQUIRE(model.Selected());
+        CHECK(model.Selected()->points.front().x == -90);
+        CHECK(model.Selected()->points.front().y == -40);
+        CHECK(model.Selected()->points.back().x == -35);
+        CHECK(model.Selected()->points.back().y == -5);
+        model.Undo();
+        CHECK(model.Selected()->points.front().x == -50);
+        model.Redo();
+        CHECK(model.Selected()->points.back().x == -35);
+    }
+}
+
+TEST_CASE("Annotation resize can cross its fixed corner without losing selection") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Rectangle, {20, 20}, {60, 45});
+    REQUIRE(model.BeginEdit({20, 20}, 1));
+    model.UpdateEdit({70, 55});
+    model.CommitEdit();
+    REQUIRE(model.Selected());
+    CHECK(model.Selected()->points.front().x == 60);
+    CHECK(model.Selected()->points.front().y == 45);
+    CHECK(model.Selected()->points.back().x == 70);
+    CHECK(model.Selected()->points.back().y == 55);
+}
+
+TEST_CASE("Annotation arrow endpoint edits preserve direction and snap within the selection") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Arrow, {70, 50}, {10, 10});
+    REQUIRE(model.Handles().size() == 2);
+    REQUIRE(model.BeginEdit({70, 50}, 2));
+    model.UpdateEdit({60, 20});
+    model.CommitEdit();
+    CHECK(model.Selected()->points.front().x == 60);
+    CHECK(model.Selected()->points.front().y == 20);
+    CHECK(model.Selected()->points.back().x == 10);
+    REQUIRE(model.BeginEdit({10, 10}, 2));
+    model.UpdateEdit({-100, 18}, true);
+    model.CommitEdit();
+    CHECK(model.Selected()->points.back().x == 0);
+    CHECK(model.Selected()->points.back().y == 20);
+    model.Undo();
+    CHECK(model.Selected()->points.back().y == 10);
+}
+
+TEST_CASE("Annotation style edits use original DPI and preserve geometry and undo branching") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Rectangle, {10, 10}, {70, 50}, false, 192);
+    auto style = model.SelectedStyle();
+    CHECK(style.strokeWidth == 4);
+    style.color = 0x007AFF;
+    style.strokeWidth = 6;
+    model.ApplySelectedStyle(style);
+    CHECK(model.Selected()->strokePixels == 12);
+    CHECK(model.Selected()->color == 0x007AFF);
+    CHECK(model.Selected()->points.front().x == 10);
+    model.Undo();
+    CHECK(model.Selected()->strokePixels == 8);
+    CHECK(model.Selected()->color == 0xFF3B30);
+    model.Redo();
+    CHECK(model.Selected()->color == 0x007AFF);
+    model.Undo();
+    style.strokeWidth = 2;
+    model.ApplySelectedStyle(style);
+    CHECK_FALSE(model.CanRedo());
+    CHECK(model.Selected()->strokePixels == 4);
+}
+
+TEST_CASE("Annotation canceled and stationary edits preserve redo history") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Rectangle, {10, 10}, {70, 50});
+    auto style = model.SelectedStyle();
+    style.color = 0xFFFFFF;
+    model.ApplySelectedStyle(style);
+    model.Undo();
+    REQUIRE(model.BeginEdit({25, 10}, 1));
+    model.UpdateEdit({30, 15});
+    model.CancelEdit();
+    CHECK(model.Selected()->points.front().x == 10);
+    CHECK(model.CanRedo());
+    REQUIRE(model.BeginEdit({25, 10}, 1));
+    model.CommitEdit();
+    CHECK(model.CanRedo());
+    model.Redo();
+    CHECK(model.Selected()->color == 0xFFFFFF);
+}
+
+TEST_CASE("Annotation keyboard moves clamp geometry to the selection and undo in one step") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    model.SetSelection({5, 5, 75, 55});
+    Draw(model, vispick::AnnotationTool::Rectangle, {10, 10}, {30, 30});
+    model.NudgeSelected(100, -100);
+    CHECK(model.Selected()->points.back().x == 74);
+    CHECK(model.Selected()->points.front().y == 5);
+    model.Undo();
+    CHECK(model.Selected()->points.front().x == 10);
+    CHECK(model.Selected()->points.front().y == 10);
+    model.SetTool(vispick::AnnotationTool::Pen);
+    CHECK(model.Selected() == nullptr);
+    CHECK_FALSE(model.Editing());
+}
+
+TEST_CASE("Annotation text replaces its original layer and preserves raw hard line breaks") {
+    const auto image = Pattern(160, 100);
+    vispick::AnnotationModel model(image.View(), {});
+    LOGFONTW font{};
+    font.lfHeight = -20;
+    wcscpy_s(font.lfFaceName, L"Arial");
+    model.AddText({5, 5, 105, 65}, font, 0xFFFFFF, {{L"wrapped", {0, 0}}, {L"text", {0, 20}}, {L"manual", {0, 40}}},
+                  L"wrapped text\r\nmanual", 96);
+    REQUIRE(model.Selected());
+    CHECK(model.Selected()->text == L"wrapped text\r\nmanual");
+    model.NudgeSelected(10, 10);
+    CHECK(model.Selected()->bounds.left == 15);
+    CHECK(model.Selected()->textLines[1].offset.y == 20);
+    model.ReplaceText(0, {15, 15, 115, 75}, font, 0xFF3B30, {{L"edited", {0, 0}}, {L"manual", {0, 20}}},
+                      L"edited\r\nmanual", 96);
+    REQUIRE(model.Committed().size() == 1);
+    CHECK(model.Selected()->text == L"edited\r\nmanual");
+    model.Undo();
+    CHECK(model.Selected()->text == L"wrapped text\r\nmanual");
+    CHECK(model.Selected()->bounds.left == 15);
+    model.Undo();
+    CHECK(model.Selected()->bounds.left == 5);
+    model.Redo();
+    model.Redo();
+    CHECK(model.Selected()->text == L"edited\r\nmanual");
+    model.ReplaceText(0, {15, 15, 115, 75}, font, 0xFF3B30, {{L"", {}}}, L"", 96);
+    CHECK_FALSE(model.HasAnnotations());
+    CHECK(model.Selected() == nullptr);
+    model.Undo();
+    CHECK(model.Selected()->text == L"edited\r\nmanual");
+}
+
+TEST_CASE("Annotation deletion restores middle objects and stable layer order") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Rectangle, {5, 5}, {20, 20});
+    Draw(model, vispick::AnnotationTool::Ellipse, {25, 5}, {40, 20});
+    Draw(model, vispick::AnnotationTool::Arrow, {45, 5}, {70, 20});
+    model.Select(1);
+    model.RemoveSelected();
+    CHECK(model.Committed().size() == 2);
+    CHECK(model.Committed()[1].tool == vispick::AnnotationTool::Arrow);
+    model.Undo();
+    CHECK(model.SelectedIndex() == std::size_t{1});
+    CHECK(model.Selected()->tool == vispick::AnnotationTool::Ellipse);
+    model.Redo();
+    CHECK(model.Selected() == nullptr);
+    model.Undo();
+    Draw(model, vispick::AnnotationTool::Pen, {5, 30}, {40, 30});
+    CHECK_FALSE(model.CanRedo());
+    CHECK(model.Committed().size() == 4);
+    CHECK(model.Committed()[1].tool == vispick::AnnotationTool::Ellipse);
+}
+
+TEST_CASE("Annotation moved mosaics resample frozen pixels and restore exact output on undo") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Mosaic, {5, 5}, {14, 14});
+    const auto before = model.Selected()->mosaic;
+    model.NudgeSelected(10, 15);
+    REQUIRE(static_cast<bool>(model.Selected()->mosaic));
+    const auto expected = vispick::MosaicFrozen(image.View(), {}, {15, 20, 25, 30}, 10);
+    CHECK(SamePixels(*model.Selected()->mosaic, expected));
+    CHECK_FALSE(SamePixels(*before, expected));
+    model.Undo();
+    CHECK(static_cast<bool>(model.Selected()->mosaic == before));
+    model.Redo();
+    CHECK(SamePixels(*model.Selected()->mosaic, expected));
+    auto style = model.SelectedStyle();
+    style.mosaicSize = 4;
+    model.ApplySelectedStyle(style);
+    CHECK(model.Selected()->mosaicPixels == 4);
+    CHECK(SamePixels(*model.Selected()->mosaic, vispick::MosaicFrozen(image.View(), {}, {15, 20, 25, 30}, 4)));
+}
+
+TEST_CASE("Annotation unchanged style and return to original mosaic position create no undo step") {
+    const auto image = Pattern();
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Mosaic, {5, 5}, {35, 35});
+    const auto revision = model.Revision();
+    model.ApplySelectedStyle(model.SelectedStyle());
+    CHECK(model.Revision() == revision);
+    REQUIRE(model.BeginEdit({15, 15}, 1));
+    model.UpdateEdit({25, 20});
+    model.UpdateEdit({15, 15});
+    model.CommitEdit();
+    model.Undo();
+    CHECK_FALSE(model.HasAnnotations());
+}
+
+TEST_CASE("Annotation edited render output matches a newly constructed equivalent shape") {
+    const auto image = Pattern(160, 100);
+    vispick::AnnotationModel edited(image.View(), {}), expected(image.View(), {});
+    Draw(edited, vispick::AnnotationTool::Rectangle, {10, 10}, {50, 40});
+    REQUIRE(edited.BeginEdit({50, 40}, 2));
+    edited.UpdateEdit({90, 70});
+    edited.CommitEdit();
+    auto style = edited.SelectedStyle();
+    style.color = 0x007AFF;
+    style.strokeWidth = 6;
+    edited.ApplySelectedStyle(style);
+    expected.SetStyle(style);
+    Draw(expected, vispick::AnnotationTool::Rectangle, {10, 10}, {90, 70});
+    vispick::EditorRenderer editedRenderer(edited), expectedRenderer(expected);
+    CHECK(
+        SamePixels(editedRenderer.Flatten(edited.DesktopBounds()), expectedRenderer.Flatten(expected.DesktopBounds())));
+}

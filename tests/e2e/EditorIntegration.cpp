@@ -187,6 +187,139 @@ void CheckDeferredCommits(const vispick::Bitmap& frozen) {
             "An old EDIT committed the replacement control");
 }
 
+std::wstring ReadControlText(HWND edit) {
+    const int length = GetWindowTextLengthW(edit);
+    std::wstring text(static_cast<std::size_t>(length) + 1, L'\0');
+    const int copied = GetWindowTextW(edit, text.data(), length + 1);
+    text.resize(static_cast<std::size_t>(std::max(0, copied)));
+    return text;
+}
+
+bool SamePixels(const vispick::Bitmap& first, const vispick::Bitmap& second) {
+    return first.Width() == second.Width() && first.Height() == second.Height() &&
+           std::equal(first.Pixels().begin(), first.Pixels().end(), second.Pixels().begin());
+}
+
+void CheckTextReediting(const vispick::Bitmap& frozen) {
+    Session session(frozen, 144, 20);
+    const std::wstring originalText =
+        L"首行\r\nTab\t中文\tAligned\r\nThis long line must remain soft wrapped when its font size changes: "
+        L"ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 中文软换行不会变为手动换行。";
+    SetWindowTextW(session.input->Handle(), originalText.c_str());
+    session.input->Commit();
+    Require(session.model.Committed().size() == 1, "Initial editable text was not committed");
+    const auto originalAnnotation = session.model.Committed().front();
+    const auto originalPixels = session.renderer.Flatten(session.model.Selection());
+    const auto originalRevision = session.model.Revision();
+    Require(originalAnnotation.text == originalText && originalAnnotation.dpi == 144,
+            "Text commit did not retain original text and creation DPI");
+
+    session.input->BeginEdit(0);
+    Require(session.input->Active() && session.input->EditingIndex() == std::size_t{0},
+            "Existing text did not reopen at its original index");
+    Require(ReadControlText(session.input->Handle()) == originalText,
+            "Reopening text converted soft wraps into hard line breaks");
+    const auto hidden = session.renderer.Flatten(originalAnnotation.bounds);
+    const auto background = frozen.View().CropOpaque(originalAnnotation.bounds.left - DesktopOrigin.x,
+                                                     originalAnnotation.bounds.top - DesktopOrigin.y,
+                                                     originalAnnotation.bounds.right - originalAnnotation.bounds.left,
+                                                     originalAnnotation.bounds.bottom - originalAnnotation.bounds.top);
+    Require(SamePixels(hidden, background), "Original glyphs remained behind the native EDIT");
+    session.input->Commit();
+    Require(session.model.Revision() == originalRevision && session.model.Committed().size() == 1,
+            "Unchanged text created an undo entry or a duplicate annotation");
+    Require(SamePixels(originalPixels, session.renderer.Flatten(session.model.Selection())),
+            "Reopening unchanged text altered its rendered pixels");
+
+    session.input->BeginEdit(0);
+    const std::wstring replacement = originalText + L"\r\n二次编辑后的最后一行";
+    SetWindowTextW(session.input->Handle(), replacement.c_str());
+    auto style = session.model.Style();
+    style.color = 0x1677DD;
+    style.fontSize = 28;
+    session.input->ApplyStyle(style);
+    Require(ReadControlText(session.input->Handle()) == replacement,
+            "Changing text size lost its original Unicode content");
+    RECT updatedBounds{};
+    Require(GetWindowRect(session.input->Handle(), &updatedBounds) != FALSE, "Read resized text bounds failed");
+    const auto native = PrintNativeEdit(session.input->Handle());
+    session.input->Commit();
+    Require(session.model.Committed().size() == 1 && session.model.Revision() == originalRevision + 1,
+            "Content, color and font edit must commit as one replacement");
+    const auto& updated = session.model.Committed().front();
+    Require(updated.text == replacement && updated.color == style.color && updated.dpi == 144 &&
+                updated.font.lfHeight == -vispick::AnnotationPixels(28, 144),
+            "Edited text lost its content, color or original DPI");
+    Require(SamePixels(native, session.renderer.Flatten(updatedBounds)),
+            "Reflowed text pixels differ from the native EDIT");
+    const auto updatedPixels = session.renderer.Flatten(session.model.Selection());
+    session.model.Undo();
+    Require(session.model.Committed().size() == 1 && session.model.Committed().front().text == originalText &&
+                SamePixels(originalPixels, session.renderer.Flatten(session.model.Selection())),
+            "Undo did not restore text content, layout and color together");
+    session.model.Redo();
+    Require(SamePixels(updatedPixels, session.renderer.Flatten(session.model.Selection())),
+            "Redo did not restore edited text pixels");
+
+    const auto beforeCancel = session.model.Revision();
+    session.input->BeginEdit(0);
+    SetWindowTextW(session.input->Handle(), L"This edit is cancelled");
+    session.input->Cancel();
+    Require(session.model.Revision() == beforeCancel &&
+                SamePixels(updatedPixels, session.renderer.Flatten(session.model.Selection())),
+            "Cancel did not restore the hidden original text without history changes");
+
+    session.input->BeginEdit(0);
+    SetWindowTextW(session.input->Handle(), L"");
+    session.input->Commit();
+    Require(session.model.Committed().empty(), "Empty text edit did not remove its annotation");
+    session.model.Undo();
+    Require(session.model.Committed().size() == 1 && session.model.Committed().front().text == replacement,
+            "Undo could not restore deleted text");
+
+    session.input->BeginEdit(0);
+    SetWindowTextW(session.input->Handle(), L"转换");
+    const int textLength = GetWindowTextLengthW(session.input->Handle());
+    SendMessageW(session.input->Handle(), EM_SETSEL, static_cast<WPARAM>(textLength), textLength);
+    DWORD selectionStart = 0;
+    DWORD selectionEnd = 0;
+    SendMessageW(session.input->Handle(), EM_GETSEL, reinterpret_cast<WPARAM>(&selectionStart),
+                 reinterpret_cast<LPARAM>(&selectionEnd));
+    Require(selectionStart == static_cast<DWORD>(textLength) && selectionEnd == static_cast<DWORD>(textLength),
+            "Re-edit IME fixture did not position the caret after the existing text");
+    SendMessageW(session.input->Handle(), WM_IME_STARTCOMPOSITION, 0, 0);
+    session.input->Commit();
+    Require(session.input->Active() && session.model.Committed().front().text == replacement,
+            "Re-edit committed an unfinished IME composition");
+    Require(PostMessageW(session.input->Handle(), WM_CHAR, L'尾', 1) != FALSE,
+            "Queue re-edit conversion result failed");
+    SendMessageW(session.input->Handle(), WM_IME_ENDCOMPOSITION, 0, 0);
+    vispick::PumpWindowMessages();
+    Require(!session.input->Active() && session.model.Committed().size() == 1 &&
+                session.model.Committed().front().text == L"转换尾",
+            "Re-edit IME commit lost queued characters or duplicated the annotation");
+}
+
+void CheckLiveTextStyle(const vispick::Bitmap& frozen) {
+    Session session(frozen, 192, 14);
+    const std::wstring text = L"输入过程中调整颜色和字号\r\nLive text style";
+    SetWindowTextW(session.input->Handle(), text.c_str());
+    auto style = session.model.Style();
+    style.color = 0x00AA44;
+    style.fontSize = 28;
+    session.input->ApplyStyle(style);
+    RECT bounds{};
+    Require(GetWindowRect(session.input->Handle(), &bounds) != FALSE, "Read live text bounds failed");
+    const auto native = PrintNativeEdit(session.input->Handle());
+    session.input->Commit();
+    const auto& annotation = session.model.Committed().front();
+    Require(annotation.text == text && annotation.color == style.color &&
+                annotation.font.lfHeight == -vispick::AnnotationPixels(28, 192),
+            "Changing the active text style did not update the committed text");
+    Require(SamePixels(native, session.renderer.Flatten(bounds)),
+            "Active text style pixels differ from committed output");
+}
+
 struct Resources {
     DWORD gdi = 0;
     DWORD user = 0;
@@ -216,6 +349,8 @@ int wmain(int argumentCount, wchar_t** arguments) {
         }
         const auto frozen = Pattern();
         CheckDeferredCommits(frozen);
+        CheckTextReediting(frozen);
+        CheckLiveTextStyle(frozen);
         constexpr const wchar_t* content =
             L"中文标注：位置与换行一致\r\nTab\tAligned\t测试\r\n自动换行 Mixed English 中文文字 0123456789 "
             L"ABCDEFGHIJKLMNOPQRSTUVWXYZ 自动换行继续，确保输入与提交使用同一字体。";
@@ -248,21 +383,21 @@ int wmain(int argumentCount, wchar_t** arguments) {
         const auto after = Measure();
         const bool resourcesReturned = before.gdi == after.gdi && before.user == after.user;
         const bool passed = mismatches == 0 && resourcesReturned;
-        const auto report = std::string("{\n  \"passed\": ") + (passed ? "true" : "false") +
-                            ",\n  \"native_edit_pixels\": " + std::to_string(compared) +
-                            ",\n  \"mismatched_pixels\": " + std::to_string(mismatches) +
-                            ",\n  \"sessions\": " + std::to_string(sessions) +
-                            ",\n  \"gdi_before\": " + std::to_string(before.gdi) +
-                            ",\n  \"gdi_after\": " + std::to_string(after.gdi) +
-                            ",\n  \"user_before\": " + std::to_string(before.user) +
-                            ",\n  \"user_after\": " + std::to_string(after.user) +
-                            ",\n  \"private_bytes_before\": " + std::to_string(before.privateBytes) +
-                            ",\n  \"private_bytes_after\": " + std::to_string(after.privateBytes) +
-                            ",\n  \"working_set_before\": " + std::to_string(before.workingSetBytes) +
-                            ",\n  \"working_set_after\": " + std::to_string(after.workingSetBytes) +
-                            ",\n  \"synthetic_ime_completion_tested\": true,\n  \"real_ime_input_tested\": false,\n  "
-                            "\"method\": \"hidden native EDIT WM_SETTEXT and WM_PRINTCLIENT; exact RGB comparison; no "
-                            "external windows or clipboard\"\n}\n";
+        const auto report =
+            std::string("{\n  \"passed\": ") + (passed ? "true" : "false") +
+            ",\n  \"native_edit_pixels\": " + std::to_string(compared) +
+            ",\n  \"mismatched_pixels\": " + std::to_string(mismatches) +
+            ",\n  \"sessions\": " + std::to_string(sessions) + ",\n  \"gdi_before\": " + std::to_string(before.gdi) +
+            ",\n  \"gdi_after\": " + std::to_string(after.gdi) +
+            ",\n  \"user_before\": " + std::to_string(before.user) +
+            ",\n  \"user_after\": " + std::to_string(after.user) +
+            ",\n  \"private_bytes_before\": " + std::to_string(before.privateBytes) +
+            ",\n  \"private_bytes_after\": " + std::to_string(after.privateBytes) +
+            ",\n  \"working_set_before\": " + std::to_string(before.workingSetBytes) +
+            ",\n  \"working_set_after\": " + std::to_string(after.workingSetBytes) +
+            ",\n  \"synthetic_ime_completion_tested\": true,\n  \"real_ime_input_tested\": false,\n  "
+            "\"text_reediting_and_style_tested\": true,\n  \"method\": \"hidden native EDIT WM_SETTEXT and WM_PRINTCLIENT; exact RGB comparison; no "
+            "external windows or clipboard\"\n}\n";
         std::cout << report;
         if (argumentCount > reportArgument) {
             const std::filesystem::path path(arguments[reportArgument]);

@@ -1,6 +1,8 @@
 #include "overlay/Overlay.h"
 #include "overlay/Selection.h"
 #include "core/Paths.h"
+#include "editor/Annotation.h"
+#include "editor/Renderer.h"
 #include "platform/Compat.h"
 #include "platform/Gdi.h"
 #include "capture/ScreenGrab.h"
@@ -225,10 +227,59 @@ void Click(vispick::Overlay& overlay, const POINT point, const RECT desktop) {
 
 enum class ScreenshotToolbarSlot : LONG { Save = 6, Pin = 7, Cancel = 8, Copy = 9 };
 
-RECT ScreenshotToolbarBounds(const RECT selection, const vispick::MonitorInfo& monitor) {
+RECT ScreenshotToolbarBounds(const RECT selection, const vispick::MonitorInfo& monitor, const bool properties = false) {
     const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
     const LONG width = std::min<LONG>(scale(400), monitor.bounds.right - monitor.bounds.left);
-    return vispick::PlaceToolbar(selection, {width, scale(36)}, monitor.bounds, scale(6));
+    return vispick::PlaceToolbar(selection, {width, scale(properties ? 70 : 36)}, monitor.bounds, scale(6));
+}
+
+void ClickAnnotationProperty(vispick::Overlay& overlay, const RECT selection, const RECT desktop,
+                             const vispick::MonitorInfo& monitor, const LONG property, const LONG count = 11) {
+    const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
+    const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true);
+    const LONG margin = scale(4);
+    const LONG slotWidth = (toolbar.right - toolbar.left - margin * 2) / count;
+    Click(overlay,
+          {toolbar.left + margin + property * slotWidth + slotWidth / 2,
+           (toolbar.top + scale(38) + toolbar.bottom - margin) / 2},
+          desktop);
+}
+
+void DragAnnotation(vispick::Overlay& overlay, const POINT start, const POINT finish, const RECT desktop) {
+    SendMessageW(overlay.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, Position(start, desktop));
+    for (LONG step = 1; step <= 3; ++step) {
+        const POINT point{start.x + (finish.x - start.x) * step / 3, start.y + (finish.y - start.y) * step / 3};
+        SendMessageW(overlay.Handle(), WM_MOUSEMOVE, MK_LBUTTON, Position(point, desktop));
+    }
+    SendMessageW(overlay.Handle(), WM_LBUTTONUP, 0, Position(finish, desktop));
+    UpdateWindow(overlay.Handle());
+    GdiFlush();
+}
+
+void CheckSamePixels(const vispick::BitmapView actual, const vispick::BitmapView expected, const char* explanation) {
+    Require(actual.Width() == expected.Width() && actual.Height() == expected.Height(), explanation);
+    Require(std::equal(actual.Pixels().begin(), actual.Pixels().end(), expected.Pixels().begin()), explanation);
+}
+
+HWND NativeTextEdit(const vispick::Overlay& overlay) {
+    return FindWindowExW(overlay.Handle(), nullptr, L"EDIT", nullptr);
+}
+
+std::wstring NativeText(const HWND edit) {
+    if (!edit) { throw std::runtime_error("Expected native text editor before reading text"); }
+    const int length = GetWindowTextLengthW(edit);
+    std::wstring text(static_cast<std::size_t>(length) + 1, L'\0');
+    Require(GetWindowTextW(edit, text.data(), length + 1) == length, "Cannot read native annotation text");
+    text.resize(static_cast<std::size_t>(length));
+    return text;
+}
+
+void CommitNativeText(vispick::Overlay& overlay) {
+    const HWND edit = NativeTextEdit(overlay);
+    if (!edit) { throw std::runtime_error("Expected native text editor before committing"); }
+    SendMessageW(edit, WM_KEYDOWN, VK_ESCAPE, 0);
+    vispick::PumpWindowMessages();
+    Require(overlay.Active() && !NativeTextEdit(overlay), "Text commit closed the overlay or left EDIT active");
 }
 
 void ClickScreenshotButton(vispick::Overlay& overlay, const RECT selection, const RECT desktop,
@@ -270,6 +321,264 @@ void CheckPixels(const vispick::BitmapView image, const RECT rectangle) {
 void CheckPixels(const vispick::OverlayResult& result, const RECT rectangle) {
     Require(EqualRect(&result.selection, &rectangle) != FALSE, "Overlay output rectangle mismatch");
     CheckPixels(result.image.View(), rectangle);
+}
+
+void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& monitor,
+                               const std::filesystem::path& visualOutput) {
+    const LONG monitorWidth = monitor.bounds.right - monitor.bounds.left;
+    const LONG monitorHeight = monitor.bounds.bottom - monitor.bounds.top;
+    Require(monitorWidth >= 800 && monitorHeight >= 600,
+            "Annotation editing integration requires a display of at least 800x600");
+    const RECT selection{monitor.bounds.left + 50, monitor.bounds.top + 60,
+                         monitor.bounds.left + std::min(1010L, monitorWidth - 50),
+                         monitor.bounds.top + std::min(620L, monitorHeight - 50)};
+    const auto pointAt = [&](LONG horizontal, LONG vertical) {
+        return POINT{selection.left + horizontal, selection.top + vertical};
+    };
+    const auto geometryAt = [&](LONG left, LONG top, LONG right, LONG bottom) {
+        return RECT{selection.left + left, selection.top + top, selection.left + right, selection.top + bottom};
+    };
+
+    PatternWindow pattern(desktop);
+    vispick::Overlay overlay(nullptr);
+    vispick::Config config;
+    config.capture.includeCursor = false;
+    config.capture.magnifier = false;
+    config.capture.windowSnap = false;
+    std::optional<vispick::OverlayResult> result;
+    std::optional<vispick::Bitmap> snapshot;
+    const auto begin = [&] {
+        result.reset();
+        snapshot.reset();
+        vispick::test::ActivateOwnedWindow(pattern.Handle());
+        overlay.Begin(
+            vispick::CaptureMode::Screenshot, config, [&](vispick::OverlayResult value) { result = std::move(value); },
+            [&](vispick::Bitmap image, RECT bounds) {
+                Require(EqualRect(&bounds, &selection) != FALSE,
+                        "Editing a component changed the screenshot selection");
+                snapshot = std::move(image);
+                return false;
+            });
+        Drag(overlay, selection, desktop);
+    };
+    const auto capture = [&] {
+        snapshot.reset();
+        PressKey(overlay, 'S', true);
+        Require(snapshot.has_value() && overlay.Active() && !result,
+                "Annotation inspection unexpectedly completed the capture session");
+        return std::move(*snapshot);
+    };
+    const auto saveVisual = [&](const wchar_t* filename) {
+        if (visualOutput.empty()) { return; }
+        std::filesystem::create_directories(visualOutput);
+        UpdateWindow(overlay.Handle());
+        GdiFlush();
+        DwmFlush();
+        const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true);
+        RECT visible{};
+        UnionRect(&visible, &selection, &toolbar);
+        InflateRect(&visible, 20, 20);
+        IntersectRect(&visible, &visible, &monitor.bounds);
+        // The full-screen fixture and overlay own every pixel in this region.
+        const auto screenshot = vispick::CaptureScreen(visible);
+        vispick::SaveImage(visualOutput / filename, screenshot->Image(), vispick::SaveFormat::Png);
+    };
+
+    vispick::Bitmap expectedFrozen(selection.right - selection.left, selection.bottom - selection.top);
+    for (int row = 0; row < expectedFrozen.Height(); ++row) {
+        for (int column = 0; column < expectedFrozen.Width(); ++column) {
+            expectedFrozen.Row(row)[column] = Pattern(selection.left + column, selection.top + row);
+        }
+    }
+    const auto expectedShape = [&](vispick::AnnotationTool tool, RECT geometry, std::uint32_t color, int strokeWidth,
+                                   int mosaicSize = 10) {
+        vispick::AnnotationModel model(expectedFrozen.View(), {selection.left, selection.top});
+        vispick::AnnotationStyle style;
+        style.color = color;
+        style.strokeWidth = strokeWidth;
+        style.mosaicSize = mosaicSize;
+        model.SetStyle(style);
+        model.SetTool(tool);
+        model.PointerDown({geometry.left, geometry.top}, false, monitor.dpiX);
+        model.PointerUp({geometry.right, geometry.bottom});
+        vispick::EditorRenderer renderer(model);
+        return renderer.Flatten(selection);
+    };
+    const auto checkShape = [&](vispick::AnnotationTool tool, RECT geometry, std::uint32_t color, int strokeWidth,
+                                const char* explanation, int mosaicSize = 10) {
+        const auto expected = expectedShape(tool, geometry, color, strokeWidth, mosaicSize);
+        const auto actual = capture();
+        CheckSamePixels(actual.View(), expected.View(), explanation);
+    };
+
+    begin();
+    const auto unannotated = capture();
+    CheckPixels(unannotated.View(), selection);
+    PressKey(overlay, 'R');
+    const RECT initialRectangle = geometryAt(80, 70, 300, 190);
+    Drag(overlay, initialRectangle, desktop);
+    checkShape(vispick::AnnotationTool::Rectangle, initialRectangle, config.editor.color, 4,
+               "New rectangle export includes selection handles or incorrect geometry");
+
+    // Several mouse moves must form one edit, rather than one history entry per frame.
+    DragAnnotation(overlay, pointAt(130, 70), pointAt(170, 105), desktop);
+    const RECT movedRectangle = geometryAt(120, 105, 340, 225);
+    checkShape(vispick::AnnotationTool::Rectangle, movedRectangle, config.editor.color, 4,
+               "Dragging an existing rectangle did not move exactly one component");
+    PressKey(overlay, 'Z', true);
+    checkShape(vispick::AnnotationTool::Rectangle, initialRectangle, config.editor.color, 4,
+               "One undo did not restore the rectangle before the complete drag");
+    PressKey(overlay, 'Y', true);
+    checkShape(vispick::AnnotationTool::Rectangle, movedRectangle, config.editor.color, 4,
+               "Redo did not restore the rectangle move");
+
+    DragAnnotation(overlay, pointAt(340, 225), pointAt(390, 255), desktop);
+    const RECT resizedRectangle = geometryAt(120, 105, 390, 255);
+    checkShape(vispick::AnnotationTool::Rectangle, resizedRectangle, config.editor.color, 4,
+               "Rectangle corner handle did not resize its existing geometry");
+    PressKey(overlay, 'Z', true);
+    checkShape(vispick::AnnotationTool::Rectangle, movedRectangle, config.editor.color, 4,
+               "Rectangle resize did not undo as one operation");
+    PressKey(overlay, 'Y', true);
+
+    // A shape has eight color slots followed by three stroke widths; there is no font row.
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10);
+    checkShape(vispick::AnnotationTool::Rectangle, resizedRectangle, config.editor.color, 6,
+               "The last shape property did not change the selected rectangle stroke width");
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 1);
+    constexpr std::uint32_t orange = 0xFF9500;
+    checkShape(vispick::AnnotationTool::Rectangle, resizedRectangle, orange, 6,
+               "Color property did not update the existing rectangle");
+    saveVisual(L"shape-properties.png");
+    PressKey(overlay, 'Z', true);
+    checkShape(vispick::AnnotationTool::Rectangle, resizedRectangle, config.editor.color, 6,
+               "Color change did not undo without removing the rectangle");
+    PressKey(overlay, 'Y', true);
+
+    // Losing capture during an object drag must restore the original object and leave no edit in history.
+    SendMessageW(overlay.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, Position(pointAt(170, 105), desktop));
+    SendMessageW(overlay.Handle(), WM_MOUSEMOVE, MK_LBUTTON, Position(pointAt(190, 125), desktop));
+    PressKey(overlay, VK_ESCAPE);
+    Require(overlay.Active() && GetCapture() != overlay.Handle(), "Cancelling component drag closed the overlay");
+    checkShape(vispick::AnnotationTool::Rectangle, resizedRectangle, orange, 6,
+               "Cancelled component drag left changed pixels behind");
+    PressKey(overlay, 'Z', true);
+    checkShape(vispick::AnnotationTool::Rectangle, resizedRectangle, config.editor.color, 6,
+               "Cancelled drag inserted an unexpected undo entry");
+    PressKey(overlay, 'Y', true);
+    PressKey(overlay, VK_DELETE);
+    const auto deleted = capture();
+    CheckPixels(deleted.View(), selection);
+    PressKey(overlay, 'Z', true);
+    checkShape(vispick::AnnotationTool::Rectangle, resizedRectangle, orange, 6,
+               "Deleting and undoing a selected component did not restore its styling");
+    SendMessageW(overlay.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, Position(pointAt(170, 105), desktop));
+    SendMessageW(overlay.Handle(), WM_MOUSEMOVE, MK_LBUTTON, Position(pointAt(190, 125), desktop));
+    Require(GetCapture() == overlay.Handle(), "Component drag did not capture the pointer before undo");
+    PressKey(overlay, 'Z', true);
+    Require(overlay.Active() && GetCapture() != overlay.Handle(), "Undo during component drag kept pointer capture");
+    SendMessageW(overlay.Handle(), WM_LBUTTONUP, 0, Position(pointAt(190, 125), desktop));
+    checkShape(vispick::AnnotationTool::Rectangle, resizedRectangle, config.editor.color, 6,
+               "Undo during component drag did not cancel the move before undoing the previous color change");
+    overlay.Cancel();
+
+    begin();
+    PressKey(overlay, 'E');
+    const RECT initialEllipse = geometryAt(80, 70, 300, 190);
+    Drag(overlay, initialEllipse, desktop);
+    DragAnnotation(overlay, pointAt(300, 190), pointAt(340, 220), desktop);
+    checkShape(vispick::AnnotationTool::Ellipse, geometryAt(80, 70, 340, 220), config.editor.color, 4,
+               "Ellipse corner handle did not resize the selected component");
+    overlay.Cancel();
+
+    begin();
+    PressKey(overlay, 'A');
+    Drag(overlay, geometryAt(80, 70, 300, 190), desktop);
+    DragAnnotation(overlay, pointAt(300, 190), pointAt(350, 150), desktop);
+    checkShape(vispick::AnnotationTool::Arrow, geometryAt(80, 70, 350, 150), config.editor.color, 4,
+               "Arrow endpoint handle did not edit the existing arrow");
+    overlay.Cancel();
+
+    begin();
+    PressKey(overlay, 'M');
+    Drag(overlay, geometryAt(80, 70, 300, 190), desktop);
+    DragAnnotation(overlay, pointAt(150, 130), pointAt(185, 155), desktop);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 2, 3);
+    checkShape(vispick::AnnotationTool::Mosaic, geometryAt(115, 95, 335, 215), config.editor.color, 4,
+               "Mosaic movement or its tool-specific block-size property did not resample frozen pixels", 16);
+    overlay.Cancel();
+
+    begin();
+    PressKey(overlay, 'T');
+    const POINT textOrigin = pointAt(80, 70);
+    Click(overlay, textOrigin, desktop);
+    constexpr wchar_t originalText[] = L"初始文字\r\nOriginal annotation";
+    constexpr wchar_t changedText[] = L"重新编辑\r\nChanged text";
+    HWND edit = NativeTextEdit(overlay);
+    Require(edit && SetWindowTextW(edit, originalText), "Text tool did not open native EDIT");
+    CommitNativeText(overlay);
+    const auto originalTextPixels = capture();
+    Click(overlay, pointAt(84, 74), desktop);
+    SendMessageW(overlay.Handle(), WM_LBUTTONDBLCLK, MK_LBUTTON, Position(pointAt(84, 74), desktop));
+    SendMessageW(overlay.Handle(), WM_LBUTTONUP, 0, Position(pointAt(84, 74), desktop));
+    edit = NativeTextEdit(overlay);
+    if (!edit) { throw std::runtime_error("Double-clicking text did not reopen native EDIT"); }
+    Require(overlay.Active() && !result && NativeText(edit) == originalText,
+            "Double-clicking text exported the screenshot or lost its original editable content");
+    Require(SetWindowTextW(edit, changedText) != FALSE, "Cannot replace annotation text");
+    CommitNativeText(overlay);
+    const auto changedTextPixels = capture();
+    PressKey(overlay, 'Z', true);
+    const auto undoneTextPixels = capture();
+    CheckSamePixels(undoneTextPixels.View(), originalTextPixels.View(), "Text re-edit did not undo as one replacement");
+    PressKey(overlay, 'Y', true);
+    const auto redoneTextPixels = capture();
+    CheckSamePixels(redoneTextPixels.View(), changedTextPixels.View(), "Text replacement redo changed its pixels");
+
+    // Text uses the same eleven slots, but its last three are font sizes, not stroke widths.
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10);
+    PressKey(overlay, VK_RETURN);
+    edit = NativeTextEdit(overlay);
+    Require(edit && NativeText(edit) == changedText && overlay.Active(), "Enter did not reopen selected text");
+    const auto checkFontSize = [&](int logicalSize) {
+        const HWND textEdit = NativeTextEdit(overlay);
+        if (!textEdit) { throw std::runtime_error("Expected native text editor before reading its font"); }
+        const auto font = reinterpret_cast<HFONT>(SendMessageW(textEdit, WM_GETFONT, 0, 0));
+        LOGFONTW actualFont{};
+        Require(font && GetObjectW(font, sizeof(actualFont), &actualFont) == static_cast<int>(sizeof(actualFont)) &&
+                    actualFont.lfHeight == -vispick::AnnotationPixels(logicalSize, monitor.dpiX),
+                "Text properties changed stroke width instead of the native font size");
+    };
+    checkFontSize(28);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 8);
+    Require(NativeTextEdit(overlay) != nullptr, "Changing text size unexpectedly closed the active editor");
+    checkFontSize(14);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10);
+    checkFontSize(28);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 1);
+    Require(NativeText(NativeTextEdit(overlay)) == changedText, "Editing text properties lost its content");
+    CommitNativeText(overlay);
+    DragAnnotation(overlay, pointAt(90, 80), pointAt(50, 110), desktop);
+    const auto editedText = capture();
+    saveVisual(L"text-properties.png");
+    overlay.Cancel();
+
+    // A fresh, single text object must exactly match the re-edited, resized, recolored and moved text.
+    // This also detects an old text layer or selection outline leaking into exported pixels.
+    config.editor.fontSize = 28;
+    config.editor.color = orange;
+    begin();
+    PressKey(overlay, 'T');
+    Click(overlay, pointAt(40, 100), desktop);
+    edit = NativeTextEdit(overlay);
+    Require(edit && SetWindowTextW(edit, changedText), "Cannot create the clean text comparison");
+    CommitNativeText(overlay);
+    const auto cleanText = capture();
+    CheckSamePixels(editedText.View(), cleanText.View(),
+                    "Text editing duplicated the old object, changed layout, or exported selection adorners");
+    overlay.Cancel();
+    Require(vispick::Window::ExceptionCount() == 0, "An annotation editing window callback threw");
+    std::puts("Annotation editing: geometry, property rows, text re-edit, undo/redo and clean exports passed");
 }
 
 void CheckDeniedForeground(DWORD parentProcess) {
@@ -351,10 +660,10 @@ void RunForegroundDenialTest() {
     child.WaitForSuccess();
 }
 
-void Run(const std::filesystem::path& visualOutput, bool focusOnly, bool selectionOnly) {
+void Run(const std::filesystem::path& visualOutput, bool focusOnly, bool selectionOnly, bool annotationsOnly) {
     vispick::InitializeDpiAwareness();
-    if (selectionOnly) {
-        std::puts("Selection-only run: foreground-denial fixture is not executed.");
+    if (selectionOnly || annotationsOnly) {
+        std::puts("Selection/annotation-only run: foreground-denial fixture is not executed.");
     } else {
         RunForegroundDenialTest();
     }
@@ -362,6 +671,8 @@ void Run(const std::filesystem::path& visualOutput, bool focusOnly, bool selecti
     const RECT desktop = vispick::VirtualDesktopBounds();
     const auto monitors = vispick::EnumerateMonitors();
     Require(!monitors.empty(), "No monitor available for overlay integration");
+    RunAnnotationEditingTests(desktop, monitors.front(), annotationsOnly ? visualOutput : std::filesystem::path{});
+    if (annotationsOnly) { return; }
     PatternWindow pattern(desktop);
     vispick::Overlay overlay(nullptr);
     vispick::Config config;
@@ -641,19 +952,27 @@ int wmain(int count, wchar_t** arguments) {
         std::filesystem::path output;
         const bool focusOnly = count == 2 && std::wstring_view(arguments[1]) == L"--focus-only";
         const bool selectionOnly = count == 2 && std::wstring_view(arguments[1]) == L"--selection-only";
+        const bool annotationsOnly =
+            (count == 2 || count == 4) && std::wstring_view(arguments[1]) == L"--annotations-only";
         if (count == 3 && std::wstring_view(arguments[1]) == L"--foreground-lock-child") {
             CheckDeniedForeground(std::stoul(arguments[2]));
             return 0;
         }
-        if (count == 3 && std::wstring_view(arguments[1]) == L"--visual-output") {
+        if (annotationsOnly && count == 4) {
+            if (std::wstring_view(arguments[2]) != L"--visual-output") {
+                throw std::invalid_argument("Use --annotations-only --visual-output <directory>");
+            }
+            output = arguments[3];
+        } else if (count == 3 && std::wstring_view(arguments[1]) == L"--visual-output") {
             output = arguments[2];
-        } else if (count != 1 && !focusOnly && !selectionOnly) {
+        } else if (count != 1 && !focusOnly && !selectionOnly && !annotationsOnly) {
             throw std::invalid_argument(
-                "Usage: VisPickOverlayTests [--focus-only | --selection-only | --visual-output image.png]");
+                "Usage: VisPickOverlayTests [--focus-only | --selection-only | --annotations-only [--visual-output directory] | --visual-output image.png]");
         }
-        Run(output, focusOnly, selectionOnly);
-        std::puts(selectionOnly ? "Overlay selection integration passed; foreground-denial fixture was not run"
-                                : "Overlay integration passed");
+        Run(output, focusOnly, selectionOnly, annotationsOnly);
+        std::puts(annotationsOnly ? "Annotation editing integration passed; foreground-denial fixture was not run"
+                  : selectionOnly ? "Overlay selection integration passed; foreground-denial fixture was not run"
+                                  : "Overlay integration passed");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "Overlay integration failed: %s\n", error.what());

@@ -190,8 +190,10 @@ struct EditorRenderer::State {
     void EnsureCache() {
         if (revision == model.Revision()) { return; }
         RECT annotationRegion{};
-        for (const auto& annotation : model.Committed()) {
-            UnionRect(&annotationRegion, &annotationRegion, &annotation.bounds);
+        const auto annotations = model.Committed();
+        for (std::size_t annotationIndex = 0; annotationIndex < annotations.size(); ++annotationIndex) {
+            if (hiddenAnnotation == annotationIndex) { continue; }
+            UnionRect(&annotationRegion, &annotationRegion, &annotations[annotationIndex].bounds);
         }
         const auto desktop = model.DesktopBounds();
         IntersectRect(&cacheBounds, &annotationRegion, &desktop);
@@ -216,9 +218,10 @@ struct EditorRenderer::State {
             auto* target = pixels.data() + static_cast<std::size_t>(row) * width;
             std::transform(source, source + width, target, [](std::uint32_t pixel) { return pixel | 0xFF000000U; });
         }
-        for (const auto& annotation : model.Committed()) {
-            DrawAnnotation(cache->DeviceContext(), {cacheBounds.left, cacheBounds.top}, cacheBounds, annotation,
-                           curvePoints);
+        for (std::size_t annotationIndex = 0; annotationIndex < annotations.size(); ++annotationIndex) {
+            if (hiddenAnnotation == annotationIndex) { continue; }
+            DrawAnnotation(cache->DeviceContext(), {cacheBounds.left, cacheBounds.top}, cacheBounds,
+                           annotations[annotationIndex], curvePoints);
         }
         GdiFlush();
         // GDI text does not preserve the DIB alpha byte. This combined cache is explicitly
@@ -232,6 +235,7 @@ struct EditorRenderer::State {
     std::unique_ptr<DibSection> cache;
     std::uint64_t revision = std::numeric_limits<std::uint64_t>::max();
     std::uint64_t buildCount = 0;
+    std::optional<std::size_t> hiddenAnnotation;
     std::vector<Gdiplus::PointF> curvePoints;
 };
 
@@ -270,8 +274,11 @@ void EditorRenderer::Draw(HDC destination, POINT destinationScreenOrigin, RECT s
             throw std::runtime_error("Annotation cache blit failed");
         }
     } else if (!state_->cache) {
-        for (const auto& annotation : state_->model.Committed()) {
-            DrawAnnotation(destination, destinationScreenOrigin, clipped, annotation, state_->curvePoints);
+        const auto annotations = state_->model.Committed();
+        for (std::size_t annotationIndex = 0; annotationIndex < annotations.size(); ++annotationIndex) {
+            if (state_->hiddenAnnotation == annotationIndex) { continue; }
+            DrawAnnotation(destination, destinationScreenOrigin, clipped, annotations[annotationIndex],
+                           state_->curvePoints);
         }
     }
     if (preview && state_->model.Preview() != nullptr) {
@@ -311,6 +318,8 @@ Bitmap EditorRenderer::Flatten(RECT screenSelection) {
                                     std::min(clipped.bottom, top + tile.Height())};
                 const auto annotations = state_->model.Committed();
                 if (!std::any_of(annotations.begin(), annotations.end(), [&](const Annotation& annotation) {
+                        const auto annotationIndex = static_cast<std::size_t>(&annotation - annotations.data());
+                        if (state_->hiddenAnnotation == annotationIndex) { return false; }
                         RECT overlap{};
                         return IntersectRect(&overlap, &tileClip, &annotation.bounds) != FALSE;
                     })) {
@@ -332,6 +341,12 @@ Bitmap EditorRenderer::Flatten(RECT screenSelection) {
 
 std::uint64_t EditorRenderer::CacheBuildCount() const noexcept {
     return state_->buildCount;
+}
+
+void EditorRenderer::SetHiddenAnnotation(std::optional<std::size_t> annotationIndex) noexcept {
+    if (state_->hiddenAnnotation == annotationIndex) { return; }
+    state_->hiddenAnnotation = annotationIndex;
+    state_->revision = std::numeric_limits<std::uint64_t>::max();
 }
 
 } // namespace vispick
