@@ -76,7 +76,8 @@ SelectionHandle HitSelection(const RECT selection, const POINT point, const int 
     return PtInRect(&selection, point) ? SelectionHandle::Move : SelectionHandle::None;
 }
 
-RECT PlaceToolbar(const RECT selection, const SIZE size, const RECT monitor, const int gap) noexcept {
+RECT PlaceToolbar(const RECT selection, const SIZE size, const RECT monitor, const int gap,
+                  const RECT excluded) noexcept {
     LONG left = selection.right - size.cx;
     LONG top = selection.bottom + gap;
     if (top + size.cy > monitor.bottom) {
@@ -85,7 +86,25 @@ RECT PlaceToolbar(const RECT selection, const SIZE size, const RECT monitor, con
     }
     left = std::clamp(left, monitor.left, std::max(monitor.left, monitor.right - size.cx));
     top = std::clamp(top, monitor.top, std::max(monitor.top, monitor.bottom - size.cy));
-    return {left, top, left + size.cx, top + size.cy};
+    const RECT preferred{left, top, left + size.cx, top + size.cy};
+    RECT overlap{};
+    if (!IntersectRect(&overlap, &preferred, &excluded)) { return preferred; }
+    // Native EDIT children cover the parent-painted toolbar. Keep the usual
+    // position when possible, otherwise find room around the current editor.
+    const std::array<POINT, 4> alternatives{{{left, excluded.top - size.cy - gap},
+                                             {left, excluded.bottom + gap},
+                                             {excluded.left - size.cx - gap, top},
+                                             {excluded.right + gap, top}}};
+    for (auto origin : alternatives) {
+        origin.x = std::clamp(origin.x, monitor.left, std::max(monitor.left, monitor.right - size.cx));
+        origin.y = std::clamp(origin.y, monitor.top, std::max(monitor.top, monitor.bottom - size.cy));
+        const RECT candidate{origin.x, origin.y, origin.x + size.cx, origin.y + size.cy};
+        if (!IntersectRect(&overlap, &candidate, &excluded)) { return candidate; }
+    }
+    // Dock below the editor before the caller limits its viewport. The preferred
+    // position can be above the text origin after the screenshot crop changes.
+    const LONG dockedTop = std::max(monitor.top, monitor.bottom - size.cy - gap);
+    return {left, dockedTop, left + size.cx, dockedTop + size.cy};
 }
 
 std::optional<RECT> CycleWindowSelection(const std::span<const RECT> candidates, const RECT current,

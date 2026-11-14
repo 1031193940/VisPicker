@@ -29,6 +29,7 @@ namespace {
 
 constexpr UINT CommitTextMessage = WM_APP + 51;
 constexpr UINT CheckFocusMessage = WM_APP + 52;
+constexpr UINT TextLayoutMessage = WM_APP + 53;
 constexpr UINT_PTR ActivationWatch = 1;
 constexpr std::array<std::uint32_t, 8> PresetColors{0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759,
                                                     0x00C7BE, 0x007AFF, 0xAF52DE, 0xFFFFFF};
@@ -477,7 +478,15 @@ struct Overlay::State {
         const auto propertyTool = PropertyTool();
         const bool properties = propertyTool != AnnotationTool::None;
         const LONG width = std::min<LONG>(Scale(mode == CaptureMode::Gif ? 320 : 400), monitor.right - monitor.left);
-        toolbar = PlaceToolbar(selected, {width, Scale(properties ? 70 : 36)}, monitor, Scale(6));
+        RECT editorBounds{};
+        if (textInput && textInput->Active()) { GetWindowRect(textInput->Handle(), &editorBounds); }
+        toolbar = PlaceToolbar(selected, {width, Scale(properties ? 70 : 36)}, monitor, Scale(6), editorBounds);
+        RECT overlap{};
+        if (IntersectRect(&overlap, &toolbar, &editorBounds)) {
+            // A tall editor on a narrow monitor may leave no adjacent space.
+            // Scroll its viewport above the toolbar without changing export bounds.
+            textInput->SetViewportHeightLimit(std::max(1L, toolbar.top - Scale(6) - editorBounds.top));
+        }
         const LONG margin = Scale(4);
         if (mode == CaptureMode::Gif) {
             LayoutGifToolbar(toolbar, monitor, margin);
@@ -765,7 +774,8 @@ struct Overlay::State {
                          config.editor.mosaicSize});
         model->SetSelection(selection.Bounds());
         auto painter = std::make_unique<EditorRenderer>(*model);
-        auto input = std::make_unique<TextInput>(*model, *painter, window.Handle(), CommitTextMessage);
+        auto input =
+            std::make_unique<TextInput>(*model, *painter, window.Handle(), CommitTextMessage, TextLayoutMessage);
         annotations = std::move(model);
         renderer = std::move(painter);
         textInput = std::move(input);
@@ -1449,6 +1459,9 @@ LRESULT Overlay::OnMessage(const UINT message, const WPARAM parameter, const LPA
             state_->AddDamage(state_->textInput->CommitRequested(parameter));
             state_->Changed(old);
         }
+        return 0;
+    case TextLayoutMessage:
+        if (state_->textInput && state_->textInput->Active()) { state_->Changed(state_->Snapshot()); }
         return 0;
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORSTATIC:

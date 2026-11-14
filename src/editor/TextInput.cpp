@@ -43,8 +43,9 @@ UINT_PTR NextEditGeneration() noexcept {
 } // namespace
 
 struct TextInput::State {
-    State(AnnotationModel& source, EditorRenderer& sourceRenderer, HWND owner, UINT message)
-        : model(source), renderer(sourceRenderer), parent(owner), commitMessage(message) {}
+    State(AnnotationModel& source, EditorRenderer& sourceRenderer, HWND owner, UINT message, UINT geometryMessage)
+        : model(source), renderer(sourceRenderer), parent(owner), commitMessage(message),
+          layoutMessage(geometryMessage) {}
     ~State() { DestroyEdit(); }
 
     void InvalidateBounds(RECT rectangle) const noexcept {
@@ -80,6 +81,7 @@ struct TextInput::State {
         originalText.clear();
         originalBounds = {};
         bounds = {};
+        viewportHeightLimit = 0;
         InvalidateBounds(dirty);
     }
 
@@ -111,6 +113,40 @@ struct TextInput::State {
         bounds = rectangle;
     }
 
+    [[nodiscard]] LONG ViewportHeight() const noexcept {
+        const LONG height = bounds.bottom - bounds.top;
+        return viewportHeightLimit > 0 ? std::min(height, viewportHeightLimit) : height;
+    }
+
+    void ResizeViewport() {
+        RECT current{};
+        if (!GetClientRect(edit, &current)) { TextError("Read text input viewport"); }
+        const LONG width = bounds.right - bounds.left;
+        const LONG height = ViewportHeight();
+        if (current.right == width && current.bottom == height) { return; }
+        if (!SetWindowPos(edit, nullptr, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+            TextError("Resize text input viewport");
+        }
+        RECT formatting{0, 0, width, height};
+        SendMessageW(edit, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&formatting));
+        if (layoutMessage != 0) { PostMessageW(parent, layoutMessage, editGeneration, 0); }
+    }
+
+    void RestoreFullLayout() {
+        if (ViewportHeight() == bounds.bottom - bounds.top) { return; }
+        // The smaller editing viewport must not affect native line/tab positions at export.
+        // Commit destroys the HWND immediately afterwards, so no repaint is needed.
+        SendMessageW(edit, WM_SETREDRAW, FALSE, 0);
+        const LONG width = bounds.right - bounds.left;
+        const LONG height = bounds.bottom - bounds.top;
+        if (!SetWindowPos(edit, nullptr, 0, 0, width, height,
+                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW)) {
+            TextError("Restore text layout for commit");
+        }
+        RECT formatting{0, 0, width, height};
+        SendMessageW(edit, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&formatting));
+    }
+
     void FitText() {
         const auto lineCount = SendMessageW(edit, EM_GETLINECOUNT, 0, 0);
         const auto desired = std::min<LRESULT>(maximumBounds.bottom - maximumBounds.top,
@@ -123,11 +159,8 @@ struct TextInput::State {
         auto resized = bounds;
         resized.bottom = resized.top + static_cast<LONG>(desired);
         SetBackground(resized);
-        SetWindowPos(edit, nullptr, 0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top,
-                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-        RECT formatting{0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top};
-        SendMessageW(edit, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&formatting));
-        if (desired < maximumBounds.bottom - maximumBounds.top) {
+        ResizeViewport();
+        if (desired <= ViewportHeight() && desired < maximumBounds.bottom - maximumBounds.top) {
             const auto first = SendMessageW(edit, EM_GETFIRSTVISIBLELINE, 0, 0);
             if (first != 0) { SendMessageW(edit, EM_LINESCROLL, 0, -first); }
         }
@@ -173,6 +206,7 @@ struct TextInput::State {
     EditorRenderer& renderer;
     HWND parent = nullptr;
     UINT commitMessage = 0;
+    UINT layoutMessage = 0;
     HWND edit = nullptr;
     UINT_PTR editGeneration = 0;
     bool composing = false;
@@ -180,6 +214,7 @@ struct TextInput::State {
     WNDPROC originalProcedure = nullptr;
     RECT bounds{};
     RECT maximumBounds{};
+    LONG viewportHeightLimit = 0;
     LONG lineHeight = 1;
     unsigned dpi = 96;
     std::optional<std::size_t> editingIndex;
@@ -194,10 +229,12 @@ struct TextInput::State {
     UniqueGdiObject<HBRUSH> backgroundBrush;
 };
 
-TextInput::TextInput(AnnotationModel& model, EditorRenderer& renderer, HWND parent, UINT commitMessage)
-    : state_(std::make_unique<State>(model, renderer, parent, commitMessage)) {
-    if (parent == nullptr || commitMessage < WM_APP || commitMessage > 0xBFFF) {
-        throw std::invalid_argument("TextInput requires a parent and WM_APP commit message");
+TextInput::TextInput(AnnotationModel& model, EditorRenderer& renderer, HWND parent, UINT commitMessage,
+                     UINT layoutMessage)
+    : state_(std::make_unique<State>(model, renderer, parent, commitMessage, layoutMessage)) {
+    if (parent == nullptr || commitMessage < WM_APP || commitMessage > 0xBFFF ||
+        (layoutMessage != 0 && (layoutMessage < WM_APP || layoutMessage > 0xBFFF || layoutMessage == commitMessage))) {
+        throw std::invalid_argument("TextInput requires a parent and distinct WM_APP messages");
     }
 }
 
@@ -345,6 +382,16 @@ void TextInput::ApplyStyle(const AnnotationStyle& style) {
     InvalidateRect(state_->edit, nullptr, TRUE);
 }
 
+void TextInput::SetViewportHeightLimit(LONG maximumHeight) {
+    if (maximumHeight <= 0) { throw std::invalid_argument("Text viewport height must be positive"); }
+    if (!Active()) { return; }
+    state_->viewportHeightLimit =
+        state_->viewportHeightLimit > 0 ? std::min(state_->viewportHeightLimit, maximumHeight) : maximumHeight;
+    state_->ResizeViewport();
+    state_->InvalidateBounds(state_->bounds);
+    SendMessageW(state_->edit, EM_SCROLLCARET, 0, 0);
+}
+
 RECT TextInput::Commit() {
     if (!Active()) { return {}; }
     const HWND edit = state_->edit;
@@ -368,6 +415,7 @@ RECT TextInput::Commit() {
             if (restoreFocus && GetForegroundWindow() == state_->parent) { SetFocus(state_->parent); }
             return dirty;
         }
+        state_->RestoreFullLayout();
         const LRESULT firstVisible = SendMessageW(edit, EM_GETFIRSTVISIBLELINE, 0, 0);
         if (firstVisible != 0) { SendMessageW(edit, EM_LINESCROLL, 0, -firstVisible); }
         const ScreenDc context(edit);

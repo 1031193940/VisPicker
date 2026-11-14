@@ -241,3 +241,120 @@ TEST_CASE("Sampled color formats preserve RGB channels and ignore alpha") {
     CHECK(vispick::FormatSampledColor(0, false) == L"#000000");
     CHECK(vispick::FormatSampledColor(0xFFFFFFFFU, true) == L"RGB(255, 255, 255)");
 }
+
+TEST_CASE("Toolbar exclusion leaves its preferred position unchanged when text does not overlap") {
+    constexpr RECT monitor{0, 0, 1280, 720};
+    constexpr RECT selection{100, 100, 700, 400};
+    constexpr SIZE size{400, 70};
+    const auto preferred = vispick::PlaceToolbar(selection, size, monitor, 6);
+    CHECK(Same(vispick::PlaceToolbar(selection, size, monitor, 6, {100, 100, 500, 300}), preferred));
+    CHECK(Same(vispick::PlaceToolbar(selection, size, monitor, 6, {-600, -300, -100, -50}), preferred));
+    CHECK(Same(vispick::PlaceToolbar(selection, size, monitor, 6, {}), preferred));
+}
+
+TEST_CASE("Toolbar moves above bottom text instead of being covered by the native editor") {
+    constexpr RECT monitor{0, 0, 1280, 720};
+    constexpr RECT editor{850, 600, 1280, 720};
+    constexpr SIZE size{400, 70};
+    const auto preferred = vispick::PlaceToolbar(monitor, size, monitor, 6);
+    RECT overlap{};
+    REQUIRE(IntersectRect(&overlap, &preferred, &editor) != FALSE);
+    const auto toolbar = vispick::PlaceToolbar(monitor, size, monitor, 6, editor);
+    CHECK(toolbar.bottom <= editor.top - 6);
+    CHECK(toolbar.top >= monitor.top);
+    CHECK(toolbar.left >= monitor.left);
+    CHECK(toolbar.right <= monitor.right);
+    CHECK(toolbar.right - toolbar.left == size.cx);
+    CHECK(toolbar.bottom - toolbar.top == size.cy);
+    CHECK(IntersectRect(&overlap, &toolbar, &editor) == FALSE);
+}
+
+TEST_CASE("Toolbar moves below top text when clamping the above position still overlaps") {
+    constexpr RECT monitor{0, 0, 1280, 720};
+    constexpr RECT selection{100, 200, 700, 700};
+    constexpr RECT editor{200, 0, 800, 220};
+    constexpr SIZE size{400, 70};
+    const auto preferred = vispick::PlaceToolbar(selection, size, monitor, 6);
+    RECT overlap{};
+    REQUIRE(IntersectRect(&overlap, &preferred, &editor) != FALSE);
+    const auto toolbar = vispick::PlaceToolbar(selection, size, monitor, 6, editor);
+    CHECK(toolbar.top >= editor.bottom + 6);
+    CHECK(toolbar.bottom <= monitor.bottom);
+    CHECK(toolbar.left >= monitor.left);
+    CHECK(toolbar.right <= monitor.right);
+    CHECK(IntersectRect(&overlap, &toolbar, &editor) == FALSE);
+}
+
+TEST_CASE("Toolbar can use either side of a full height narrow editor") {
+    constexpr RECT monitor{0, 0, 1280, 720};
+    constexpr SIZE size{400, 70};
+    RECT overlap{};
+    SUBCASE("Editor near the right edge leaves room on its left") {
+        constexpr RECT editor{1000, 0, 1280, 720};
+        const auto toolbar = vispick::PlaceToolbar(monitor, size, monitor, 6, editor);
+        CHECK(toolbar.right <= editor.left - 6);
+        CHECK(toolbar.left >= monitor.left);
+        CHECK(toolbar.top >= monitor.top);
+        CHECK(toolbar.bottom <= monitor.bottom);
+        CHECK(IntersectRect(&overlap, &toolbar, &editor) == FALSE);
+    }
+    SUBCASE("Editor near the left edge leaves room on its right") {
+        constexpr RECT editor{0, 0, 300, 720};
+        const auto toolbar = vispick::PlaceToolbar({0, 0, 400, 720}, size, monitor, 6, editor);
+        CHECK(toolbar.left >= editor.right + 6);
+        CHECK(toolbar.right <= monitor.right);
+        CHECK(toolbar.top >= monitor.top);
+        CHECK(toolbar.bottom <= monitor.bottom);
+        CHECK(IntersectRect(&overlap, &toolbar, &editor) == FALSE);
+    }
+}
+
+TEST_CASE("Toolbar text avoidance preserves scaled size within negative origin monitors") {
+    constexpr RECT monitor{-2560, -1440, 0, 0};
+    for (const UINT dpi : {96U, 120U, 144U, 168U, 192U}) {
+        const SIZE size{MulDiv(400, static_cast<int>(dpi), 96), MulDiv(70, static_cast<int>(dpi), 96)};
+        const LONG gap = MulDiv(6, static_cast<int>(dpi), 96);
+        const RECT editor{-MulDiv(450, static_cast<int>(dpi), 96), -MulDiv(120, static_cast<int>(dpi), 96), 0, 0};
+        const auto toolbar = vispick::PlaceToolbar(monitor, size, monitor, gap, editor);
+        RECT overlap{};
+        CHECK(IntersectRect(&overlap, &toolbar, &editor) == FALSE);
+        CHECK(toolbar.left >= monitor.left);
+        CHECK(toolbar.top >= monitor.top);
+        CHECK(toolbar.right <= monitor.right);
+        CHECK(toolbar.bottom <= monitor.bottom);
+        CHECK(toolbar.right - toolbar.left == size.cx);
+        CHECK(toolbar.bottom - toolbar.top == size.cy);
+    }
+}
+
+TEST_CASE("Toolbar docks at the monitor bottom when no side can fit so the editor viewport can be limited") {
+    constexpr RECT monitor{0, 0, 320, 200};
+    constexpr SIZE size{300, 70};
+    const auto preferred = vispick::PlaceToolbar(monitor, size, monitor, 6);
+    const auto toolbar = vispick::PlaceToolbar(monitor, size, monitor, 6, monitor);
+    CHECK(Same(toolbar, preferred));
+    RECT overlap{};
+    CHECK(IntersectRect(&overlap, &toolbar, &monitor) != FALSE);
+    CHECK(toolbar.left >= monitor.left);
+    CHECK(toolbar.top >= monitor.top);
+    CHECK(toolbar.right <= monitor.right);
+    CHECK(toolbar.bottom <= monitor.bottom);
+}
+
+TEST_CASE("Toolbar fallback stays below text that begins above a later screenshot crop") {
+    constexpr RECT monitor{0, 0, 800, 600};
+    constexpr RECT selection{0, 100, 800, 590};
+    constexpr RECT editor{200, 50, 600, 580};
+    constexpr SIZE size{400, 70};
+    constexpr LONG gap = 6;
+    const auto preferred = vispick::PlaceToolbar(selection, size, monitor, gap);
+    REQUIRE(preferred.top < editor.top);
+    const auto docked = vispick::PlaceToolbar(selection, size, monitor, gap, editor);
+    CHECK(Same(docked, {400, 524, 800, 594}));
+    CHECK(docked.top - gap > editor.top);
+    const RECT viewport{editor.left, editor.top, editor.right, docked.top - gap};
+    const auto settled = vispick::PlaceToolbar(selection, size, monitor, gap, viewport);
+    CHECK(Same(settled, docked));
+    RECT overlap{};
+    CHECK(IntersectRect(&overlap, &settled, &viewport) == FALSE);
+}

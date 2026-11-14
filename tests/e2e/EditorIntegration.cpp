@@ -18,6 +18,7 @@
 
 namespace {
 constexpr UINT CommitMessage = WM_APP + 71;
+constexpr UINT LayoutMessage = WM_APP + 72;
 constexpr POINT DesktopOrigin{-160, -90};
 
 void Require(bool condition, const char* description) {
@@ -35,6 +36,7 @@ public:
     ~EditorWindow() override { Destroy(); }
     vispick::TextInput* input = nullptr;
     int commitMessages = 0;
+    int layoutMessages = 0;
 
 protected:
     LRESULT OnMessage(UINT message, WPARAM parameter, LPARAM data) override {
@@ -49,6 +51,10 @@ protected:
         if (message == CommitMessage) {
             ++commitMessages;
             if (input != nullptr) { input->CommitRequested(parameter); }
+            return 0;
+        }
+        if (message == LayoutMessage) {
+            ++layoutMessages;
             return 0;
         }
         return Window::OnMessage(message, parameter, data);
@@ -79,7 +85,7 @@ public:
         model.SetStyle(style);
         model.SetSelection({-140, -70, 600, 490});
         model.SetTool(vispick::AnnotationTool::Text);
-        input = std::make_unique<vispick::TextInput>(model, renderer, window.Handle(), CommitMessage);
+        input = std::make_unique<vispick::TextInput>(model, renderer, window.Handle(), CommitMessage, LayoutMessage);
         window.input = input.get();
         input->Begin({-120, -50}, dpi);
         Require(input->Active(), "TextInput did not create native EDIT");
@@ -320,6 +326,77 @@ void CheckLiveTextStyle(const vispick::Bitmap& frozen) {
             "Active text style pixels differ from committed output");
 }
 
+void CheckLimitedTextViewport(const vispick::Bitmap& frozen) {
+    const std::wstring originalText =
+        L"首行\tTabbed\t中文\r\n第二行 ABCDEFGHIJKLMNOPQRSTUVWXYZ 自动换行 continued text\r\n"
+        L"第三行\t需要保留制表符位置\r\n第四行内容\r\n第五行\tTab\tPositions\r\n第六行";
+    const std::wstring finalText = originalText + L"\r\n尾";
+    Session full(frozen, 96, 20);
+    SetWindowTextW(full.input->Handle(), finalText.c_str());
+    full.input->Commit();
+    const RECT fullBounds = full.model.Committed().front().bounds;
+    const auto expected = full.renderer.Flatten(full.model.Selection());
+    Require(fullBounds.bottom - fullBounds.top > 96, "Viewport fixture does not contain enough text");
+
+    Session limited(frozen, 96, 20);
+    SetWindowTextW(limited.input->Handle(), originalText.c_str());
+    vispick::PumpWindowMessages();
+    const int layoutMessages = limited.window.layoutMessages;
+    limited.input->SetViewportHeightLimit(96);
+    Require(limited.window.layoutMessages == layoutMessages, "Text layout notification was synchronous");
+    RECT viewport{};
+    Require(GetClientRect(limited.input->Handle(), &viewport) && viewport.bottom == 96,
+            "Text input did not reserve the requested toolbar space");
+    vispick::PumpWindowMessages();
+    Require(limited.window.layoutMessages == layoutMessages + 1,
+            "Text viewport resize did not post one layout notification");
+    limited.input->SetViewportHeightLimit(500);
+    vispick::PumpWindowMessages();
+    Require(GetClientRect(limited.input->Handle(), &viewport) && viewport.bottom == 96 &&
+                limited.window.layoutMessages == layoutMessages + 1,
+            "Current text viewport limit expanded or repeatedly posted layout notifications");
+
+    const int length = GetWindowTextLengthW(limited.input->Handle());
+    SendMessageW(limited.input->Handle(), EM_SETSEL, static_cast<WPARAM>(length), length);
+    SendMessageW(limited.input->Handle(), EM_SCROLLCARET, 0, 0);
+    // The hidden parent cannot own a caret; set a real scroll offset explicitly.
+    SendMessageW(limited.input->Handle(), EM_LINESCROLL, 0, 4);
+    Require(SendMessageW(limited.input->Handle(), EM_GETFIRSTVISIBLELINE, 0, 0) > 0,
+            "Limited viewport fixture did not scroll to its lower lines");
+    SendMessageW(limited.input->Handle(), WM_CHAR, L'\r', 1);
+    SendMessageW(limited.input->Handle(), WM_CHAR, L'尾', 1);
+    Require(ReadControlText(limited.input->Handle()) == finalText, "Limited text viewport changed the input contents");
+    Require(SendMessageW(limited.input->Handle(), EM_GETFIRSTVISIBLELINE, 0, 0) > 0,
+            "Typing in a limited viewport unexpectedly scrolled back to the first line");
+    Require(GetClientRect(limited.input->Handle(), &viewport) && viewport.bottom == 96,
+            "Growing text expanded beyond its viewport limit");
+    limited.input->Commit();
+    const auto& committed = limited.model.Committed().front();
+    Require(committed.bounds.bottom == fullBounds.bottom && committed.text == finalText,
+            "The editing viewport clipped the committed text bounds or contents");
+    Require(SamePixels(expected, limited.renderer.Flatten(limited.model.Selection())),
+            "Scrolling a limited viewport changed exported line or tab positions");
+
+    const std::wstring replacement = originalText + L"\r\n重编辑\t仍保留 Tab 和所有行";
+    full.input->BeginEdit(0);
+    SetWindowTextW(full.input->Handle(), replacement.c_str());
+    full.input->Commit();
+    limited.input->BeginEdit(0);
+    Require(GetClientRect(limited.input->Handle(), &viewport) && viewport.bottom > 96,
+            "Viewport limit leaked into a new text editing session");
+    limited.input->SetViewportHeightLimit(64);
+    SetWindowTextW(limited.input->Handle(), replacement.c_str());
+    SendMessageW(limited.input->Handle(), EM_LINESCROLL, 0, 4);
+    limited.input->Commit();
+    Require(
+        SamePixels(full.renderer.Flatten(full.model.Selection()), limited.renderer.Flatten(limited.model.Selection())),
+        "Re-editing through a limited viewport changed exported pixels");
+    limited.model.Undo();
+    Require(limited.model.Committed().front().text == finalText &&
+                SamePixels(expected, limited.renderer.Flatten(limited.model.Selection())),
+            "Undo did not restore the full text after viewport-limited editing");
+}
+
 struct Resources {
     DWORD gdi = 0;
     DWORD user = 0;
@@ -351,6 +428,7 @@ int wmain(int argumentCount, wchar_t** arguments) {
         CheckDeferredCommits(frozen);
         CheckTextReediting(frozen);
         CheckLiveTextStyle(frozen);
+        CheckLimitedTextViewport(frozen);
         constexpr const wchar_t* content =
             L"中文标注：位置与换行一致\r\nTab\tAligned\t测试\r\n自动换行 Mixed English 中文文字 0123456789 "
             L"ABCDEFGHIJKLMNOPQRSTUVWXYZ 自动换行继续，确保输入与提交使用同一字体。";
@@ -396,7 +474,7 @@ int wmain(int argumentCount, wchar_t** arguments) {
             ",\n  \"working_set_before\": " + std::to_string(before.workingSetBytes) +
             ",\n  \"working_set_after\": " + std::to_string(after.workingSetBytes) +
             ",\n  \"synthetic_ime_completion_tested\": true,\n  \"real_ime_input_tested\": false,\n  "
-            "\"text_reediting_and_style_tested\": true,\n  \"method\": \"hidden native EDIT WM_SETTEXT and WM_PRINTCLIENT; exact RGB comparison; no "
+            "\"text_reediting_and_style_tested\": true,\n  \"limited_viewport_tested\": true,\n  \"method\": \"hidden native EDIT WM_SETTEXT and WM_PRINTCLIENT; exact RGB comparison; no "
             "external windows or clipboard\"\n}\n";
         std::cout << report;
         if (argumentCount > reportArgument) {

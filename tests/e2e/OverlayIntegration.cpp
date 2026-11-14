@@ -227,22 +227,52 @@ void Click(vispick::Overlay& overlay, const POINT point, const RECT desktop) {
 
 enum class ScreenshotToolbarSlot : LONG { Save = 6, Pin = 7, Cancel = 8, Copy = 9 };
 
-RECT ScreenshotToolbarBounds(const RECT selection, const vispick::MonitorInfo& monitor, const bool properties = false) {
+RECT ActiveTextBounds(const vispick::Overlay& overlay) {
+    RECT bounds{};
+    if (const HWND edit = FindWindowExW(overlay.Handle(), nullptr, L"EDIT", nullptr)) {
+        Require(GetWindowRect(edit, &bounds) != FALSE, "Cannot locate the native text editor");
+    }
+    return bounds;
+}
+
+RECT ScreenshotToolbarBounds(const RECT selection, const vispick::MonitorInfo& monitor, const bool properties = false,
+                             const RECT excluded = {}) {
     const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
     const LONG width = std::min<LONG>(scale(400), monitor.bounds.right - monitor.bounds.left);
-    return vispick::PlaceToolbar(selection, {width, scale(properties ? 70 : 36)}, monitor.bounds, scale(6));
+    return vispick::PlaceToolbar(selection, {width, scale(properties ? 70 : 36)}, monitor.bounds, scale(6), excluded);
 }
 
 void ClickAnnotationProperty(vispick::Overlay& overlay, const RECT selection, const RECT desktop,
                              const vispick::MonitorInfo& monitor, const LONG property, const LONG count = 11) {
+    vispick::PumpWindowMessages();
     const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
-    const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true);
+    const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true, ActiveTextBounds(overlay));
     const LONG margin = scale(4);
     const LONG slotWidth = (toolbar.right - toolbar.left - margin * 2) / count;
-    Click(overlay,
-          {toolbar.left + margin + property * slotWidth + slotWidth / 2,
-           (toolbar.top + scale(38) + toolbar.bottom - margin) / 2},
-          desktop);
+    const POINT point{toolbar.left + margin + property * slotWidth + slotWidth / 2,
+                      (toolbar.top + scale(38) + toolbar.bottom - margin) / 2};
+    const HWND edit = FindWindowExW(overlay.Handle(), nullptr, L"EDIT", nullptr);
+    POINT client = point;
+    Require(ScreenToClient(overlay.Handle(), &client) != FALSE, "Cannot locate an annotation property");
+    const HWND child = ChildWindowFromPointEx(overlay.Handle(), client, CWP_SKIPINVISIBLE | CWP_SKIPDISABLED);
+    if (child != overlay.Handle() || WindowFromPoint(point) != overlay.Handle()) {
+        RECT editBounds{};
+        if (edit) { GetWindowRect(edit, &editBounds); }
+        std::fprintf(stderr,
+                     "Property %ld blocked at (%ld,%ld): overlay=%p child=%p edit=%p "
+                     "edit_bounds=(%ld,%ld,%ld,%ld) toolbar=(%ld,%ld,%ld,%ld)\n",
+                     property, point.x, point.y, static_cast<void*>(overlay.Handle()), static_cast<void*>(child),
+                     static_cast<void*>(edit), editBounds.left, editBounds.top, editBounds.right, editBounds.bottom,
+                     toolbar.left, toolbar.top, toolbar.right, toolbar.bottom);
+        throw std::runtime_error("Annotation property is covered by another window and cannot receive a real click");
+    }
+    Click(overlay, point, desktop);
+    vispick::PumpWindowMessages();
+    if (edit) {
+        Require(IsWindow(edit) && FindWindowExW(overlay.Handle(), nullptr, L"EDIT", nullptr) == edit &&
+                    GetFocus() == edit,
+                "Changing an active text property committed or defocused the native editor");
+    }
 }
 
 void DragAnnotation(vispick::Overlay& overlay, const POINT start, const POINT finish, const RECT desktop) {
@@ -329,9 +359,9 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
     const LONG monitorHeight = monitor.bounds.bottom - monitor.bounds.top;
     Require(monitorWidth >= 800 && monitorHeight >= 600,
             "Annotation editing integration requires a display of at least 800x600");
-    const RECT selection{monitor.bounds.left + 50, monitor.bounds.top + 60,
-                         monitor.bounds.left + std::min(1010L, monitorWidth - 50),
-                         monitor.bounds.top + std::min(620L, monitorHeight - 50)};
+    RECT selection{monitor.bounds.left + 50, monitor.bounds.top + 60,
+                   monitor.bounds.left + std::min(1010L, monitorWidth - 50),
+                   monitor.bounds.top + std::min(620L, monitorHeight - 50)};
     const auto pointAt = [&](LONG horizontal, LONG vertical) {
         return POINT{selection.left + horizontal, selection.top + vertical};
     };
@@ -347,6 +377,7 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
     config.capture.windowSnap = false;
     std::optional<vispick::OverlayResult> result;
     std::optional<vispick::Bitmap> snapshot;
+    unsigned captureSequence = 0;
     const auto begin = [&] {
         result.reset();
         snapshot.reset();
@@ -362,21 +393,31 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
         Drag(overlay, selection, desktop);
     };
     const auto capture = [&] {
+        ++captureSequence;
         snapshot.reset();
         PressKey(overlay, 'S', true);
+        if (!snapshot.has_value() || !overlay.Active() || result) {
+            std::fprintf(stderr,
+                         "Annotation inspection %u failed: snapshot=%d active=%d result_action=%d "
+                         "focus=%p foreground=%p overlay=%p\n",
+                         captureSequence, snapshot.has_value() ? 1 : 0, overlay.Active() ? 1 : 0,
+                         result ? static_cast<int>(result->action) : -1, static_cast<void*>(GetFocus()),
+                         static_cast<void*>(GetForegroundWindow()), static_cast<void*>(overlay.Handle()));
+        }
         Require(snapshot.has_value() && overlay.Active() && !result,
                 "Annotation inspection unexpectedly completed the capture session");
         return std::move(*snapshot);
     };
-    const auto saveVisual = [&](const wchar_t* filename) {
+    const auto saveVisual = [&](const wchar_t* filename, RECT content = {}) {
         if (visualOutput.empty()) { return; }
         std::filesystem::create_directories(visualOutput);
         UpdateWindow(overlay.Handle());
         GdiFlush();
         DwmFlush();
-        const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true);
+        const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true, ActiveTextBounds(overlay));
+        if (IsRectEmpty(&content)) { content = selection; }
         RECT visible{};
-        UnionRect(&visible, &selection, &toolbar);
+        UnionRect(&visible, &content, &toolbar);
         InflateRect(&visible, 20, 20);
         IntersectRect(&visible, &visible, &monitor.bounds);
         // The full-screen fixture and overlay own every pixel in this region.
@@ -576,6 +617,79 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
     const auto cleanText = capture();
     CheckSamePixels(editedText.View(), cleanText.View(),
                     "Text editing duplicated the old object, changed layout, or exported selection adorners");
+    overlay.Cancel();
+
+    // Full-screen capture places the toolbar inside the selection. Growing native text near
+    // the bottom must leave its properties reachable by a real child-window hit test.
+    selection = monitor.bounds;
+    config.editor.fontSize = 20;
+    begin();
+    PressKey(overlay, 'T');
+    const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
+    const RECT bottomToolbar = ScreenshotToolbarBounds(selection, monitor, true);
+    const POINT bottomTextOrigin{bottomToolbar.left + scale(10), bottomToolbar.top - scale(90)};
+    Click(overlay, bottomTextOrigin, desktop);
+    edit = NativeTextEdit(overlay);
+    if (!edit) { throw std::runtime_error("Cannot open full-screen bottom text editor"); }
+    vispick::PumpWindowMessages();
+    const RECT initialEditBounds = ActiveTextBounds(overlay);
+    RECT intersection{};
+    Require(!IntersectRect(&intersection, &initialEditBounds, &bottomToolbar),
+            "Bottom text growth regression must start without covering the toolbar");
+    constexpr wchar_t bottomText[] =
+        L"Bottom annotation\r\nSecond line\r\nThird line\r\nFourth line\r\nFifth line\r\nSixth line";
+    // EM_REPLACESEL follows the native typing/paste change path, including EN_CHANGE and FitText.
+    SendMessageW(edit, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(bottomText));
+    vispick::PumpWindowMessages();
+    const RECT grownEditBounds = ActiveTextBounds(overlay);
+    Require(grownEditBounds.bottom > initialEditBounds.bottom &&
+                IntersectRect(&intersection, &grownEditBounds, &bottomToolbar),
+            "Multiline editor did not grow into the original full-screen toolbar position");
+    const auto checkTextToolbar = [&] {
+        vispick::PumpWindowMessages();
+        const RECT editBounds = ActiveTextBounds(overlay);
+        const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true, editBounds);
+        Require(!IntersectRect(&intersection, &editBounds, &toolbar),
+                "Growing native text covers its contextual toolbar");
+        UpdateWindow(overlay.Handle());
+        GdiFlush();
+        DwmFlush();
+        const auto screen = vispick::CaptureScreen(toolbar);
+        const auto image = screen->Image();
+        const LONG inset = std::max(1, scale(2));
+        // Sample the real toolbar frame, rather than accepting only the shared layout calculation.
+        Require((image.Row(inset)[inset] & 0xFFFFFFU) == 0x222428U &&
+                    (image.Row(image.Height() - inset - 1)[image.Width() - inset - 1] & 0xFFFFFFU) == 0x222428U,
+                "The contextual toolbar was not painted at its unobstructed position");
+    };
+    saveVisual(L"text-editing-properties.png", grownEditBounds);
+    checkTextToolbar();
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10);
+    checkFontSize(28);
+    checkTextToolbar();
+    Require(NativeText(NativeTextEdit(overlay)) == bottomText, "Changing bottom text font size lost multiline content");
+    saveVisual(L"text-editing-large-font.png", ActiveTextBounds(overlay));
+
+    // A real toolbar hit must also commit the active text before switching back to drawing.
+    const RECT activeToolbar = ScreenshotToolbarBounds(selection, monitor, true, ActiveTextBounds(overlay));
+    const LONG margin = scale(4);
+    const LONG toolWidth = (activeToolbar.right - activeToolbar.left - margin * 2) / 11;
+    const POINT rectangleTool{activeToolbar.left + margin + toolWidth / 2,
+                              activeToolbar.top + (margin + scale(32)) / 2};
+    POINT clientTool = rectangleTool;
+    Require(ScreenToClient(overlay.Handle(), &clientTool) && WindowFromPoint(rectangleTool) == overlay.Handle() &&
+                ChildWindowFromPointEx(overlay.Handle(), clientTool, CWP_SKIPINVISIBLE | CWP_SKIPDISABLED) ==
+                    overlay.Handle(),
+            "The active text editor covers the drawing tool button");
+    Click(overlay, rectangleTool, desktop);
+    vispick::PumpWindowMessages();
+    Require(overlay.Active() && !NativeTextEdit(overlay) && !result,
+            "Clicking a drawing tool did not commit active text and keep the overlay open");
+    Click(overlay, {bottomTextOrigin.x + scale(3), bottomTextOrigin.y + scale(3)}, desktop);
+    PressKey(overlay, VK_RETURN);
+    vispick::PumpWindowMessages();
+    Require(NativeText(NativeTextEdit(overlay)) == bottomText,
+            "Switching tools lost text or prevented selecting and re-editing it");
     overlay.Cancel();
     Require(vispick::Window::ExceptionCount() == 0, "An annotation editing window callback threw");
     std::puts("Annotation editing: geometry, property rows, text re-edit, undo/redo and clean exports passed");

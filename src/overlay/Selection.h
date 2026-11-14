@@ -17,7 +17,7 @@ enum class SelectionHandle { None, Move, TopLeft, Top, TopRight, Right, BottomRi
 [[nodiscard]] RECT ResizeSelection(RECT selection, SelectionHandle handle, POINT point, RECT desktop) noexcept;
 [[nodiscard]] std::array<POINT, 8> SelectionHandles(RECT selection) noexcept;
 [[nodiscard]] SelectionHandle HitSelection(RECT selection, POINT point, int radius) noexcept;
-[[nodiscard]] RECT PlaceToolbar(RECT selection, SIZE size, RECT monitor, int gap) noexcept;
+[[nodiscard]] RECT PlaceToolbar(RECT selection, SIZE size, RECT monitor, int gap, RECT excluded = {}) noexcept;
 // Candidates retain their frozen top-to-bottom Z order. Empty entries are ignored.
 [[nodiscard]] std::optional<RECT> CycleWindowSelection(std::span<const RECT> candidates, RECT current,
                                                        bool reverse) noexcept;
