@@ -28,7 +28,7 @@
 
 ## 2026-11-14 验证与交付
 
-源码版本为 0.7.0，分支 `codex/annotation-editing`，尚未合并到 main 或发布到 GitHub。
+本次验证对应 `v0.7.0` 的源码和发布文件。标注二次编辑在 `codex/annotation-editing` 分支开发。
 
 | 检查 | x64 | x86 |
 |---|---|---|
@@ -50,7 +50,7 @@ x64 `--selection-only` 同时通过原有截图选区、Copy/Pin/Cancel/Save 动
 
 未覆盖：真实中文输入法人工操作、强制拒绝前台激活夹具、物理多屏/混合 DPI，以及 Win7/Win10 实机兼容。本轮没有运行八小时测试，也不将其作为发布门槛。
 
-开发版：`dist/VisPick_0.7.0.exe`（x64）。
+发布文件为 `dist/VisPick_0.7.0.exe`（x64）。
 
 - SHA256：`81AB7EEA1FB59FC215DDB71C30D0E83CDB8D0F4973C629A3D7C5A25C91D4180C`
 - 源码指纹：`1609248F054A982F1B10D10C7B8D9CF85705243AD433B1F9EEB02C1F322CD031`
