@@ -40,6 +40,18 @@ UINT_PTR NextEditGeneration() noexcept {
     return generation;
 }
 
+class ScopedFlag {
+public:
+    ScopedFlag(bool& target, bool value) noexcept : target_(target), previous_(target) { target_ = value; }
+    ~ScopedFlag() { target_ = previous_; }
+    ScopedFlag(const ScopedFlag&) = delete;
+    ScopedFlag& operator=(const ScopedFlag&) = delete;
+
+private:
+    bool& target_;
+    bool previous_;
+};
+
 } // namespace
 
 struct TextInput::State {
@@ -76,6 +88,11 @@ struct TextInput::State {
         commitAfterComposition = false;
         backgroundBrush.Reset();
         background.reset();
+        paintBuffer.reset();
+        painting = false;
+        printing = false;
+        suppressDirectPaint = false;
+        redrawDisabled = false;
         font.Reset();
         editingIndex.reset();
         originalText.clear();
@@ -167,13 +184,75 @@ struct TextInput::State {
             if (first != 0) { SendMessageW(edit, EM_LINESCROLL, 0, -first); }
         }
         InvalidateRect(parent, &oldClient, FALSE);
-        InvalidateRect(edit, nullptr, TRUE);
+        InvalidateRect(edit, nullptr, FALSE);
+    }
+
+    void BlitBackground(HDC target, LONG width, LONG height) const noexcept {
+        if (target == nullptr || !background || width <= 0 || height <= 0) { return; }
+        const LONG copyWidth = std::min<LONG>(width, background->Width());
+        const LONG copyHeight = std::min<LONG>(height, background->Height());
+        if (copyWidth > 0 && copyHeight > 0) {
+            BitBlt(target, 0, 0, static_cast<int>(copyWidth), static_cast<int>(copyHeight), background->DeviceContext(),
+                   0, 0, SRCCOPY);
+        }
+    }
+
+    void RefreshDisplay() noexcept {
+        if (edit == nullptr || redrawDisabled || painting || suppressDirectPaint || !IsWindowVisible(edit)) { return; }
+        InvalidateRect(edit, nullptr, FALSE);
+        UpdateWindow(edit);
+    }
+
+    LRESULT PaintEdit(HWND window) noexcept {
+        RECT client{};
+        if (!GetClientRect(window, &client) || client.right <= 0 || client.bottom <= 0 || !background || painting) {
+            return CallWindowProcW(originalProcedure, window, WM_PAINT, 0, 0);
+        }
+        try {
+            if (!paintBuffer || paintBuffer->Width() != client.right || paintBuffer->Height() != client.bottom) {
+                paintBuffer.reset();
+                paintBuffer =
+                    std::make_unique<DibSection>(static_cast<int>(client.right), static_cast<int>(client.bottom));
+            }
+        } catch (...) { return CallWindowProcW(originalProcedure, window, WM_PAINT, 0, 0); }
+        const ScopedFlag paintingGuard(painting, true);
+        PAINTSTRUCT paint{};
+        const HDC context = BeginPaint(window, &paint);
+        if (context != nullptr && !IsRectEmpty(&paint.rcPaint)) {
+            BlitBackground(paintBuffer->DeviceContext(), client.right, client.bottom);
+            CallWindowProcW(originalProcedure, window, WM_PRINTCLIENT,
+                            reinterpret_cast<WPARAM>(paintBuffer->DeviceContext()), PRF_CLIENT);
+            BitBlt(context, static_cast<int>(paint.rcPaint.left), static_cast<int>(paint.rcPaint.top),
+                   static_cast<int>(paint.rcPaint.right - paint.rcPaint.left),
+                   static_cast<int>(paint.rcPaint.bottom - paint.rcPaint.top), paintBuffer->DeviceContext(),
+                   static_cast<int>(paint.rcPaint.left), static_cast<int>(paint.rcPaint.top), SRCCOPY);
+        }
+        EndPaint(window, &paint);
+        return 0;
     }
 
     static LRESULT CALLBACK EditProcedure(HWND window, UINT message, WPARAM parameter, LPARAM data) noexcept {
         auto* state = reinterpret_cast<State*>(GetWindowLongPtrW(window, GWLP_USERDATA));
         if (state == nullptr || state->originalProcedure == nullptr) {
             return DefWindowProcW(window, message, parameter, data);
+        }
+        if (message == WM_ERASEBKGND) { return 1; }
+        if (message == WM_PAINT && parameter == 0) { return state->PaintEdit(window); }
+        if (message == WM_PRINTCLIENT) {
+            const ScopedFlag printingGuard(state->printing, true);
+            if ((data & PRF_ERASEBKGND) != 0 && parameter != 0) {
+                RECT client{};
+                if (GetClientRect(window, &client)) {
+                    state->BlitBackground(reinterpret_cast<HDC>(parameter), client.right, client.bottom);
+                }
+            }
+            return CallWindowProcW(state->originalProcedure, window, message, parameter, data);
+        }
+        if (message == WM_SETREDRAW) {
+            state->redrawDisabled = parameter == 0;
+            const LRESULT result = CallWindowProcW(state->originalProcedure, window, message, parameter, data);
+            if (!state->redrawDisabled && state->edit == window) { state->RefreshDisplay(); }
+            return result;
         }
         if (message == WM_KEYDOWN && parameter == VK_ESCAPE) {
             state->PostCommit();
@@ -189,11 +268,31 @@ struct TextInput::State {
         } else if (message == WM_IME_ENDCOMPOSITION) {
             state->composing = false;
         }
-        const LRESULT result = CallWindowProcW(state->originalProcedure, window, message, parameter, data);
+        const bool textChanged = message == WM_CHAR || message == WM_UNICHAR || message == WM_KEYDOWN ||
+                                 message == WM_SYSKEYDOWN || message == WM_PASTE || message == WM_CUT ||
+                                 message == WM_CLEAR || message == WM_SETTEXT || message == EM_REPLACESEL ||
+                                 message == WM_IME_COMPOSITION || message == WM_IME_CHAR || message == WM_UNDO ||
+                                 message == EM_UNDO;
+        const bool visualChanged =
+            textChanged || message == WM_IME_STARTCOMPOSITION || message == WM_IME_ENDCOMPOSITION ||
+            message == EM_SETSEL || message == WM_LBUTTONDOWN || message == WM_LBUTTONUP ||
+            message == WM_LBUTTONDBLCLK || message == WM_RBUTTONUP || message == WM_CONTEXTMENU ||
+            (message == WM_MOUSEMOVE && ((parameter & MK_LBUTTON) != 0 || GetCapture() == window)) ||
+            message == WM_CAPTURECHANGED || message == WM_SETFOCUS || message == WM_KILLFOCUS ||
+            (message == WM_TIMER && GetCapture() == window) || message == WM_VSCROLL || message == WM_HSCROLL ||
+            message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL || message == EM_SCROLL || message == EM_LINESCROLL ||
+            message == EM_SCROLLCARET || message == EM_SETRECT || message == EM_SETRECTNP || message == EM_SETMARGINS ||
+            message == EM_SETTABSTOPS || message == WM_SETFONT || message == WM_SIZE;
+        const bool suppressPaint = visualChanged && message != WM_CONTEXTMENU && !state->redrawDisabled &&
+                                   !state->painting && IsWindowVisible(window);
+        LRESULT result = 0;
+        {
+            const ScopedFlag suppress(state->suppressDirectPaint, state->suppressDirectPaint || suppressPaint);
+            result = CallWindowProcW(state->originalProcedure, window, message, parameter, data);
+        }
+        if (state->edit != window) { return result; }
         if (message == WM_IME_ENDCOMPOSITION && state->commitAfterComposition) { state->PostCommit(); }
-        if (message == WM_CHAR || message == WM_PASTE || message == WM_CUT || message == WM_CLEAR ||
-            message == WM_SETTEXT || message == EM_REPLACESEL || message == WM_IME_COMPOSITION ||
-            message == WM_IME_CHAR || message == WM_UNDO) {
+        if (textChanged) {
             try {
                 state->FitText();
             } catch (...) {
@@ -201,6 +300,7 @@ struct TextInput::State {
                 state->PostCommit();
             }
         }
+        if (visualChanged && state->edit == window) { state->RefreshDisplay(); }
         return result;
     }
 
@@ -213,6 +313,10 @@ struct TextInput::State {
     UINT_PTR editGeneration = 0;
     bool composing = false;
     bool commitAfterComposition = false;
+    bool painting = false;
+    bool printing = false;
+    bool suppressDirectPaint = false;
+    bool redrawDisabled = false;
     WNDPROC originalProcedure = nullptr;
     RECT bounds{};
     RECT maximumBounds{};
@@ -230,6 +334,7 @@ struct TextInput::State {
     LOGFONTW actualFont{};
     UniqueGdiObject<HFONT> font;
     std::unique_ptr<DibSection> background;
+    std::unique_ptr<DibSection> paintBuffer;
     UniqueGdiObject<HBRUSH> backgroundBrush;
 };
 
@@ -303,7 +408,8 @@ void TextInput::State::Open(RECT maximum, RECT initial, const LOGFONTW& selected
         }
         if (IsWindowVisible(parent)) { SetFocus(edit); }
         InvalidateBounds(originalBounds);
-        InvalidateRect(edit, nullptr, TRUE);
+        InvalidateRect(edit, nullptr, FALSE);
+        RefreshDisplay();
     } catch (...) {
         DestroyEdit();
         throw;
@@ -406,7 +512,8 @@ void TextInput::ApplyStyle(const AnnotationStyle& style) {
     }
     state_->logicalFontSize = style.fontSize;
     state_->color = style.color;
-    InvalidateRect(state_->edit, nullptr, TRUE);
+    InvalidateRect(state_->edit, nullptr, FALSE);
+    state_->RefreshDisplay();
 }
 
 void TextInput::SetViewportHeightLimit(LONG maximumHeight) {
@@ -417,6 +524,7 @@ void TextInput::SetViewportHeightLimit(LONG maximumHeight) {
     state_->ResizeViewport();
     state_->InvalidateBounds(state_->bounds);
     SendMessageW(state_->edit, EM_SCROLLCARET, 0, 0);
+    state_->RefreshDisplay();
 }
 
 RECT TextInput::Commit() {
@@ -515,6 +623,9 @@ HBRUSH TextInput::ControlColor(HDC deviceContext, HWND child) noexcept {
     SetTextColor(deviceContext, RGB((state_->color >> 16) & 0xFF, (state_->color >> 8) & 0xFF, state_->color & 0xFF));
     SetBkMode(deviceContext, TRANSPARENT);
     SetBrushOrgEx(deviceContext, 0, 0, nullptr);
+    if (state_->suppressDirectPaint && !state_->painting && !state_->printing) {
+        IntersectClipRect(deviceContext, 0, 0, 0, 0);
+    }
     return state_->backgroundBrush.Get();
 }
 

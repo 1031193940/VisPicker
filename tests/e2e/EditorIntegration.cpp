@@ -326,6 +326,40 @@ void CheckLiveTextStyle(const vispick::Bitmap& frozen) {
             "Active text style pixels differ from committed output");
 }
 
+void CheckIncrementalEdits(const vispick::Bitmap& frozen) {
+    Session session(frozen, 96, 20);
+    const HWND edit = session.input->Handle();
+    Require(SendMessageW(edit, WM_ERASEBKGND, 0, 0) == 1, "Native EDIT must suppress direct erase flicker");
+    Require(SendMessageW(edit, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(L"Line1\r\nLine2\r\nLine3")) != FALSE,
+            "Set multi-line text failed");
+    RECT tallBounds{};
+    Require(GetWindowRect(edit, &tallBounds) != FALSE, "Read tall EDIT bounds failed");
+    SendMessageW(edit, EM_SETSEL, 12, 12);
+    SendMessageW(edit, WM_KEYDOWN, VK_DELETE, 1);
+    Require(SendMessageW(edit, EM_GETLINECOUNT, 0, 0) == 2, "VK_DELETE did not merge lines");
+    RECT shrunkBounds{};
+    Require(GetWindowRect(edit, &shrunkBounds) != FALSE &&
+                shrunkBounds.bottom - shrunkBounds.top < tallBounds.bottom - tallBounds.top,
+            "VK_DELETE did not shrink EDIT height");
+
+    Require(SendMessageW(edit, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(L"Hello 中文 World")) != FALSE,
+            "Set incremental edit fixture failed");
+    SendMessageW(edit, EM_SETSEL, 6, 6);
+    SendMessageW(edit, WM_CHAR, L'插', 1);
+    SendMessageW(edit, WM_KEYDOWN, VK_DELETE, 1);
+    SendMessageW(edit, WM_CHAR, L'\b', 1);
+    SendMessageW(edit, EM_SETSEL, 0, 5);
+    SendMessageW(edit, EM_SETSEL, static_cast<WPARAM>(-1), static_cast<LPARAM>(-1));
+    RECT bounds{};
+    Require(GetWindowRect(edit, &bounds) != FALSE, "Read edited bounds failed");
+    const auto native = PrintNativeEdit(edit);
+    session.input->Commit();
+    Require(session.model.Committed().size() == 1 && session.model.Committed().front().text == L"Hello 文 World",
+            "Incremental edit did not produce expected text");
+    Require(SamePixels(native, session.renderer.Flatten(bounds)),
+            "Incremental insert/delete left ghost pixels in native EDIT");
+}
+
 void CheckLimitedTextViewport(const vispick::Bitmap& frozen) {
     const std::wstring originalText =
         L"首行\tTabbed\t中文\r\n第二行 ABCDEFGHIJKLMNOPQRSTUVWXYZ 自动换行 continued text\r\n"
@@ -428,6 +462,7 @@ int wmain(int argumentCount, wchar_t** arguments) {
         CheckDeferredCommits(frozen);
         CheckTextReediting(frozen);
         CheckLiveTextStyle(frozen);
+        CheckIncrementalEdits(frozen);
         CheckLimitedTextViewport(frozen);
         constexpr const wchar_t* content =
             L"中文标注：位置与换行一致\r\nTab\tAligned\t测试\r\n自动换行 Mixed English 中文文字 0123456789 "

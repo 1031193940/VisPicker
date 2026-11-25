@@ -1,7 +1,9 @@
 #include <doctest/doctest.h>
 #include "editor/Annotation.h"
 #include "editor/Renderer.h"
+#include "editor/TextInput.h"
 #include "platform/Gdi.h"
+#include "platform/Window.h"
 
 #include <algorithm>
 #include <cmath>
@@ -686,4 +688,86 @@ TEST_CASE("Annotation ellipse hit test detects center hits on small ellipses onl
     CHECK(model.HitTest({12, 12}, 2) == std::size_t{0});
     Draw(model, vispick::AnnotationTool::Ellipse, {30, 10}, {90, 70});
     CHECK_FALSE(model.HitTest({60, 40}, 2).has_value());
+}
+
+TEST_CASE("TextInput double-buffered painting handles insert, delete, and line shrink cleanly") {
+    class HiddenTextHost final : public vispick::Window {
+    public:
+        HiddenTextHost() {
+            Create({L"VisPick.Tests.TextInputHost", 0, IDC_ARROW}, L"hidden text host", WS_POPUP | WS_CLIPCHILDREN,
+                   WS_EX_TOOLWINDOW, {0, 0, 320, 240}, vispick::WindowActivation::Passive);
+        }
+        ~HiddenTextHost() override { Destroy(); }
+        vispick::TextInput* input = nullptr;
+
+    protected:
+        LRESULT OnMessage(const UINT message, const WPARAM parameter, const LPARAM data) override {
+            if ((message == WM_CTLCOLOREDIT || message == WM_CTLCOLORSTATIC) && input != nullptr) {
+                if (const HBRUSH brush =
+                        input->ControlColor(reinterpret_cast<HDC>(parameter), reinterpret_cast<HWND>(data))) {
+                    return reinterpret_cast<LRESULT>(brush);
+                }
+            }
+            return Window::OnMessage(message, parameter, data);
+        }
+    };
+
+    const auto printEdit = [](const HWND edit) {
+        RECT client{};
+        REQUIRE(GetClientRect(edit, &client) != FALSE);
+        vispick::DibSection surface(static_cast<int>(client.right), static_cast<int>(client.bottom));
+        std::fill(surface.Pixels().begin(), surface.Pixels().end(), 0xFF00FF00U);
+        SendMessageW(edit, EM_SETSEL, static_cast<WPARAM>(-1), static_cast<LPARAM>(-1));
+        SendMessageW(edit, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(surface.DeviceContext()),
+                     PRF_CLIENT | PRF_ERASEBKGND);
+        GdiFlush();
+        return vispick::BitmapView(surface.Width(), surface.Height(), surface.Pixels())
+            .CropOpaque(0, 0, surface.Width(), surface.Height());
+    };
+
+    const auto image = Pattern(320, 240);
+    vispick::AnnotationModel model(image.View(), {});
+    model.SetSelection({10, 10, 310, 230});
+    model.SetTool(vispick::AnnotationTool::Text);
+    vispick::EditorRenderer renderer(model);
+    HiddenTextHost host;
+    vispick::TextInput input(model, renderer, host.Handle(), WM_APP + 91, WM_APP + 92);
+    host.input = &input;
+    input.Begin({20, 20}, 96);
+    REQUIRE(input.Active());
+    const HWND edit = input.Handle();
+
+    CHECK(SendMessageW(edit, WM_ERASEBKGND, 0, 0) == 1);
+
+    // Growing to 3 lines and deleting the second newline via VK_DELETE must shrink the EDIT back.
+    REQUIRE(SendMessageW(edit, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(L"Line1\r\nLine2\r\nLine3")) != FALSE);
+    RECT tallRect{};
+    REQUIRE(GetWindowRect(edit, &tallRect) != FALSE);
+    const LONG tallHeight = tallRect.bottom - tallRect.top;
+    SendMessageW(edit, EM_SETSEL, 12, 12);
+    SendMessageW(edit, WM_KEYDOWN, VK_DELETE, 1);
+    CHECK(SendMessageW(edit, EM_GETLINECOUNT, 0, 0) == 2);
+    RECT shrunkRect{};
+    REQUIRE(GetWindowRect(edit, &shrunkRect) != FALSE);
+    CHECK(shrunkRect.bottom - shrunkRect.top < tallHeight);
+
+    // Middle insert, forward delete, and backspace must render identically to a fresh WM_SETTEXT.
+    REQUIRE(SendMessageW(edit, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(L"Hello World")) != FALSE);
+    SendMessageW(edit, EM_SETSEL, 6, 6);
+    SendMessageW(edit, WM_CHAR, L'X', 1);
+    SendMessageW(edit, WM_KEYDOWN, VK_DELETE, 1);
+    SendMessageW(edit, WM_CHAR, L'\b', 1);
+    const auto editedPixels = printEdit(edit);
+    CHECK(std::none_of(editedPixels.Pixels().begin(), editedPixels.Pixels().end(),
+                       [](std::uint32_t pixel) { return pixel == 0xFF00FF00U; }));
+
+    REQUIRE(SendMessageW(edit, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(L"Hello orld")) != FALSE);
+    const auto cleanPixels = printEdit(edit);
+    CHECK(SamePixels(editedPixels, cleanPixels));
+
+    input.Commit();
+    CHECK_FALSE(input.Active());
+    REQUIRE(model.Committed().size() == 1);
+    CHECK(model.Committed().front().text == L"Hello orld");
+    host.input = nullptr;
 }
