@@ -23,6 +23,7 @@
 #include <stdexcept>
 #include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace vispick {
@@ -157,6 +158,8 @@ protected:
     }
 };
 
+enum class BarButton { None, Pause, Stop, Cancel };
+
 class RecordBar final : public Window {
 public:
     RecordBar(std::function<void(bool)> stop, std::function<void(bool)> session, std::function<void()> togglePause,
@@ -231,15 +234,64 @@ protected:
             }
             return 0;
         }
+        if (message == WM_MOUSEMOVE) {
+            if (!trackingMouse_) {
+                TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, Handle(), 0};
+                trackingMouse_ = TrackMouseEvent(&tracking) != FALSE;
+            }
+            const POINT position{GET_X_LPARAM(data), GET_Y_LPARAM(data)};
+            const auto candidate = ButtonAt(position);
+            const auto nextHover =
+                pressedButton_ == BarButton::None || candidate == pressedButton_ ? candidate : BarButton::None;
+            if (nextHover != hoveredButton_) {
+                hoveredButton_ = nextHover;
+                InvalidateRect(Handle(), nullptr, FALSE);
+            }
+            return 0;
+        }
+        if (message == WM_MOUSELEAVE) {
+            trackingMouse_ = false;
+            if (pressedButton_ == BarButton::None && hoveredButton_ != BarButton::None) {
+                hoveredButton_ = BarButton::None;
+                InvalidateRect(Handle(), nullptr, FALSE);
+            }
+            return 0;
+        }
+        if (message == WM_LBUTTONDOWN) {
+            const POINT position{GET_X_LPARAM(data), GET_Y_LPARAM(data)};
+            const auto button = ButtonAt(position);
+            pressedButton_ = button;
+            if (button != BarButton::None) {
+                SetCapture(Handle());
+                if (hoveredButton_ != button) {
+                    hoveredButton_ = button;
+                    InvalidateRect(Handle(), nullptr, FALSE);
+                }
+            }
+            return 0;
+        }
+        if (message == WM_CANCELMODE || message == WM_CAPTURECHANGED) {
+            pressedButton_ = BarButton::None;
+            if (hoveredButton_ != BarButton::None) {
+                hoveredButton_ = BarButton::None;
+                InvalidateRect(Handle(), nullptr, FALSE);
+            }
+            return 0;
+        }
         if (message == WM_LBUTTONUP) {
             const POINT position{GET_X_LPARAM(data), GET_Y_LPARAM(data)};
-            const auto rectangles = Layout();
-            if (PtInRect(&rectangles[1], position)) {
+            const auto pressed = std::exchange(pressedButton_, BarButton::None);
+            if (GetCapture() == Handle()) { ReleaseCapture(); }
+            if (pressed == BarButton::None || ButtonAt(position) != pressed) {
+                InvalidateRect(Handle(), nullptr, FALSE);
+                return 0;
+            }
+            if (pressed == BarButton::Pause) {
                 togglePause_();
                 InvalidateRect(Handle(), nullptr, FALSE);
-            } else if (PtInRect(&rectangles[2], position)) {
+            } else if (pressed == BarButton::Stop) {
                 stop_(false);
-            } else if (PtInRect(&rectangles[3], position)) {
+            } else if (pressed == BarButton::Cancel) {
                 Cancel();
             }
             return 0;
@@ -294,12 +346,16 @@ private:
         auto rectangles = Layout();
         DrawTextW(context, text.c_str(), static_cast<int>(text.size()), &rectangles[0],
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-        POINT pointer{};
-        const bool hovering =
-            GetCursorPos(&pointer) && WindowFromPoint(pointer) == Handle() && ScreenToClient(Handle(), &pointer);
-        const bool pauseHovered = hovering && PtInRect(&rectangles[1], pointer);
-        const bool stopHovered = hovering && PtInRect(&rectangles[2], pointer);
-        const bool cancelHovered = hovering && PtInRect(&rectangles[3], pointer);
+        BarButton hovered = hoveredButton_;
+        if (!trackingMouse_ && pressedButton_ == BarButton::None) {
+            POINT pointer{};
+            if (GetCursorPos(&pointer) && WindowFromPoint(pointer) == Handle() && ScreenToClient(Handle(), &pointer)) {
+                hovered = ButtonAt(pointer);
+            }
+        }
+        const bool pauseHovered = hovered == BarButton::Pause;
+        const bool stopHovered = hovered == BarButton::Stop;
+        const bool cancelHovered = hovered == BarButton::Cancel;
         const bool paused = paused_();
         const auto brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
         SetDCBrushColor(context, pauseHovered || paused ? RGB(43, 109, 199) : RGB(65, 69, 79));
@@ -333,6 +389,13 @@ private:
         const RECT timer{margin, margin, pause.left - margin, client.bottom - margin};
         return {timer, pause, stop, cancel};
     }
+    BarButton ButtonAt(POINT position) const noexcept {
+        const auto rectangles = Layout();
+        if (PtInRect(&rectangles[1], position)) { return BarButton::Pause; }
+        if (PtInRect(&rectangles[2], position)) { return BarButton::Stop; }
+        if (PtInRect(&rectangles[3], position)) { return BarButton::Cancel; }
+        return BarButton::None;
+    }
     void CreateResourcesForDpi() {
         const auto version = GetWindowsVersion();
         const bool hasUiFont = version.major > 6 || (version.major == 6 && version.minor >= 2);
@@ -355,6 +418,9 @@ private:
     UniqueGdiObject<HFONT> font_;
     UniqueGdiObject<HPEN> iconPen_;
     bool sessionRegistered_ = false;
+    BarButton hoveredButton_ = BarButton::None;
+    BarButton pressedButton_ = BarButton::None;
+    bool trackingMouse_ = false;
 };
 
 bool DrawRecordingCursor(HDC context, const RECT& bounds, bool showCursor, bool highlight) {
@@ -466,6 +532,7 @@ struct Recorder::Implementation {
         result.workerCount = plan.workerCount;
         result.slotCount = plan.slotCount;
         result.captureLayeredWindows = options.captureLayeredWindows;
+        result.dither = options.dither;
     }
 
     ~Implementation() {
@@ -717,10 +784,8 @@ struct Recorder::Implementation {
             }
             bool captured = BitBlt(surface.DeviceContext(), 0, 0, sourceWidth, sourceHeight, screen.Get(), bounds.left,
                                    bounds.top, rasterOperation) != FALSE;
-            if (captured &&
-                !DrawRecordingCursor(surface.DeviceContext(), bounds, options.showCursor, options.highlightClicks)) {
-                ++result.cursorFailures;
-            }
+            const bool cursorOk = !captured || DrawRecordingCursor(surface.DeviceContext(), bounds, options.showCursor,
+                                                                   options.highlightClicks);
             if (captured && scaled) {
                 SetStretchBltMode(scaled->DeviceContext(), HALFTONE);
                 SetBrushOrgEx(scaled->DeviceContext(), 0, 0, nullptr);
@@ -731,6 +796,7 @@ struct Recorder::Implementation {
             std::int64_t timestamp = 0;
             {
                 std::lock_guard lock(mutex);
+                if (!cursorOk) { ++result.cursorFailures; }
                 timestamp = timeline.Elapsed(RelativeNow());
                 if (!captured) {
                     ++result.captureFailures;

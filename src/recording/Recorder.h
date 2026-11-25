@@ -38,6 +38,7 @@ struct RecordingResult {
     bool captureInterrupted = false;
     bool cancelled = false;
     std::wstring error;
+    bool dither = false;
 };
 
 class Recorder final {

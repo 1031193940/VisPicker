@@ -15,6 +15,11 @@ TEST_CASE("Tray dispatch uses configured left click command without shell regist
     }
     CHECK(tray.HandleCallback(2, WM_LBUTTONUP, false) == vispick::AppCommand::None);
     CHECK(tray.HandleCallback(1, WM_MOUSEMOVE, false) == vispick::AppCommand::None);
+    CHECK(tray.IsMenuCallback(1, WM_CONTEXTMENU));
+    CHECK(tray.IsMenuCallback(1, WM_RBUTTONUP));
+    CHECK_FALSE(tray.IsMenuCallback(1, WM_LBUTTONUP));
+    CHECK_FALSE(tray.IsMenuCallback(1, WM_MOUSEMOVE));
+    CHECK_FALSE(tray.IsMenuCallback(2, WM_CONTEXTMENU));
     tray.SetLanguage(true);
     tray.SetLanguage(false);
     CHECK_FALSE(tray.Notify(L"title", L"message"));

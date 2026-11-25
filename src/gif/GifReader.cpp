@@ -1,4 +1,5 @@
 #include "gif/GifReader.h"
+#include "platform/FileCommit.h"
 
 #include <Windows.h>
 #include <wincodec.h>
@@ -116,8 +117,9 @@ struct GifReader::Implementation {
         Check(CoCreateInstance(CLSID_WICImagingFactory1, nullptr, CLSCTX_INPROC_SERVER,
                                IID_PPV_ARGS(factory.GetAddressOf())),
               "Create WIC factory failed");
-        Check(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand,
-                                                 decoder.GetAddressOf()),
+        const auto extended = ExtendedFilePath(path);
+        Check(factory->CreateDecoderFromFilename(extended.c_str(), nullptr, GENERIC_READ,
+                                                 WICDecodeMetadataCacheOnDemand, decoder.GetAddressOf()),
               "Decode GIF failed");
         GUID container{};
         Check(decoder->GetContainerFormat(&container), "Read GIF container failed");

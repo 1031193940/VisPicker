@@ -629,11 +629,13 @@ void CheckPreviewTimeline(Report& report, Owner& owner, const std::filesystem::p
         const auto savePoint =
             MAKELPARAM(fixture.client.right - fixture.Scale(145), fixture.client.bottom - fixture.Scale(20));
         SendMessageW(window, WM_LBUTTONUP, 0, savePoint);
+        report.Require(saves == 0 && !preview.Busy(), "stray_mouse_up_does_not_trigger_preview_save");
+        fixture.Click(savePoint);
         WaitUntil([&] { return saves == 1 && !preview.Busy(); }, fixtureTimeout);
         report.Require(!preview.Closed() && std::filesystem::exists(trimFile) &&
                            vispick::gif::InspectGif(trimFile).durationCentiseconds == 400,
                        "trim_save_failure_preserves_complete_original");
-        SendMessageW(window, WM_LBUTTONUP, 0, savePoint);
+        fixture.Click(savePoint);
         WaitUntil([&] { return saves == 2 && preview.Closed(); }, fixtureTimeout);
         const std::array pixels{blue, blue, green, green, blue, blue, green, green};
         const std::array hashes{vispick::gif::PixelHash(pixels)};
@@ -679,7 +681,8 @@ void ClickRecordingButton(Report& report, HWND owner, bool cancel, const std::fi
     const int buttonWidth = MulDiv(82, dpi, 96);
     const int x = client.right - margin - buttonWidth / 2 - (cancel ? 0 : buttonWidth + margin);
     const int y = client.bottom / 2;
-    if (!PostMessageW(search.found, WM_LBUTTONUP, 0, MAKELPARAM(x, y))) {
+    if (!PostMessageW(search.found, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(x, y)) ||
+        !PostMessageW(search.found, WM_LBUTTONUP, 0, MAKELPARAM(x, y))) {
         throw std::runtime_error("Cannot click owned recording button");
     }
 }
@@ -695,7 +698,9 @@ HWND ClickRecordingPause(Report& report, HWND owner) {
     const int margin = MulDiv(8, dpi, 96);
     const int buttonWidth = MulDiv(82, dpi, 96);
     const int x = client.right - 3 * margin - 2 * buttonWidth - MulDiv(16, dpi, 96);
-    SendMessageW(search.found, WM_LBUTTONUP, 0, MAKELPARAM(x, client.bottom / 2));
+    const LPARAM point = MAKELPARAM(x, client.bottom / 2);
+    SendMessageW(search.found, WM_LBUTTONDOWN, MK_LBUTTON, point);
+    SendMessageW(search.found, WM_LBUTTONUP, 0, point);
     return search.found;
 }
 

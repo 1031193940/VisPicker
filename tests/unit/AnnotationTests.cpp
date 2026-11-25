@@ -654,3 +654,36 @@ TEST_CASE("Annotation edited render output matches a newly constructed equivalen
     CHECK(
         SamePixels(editedRenderer.Flatten(edited.DesktopBounds()), expectedRenderer.Flatten(expected.DesktopBounds())));
 }
+
+TEST_CASE("Annotation selected style preserves exact logical sizes across non-exact DPIs") {
+    const auto image = Pattern(120, 90);
+    vispick::AnnotationModel model(image.View(), {});
+    auto style = model.Style();
+    style.strokeWidth = 2;
+    style.fontSize = 14;
+    style.mosaicSize = 6;
+    model.SetStyle(style);
+    // At 75 DPI, MulDiv(2, 75, 96) == 2 while inverse MulDiv(2, 96, 75) == 3.
+    Draw(model, vispick::AnnotationTool::Rectangle, {10, 10}, {60, 50}, false, 75);
+    const auto selectedShapeStyle = model.SelectedStyle();
+    CHECK(selectedShapeStyle.strokeWidth == 2);
+    CHECK_NOTHROW(model.SetStyle(selectedShapeStyle));
+    Draw(model, vispick::AnnotationTool::Mosaic, {10, 10}, {60, 50}, false, 75);
+    CHECK(model.SelectedStyle().mosaicSize == 6);
+    LOGFONTW font{};
+    font.lfHeight = -vispick::AnnotationPixels(14, 75);
+    wcscpy_s(font.lfFaceName, L"Microsoft YaHei");
+    model.AddText({10, 10, 80, 50}, font, 0xFF3B30, {{L"DPI", {0, 0}}}, L"DPI", 75, 14);
+    const auto selectedTextStyle = model.SelectedStyle();
+    CHECK(selectedTextStyle.fontSize == 14);
+    CHECK_NOTHROW(model.SetStyle(selectedTextStyle));
+}
+
+TEST_CASE("Annotation ellipse hit test detects center hits on small ellipses only") {
+    const auto image = Pattern(120, 90);
+    vispick::AnnotationModel model(image.View(), {});
+    Draw(model, vispick::AnnotationTool::Ellipse, {10, 10}, {14, 14});
+    CHECK(model.HitTest({12, 12}, 2) == std::size_t{0});
+    Draw(model, vispick::AnnotationTool::Ellipse, {30, 10}, {90, 70});
+    CHECK_FALSE(model.HitTest({60, 40}, 2).has_value());
+}

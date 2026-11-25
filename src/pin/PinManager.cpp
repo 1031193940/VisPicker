@@ -27,6 +27,20 @@ constexpr std::uint64_t PinStorageBudget = (sizeof(void*) == 4 ? 384ULL : 1024UL
 constexpr std::uint64_t SingleSurfacePixelLimit = (sizeof(void*) == 4 ? 16ULL : 64ULL) * 1024 * 1024;
 enum class PinAction { Close, Copy, Cut, Save, Paste, Restore, CloseAll, Menu };
 
+struct PinViewState {
+    POINT origin{};
+    double scale = 1;
+    unsigned quarterTurns = 0;
+    bool flipHorizontal = false;
+    bool flipVertical = false;
+    int opacity = 100;
+    bool topmost = true;
+    bool passthrough = false;
+    bool compact = false;
+    POINT compactAnchor{};
+    int compactSide = 50;
+};
+
 struct PinRecord {
     PinSource image;
     POINT origin{}; // Physical content origin; decoration is always outside it.
@@ -40,6 +54,25 @@ struct PinRecord {
     bool compact = false;
     POINT compactAnchor{};
     int compactSide = 50;
+
+    [[nodiscard]] PinViewState SaveState() const noexcept {
+        return {origin,  scale,       quarterTurns, flipHorizontal, flipVertical, opacity,
+                topmost, passthrough, compact,      compactAnchor,  compactSide};
+    }
+
+    void RestoreState(const PinViewState& state) noexcept {
+        origin = state.origin;
+        scale = state.scale;
+        quarterTurns = state.quarterTurns;
+        flipHorizontal = state.flipHorizontal;
+        flipVertical = state.flipVertical;
+        opacity = state.opacity;
+        topmost = state.topmost;
+        passthrough = state.passthrough;
+        compact = state.compact;
+        compactAnchor = state.compactAnchor;
+        compactSide = state.compactSide;
+    }
 };
 
 std::uint64_t DesktopZoomBudget() noexcept {
@@ -167,7 +200,9 @@ public:
     }
 
     void Configure(const Config::Pin& config) {
-        if (config.acrossDesktops != config_.acrossDesktops) { AcrossDesktops(config.acrossDesktops); }
+        const Config::Pin previousConfig = config_;
+        const auto saved = record_.SaveState();
+        const bool acrossChanged = config.acrossDesktops != config_.acrossDesktops;
         const bool topmostChanged = config.topmost != config_.topmost;
         const bool needsComposition = config.shadow != config_.shadow || config.border != config_.border ||
                                       config.smooth != config_.smooth ||
@@ -178,21 +213,32 @@ public:
                                      config.inactiveOpacity != config_.inactiveOpacity ||
                                      config.compactOpacity != config_.compactOpacity;
         config_ = config;
-        if (topmostChanged) {
-            record_.topmost = config.topmost;
-            SetWindowPos(Handle(), record_.topmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
+        config_.acrossDesktops = previousConfig.acrossDesktops;
         if (record_.compact) {
             const int side = CompactSide();
             record_.origin.x += record_.compactSide / 2 - side / 2;
             record_.origin.y += record_.compactSide / 2 - side / 2;
             record_.compactSide = side;
         }
-        if (needsComposition) {
-            Render(false);
-        } else if (needsAppearance) {
-            Render(false, true);
+        try {
+            if (needsComposition) {
+                Render(false);
+            } else if (needsAppearance) {
+                Render(false, true);
+            }
+        } catch (...) {
+            config_ = previousConfig;
+            record_.RestoreState(saved);
+            throw;
+        }
+        if (topmostChanged) {
+            record_.topmost = config.topmost;
+            SetWindowPos(Handle(), record_.topmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        if (acrossChanged) {
+            AcrossDesktops(config.acrossDesktops);
+            config_.acrossDesktops = config.acrossDesktops;
         }
     }
 
@@ -239,7 +285,10 @@ public:
         menu.Add(500, text(L"关闭\tEsc", L"Close\tEsc"));
         menu.Add(501, text(L"关闭全部参考图", L"Close all reference images"));
         menu.Add(502, text(L"恢复最近关闭\tCtrl+Z", L"Restore last closed\tCtrl+Z"));
-        if (position.x == -1 && position.y == -1) { GetCursorPos(&position); }
+        if (position.x == -1 && position.y == -1) {
+            const RECT bounds = ContentBounds();
+            position = {bounds.left + (bounds.right - bounds.left) / 2, bounds.top + (bounds.bottom - bounds.top) / 2};
+        }
         SetForegroundWindow(Handle());
         const UINT command = TrackPopupMenu(menu.Get(), TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, position.x,
                                             position.y, 0, Handle(), nullptr);
@@ -277,12 +326,10 @@ public:
             Rotate();
             break;
         case 401:
-            record_.flipHorizontal = !record_.flipHorizontal;
-            Render(false);
+            Flip(true);
             break;
         case 402:
-            record_.flipVertical = !record_.flipVertical;
-            Render(false);
+            Flip(false);
             break;
         case 403:
             ToggleCompact({anchor.x - record_.origin.x, anchor.y - record_.origin.y});
@@ -347,7 +394,20 @@ protected:
             return 0;
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
-            if (Key(parameter)) { return 0; }
+            if (Key(parameter)) {
+                suppressSysChar_ = message == WM_SYSKEYDOWN;
+                return 0;
+            }
+            suppressSysChar_ = false;
+            break;
+        case WM_SYSCHAR:
+            if (suppressSysChar_) {
+                suppressSysChar_ = false;
+                return 0;
+            }
+            break;
+        case WM_SYSKEYUP:
+            suppressSysChar_ = false;
             break;
         case WM_MOUSEWHEEL: {
             wheelRemainder_ += GET_WHEEL_DELTA_WPARAM(parameter);
@@ -374,12 +434,15 @@ protected:
             }
             break;
         case WM_ACTIVATE:
+            suppressSysChar_ = false;
             if (active_ != (LOWORD(parameter) != WA_INACTIVE)) {
                 active_ = LOWORD(parameter) != WA_INACTIVE;
                 if (!record_.compact) { Render(false, true); }
             }
             return 0;
         case WM_DPICHANGED: {
+            const UINT previousDpi = dpi_;
+            const auto saved = record_.SaveState();
             dpi_ = LOWORD(parameter);
             if (record_.compact) {
                 const int side = CompactSide();
@@ -387,9 +450,15 @@ protected:
                 record_.origin.y += record_.compactSide / 2 - side / 2;
                 record_.compactSide = side;
             }
-            // Image dimensions and content origin stay in physical pixels. Only
-            // logical decoration/compact size changes; ignore the scaled RECT.
-            Render(false);
+            try {
+                // Image dimensions and content origin stay in physical pixels. Only
+                // logical decoration/compact size changes; ignore the scaled RECT.
+                Render(false);
+            } catch (...) {
+                dpi_ = previousDpi;
+                record_.RestoreState(saved);
+                throw;
+            }
             return 0;
         }
         default:
@@ -627,26 +696,41 @@ private:
     }
 
     void ToggleCompact(const POINT anchor) {
-        if (record_.compact) {
-            Expand(record_.scale);
-        } else {
-            const int side = CompactSide();
-            CheckSurfaceSize(side, side);
-            record_.compactAnchor = anchor;
-            record_.compactSide = side;
-            const RECT bounds = CompactPinBounds(record_.origin, anchor, record_.compactSide);
-            record_.origin = {bounds.left, bounds.top};
-            record_.compact = true;
+        const auto saved = record_.SaveState();
+        try {
+            if (record_.compact) {
+                Expand(record_.scale);
+            } else {
+                const int side = CompactSide();
+                CheckSurfaceSize(side, side);
+                const SIZE content = ContentSize();
+                const POINT clamped{std::clamp<LONG>(anchor.x, 0, std::max<LONG>(0, content.cx - 1)),
+                                    std::clamp<LONG>(anchor.y, 0, std::max<LONG>(0, content.cy - 1))};
+                record_.compactAnchor = clamped;
+                record_.compactSide = side;
+                const RECT bounds = CompactPinBounds(record_.origin, clamped, record_.compactSide);
+                record_.origin = {bounds.left, bounds.top};
+                record_.compact = true;
+            }
+            Render(false);
+        } catch (...) {
+            record_.RestoreState(saved);
+            throw;
         }
-        Render(false);
     }
 
     void Zoom(const double scale, const POINT anchor, const bool fast) {
-        const double next = BoundedScale(scale);
-        Expand(next);
-        record_.origin = ZoomPinOrigin(record_.origin, anchor, record_.scale, next);
-        record_.scale = next;
-        Render(fast);
+        const auto saved = record_.SaveState();
+        try {
+            const double next = BoundedScale(scale);
+            Expand(next);
+            record_.origin = ZoomPinOrigin(record_.origin, anchor, record_.scale, next);
+            record_.scale = next;
+            Render(fast);
+        } catch (...) {
+            record_.RestoreState(saved);
+            throw;
+        }
         if (fast && config_.smooth) {
             if (!SetTimer(Handle(), RefineImageTimer, 150, nullptr)) { Render(false); }
         } else {
@@ -655,15 +739,37 @@ private:
     }
 
     void Rotate() {
-        Expand(record_.scale);
-        const SIZE before = ContentSize();
-        record_.quarterTurns = (record_.quarterTurns + 1) % 4;
-        // Flips are relative to visible axes; swap them when those axes rotate.
-        std::swap(record_.flipHorizontal, record_.flipVertical);
-        const SIZE after = ContentSize();
-        record_.origin.x += (before.cx - after.cx) / 2;
-        record_.origin.y += (before.cy - after.cy) / 2;
-        Render(false);
+        const auto saved = record_.SaveState();
+        try {
+            Expand(record_.scale);
+            const SIZE before = ContentSize();
+            record_.quarterTurns = (record_.quarterTurns + 1) % 4;
+            // Flips are relative to visible axes; swap them when those axes rotate.
+            std::swap(record_.flipHorizontal, record_.flipVertical);
+            const SIZE after = ContentSize();
+            record_.origin.x += (before.cx - after.cx) / 2;
+            record_.origin.y += (before.cy - after.cy) / 2;
+            Render(false);
+        } catch (...) {
+            record_.RestoreState(saved);
+            throw;
+        }
+    }
+
+    void Flip(const bool horizontal) {
+        const auto saved = record_.SaveState();
+        try {
+            Expand(record_.scale);
+            if (horizontal) {
+                record_.flipHorizontal = !record_.flipHorizontal;
+            } else {
+                record_.flipVertical = !record_.flipVertical;
+            }
+            Render(false);
+        } catch (...) {
+            record_.RestoreState(saved);
+            throw;
+        }
     }
 
     bool Key(const WPARAM key) {
@@ -694,8 +800,14 @@ private:
             }
         }
         if (record_.compact && (key == VK_ESCAPE || key == VK_RETURN)) {
-            Expand(record_.scale);
-            Render(false);
+            const auto saved = record_.SaveState();
+            try {
+                Expand(record_.scale);
+                Render(false);
+            } catch (...) {
+                record_.RestoreState(saved);
+                throw;
+            }
             return true;
         }
         const RECT bounds = ContentBounds();
@@ -712,13 +824,11 @@ private:
                 return true;
             }
             if (key == 'H') {
-                record_.flipHorizontal = !record_.flipHorizontal;
-                Render(false);
+                Flip(true);
                 return true;
             }
             if (key == 'V') {
-                record_.flipVertical = !record_.flipVertical;
-                Render(false);
+                Flip(false);
                 return true;
             }
             return false;
@@ -769,6 +879,7 @@ private:
     bool appearanceAgain_ = false;
     bool active_ = false;
     bool dragging_ = false;
+    bool suppressSysChar_ = false;
     POINT dragStart_{};
     POINT dragOrigin_{};
 };
@@ -779,6 +890,7 @@ struct PinManager::State {
     HWND owner;
     std::function<void(Bitmap)> save;
     std::function<void(std::wstring, bool)> notify;
+    std::function<void(bool)> modalChanged;
     Config::Pin config;
     bool english = false;
     bool processing = false;
@@ -912,14 +1024,37 @@ struct PinManager::State {
             while (!pins.empty()) { Close(pins.back()->Handle()); }
             return;
         }
-        const auto found =
-            std::find_if(pins.begin(), pins.end(), [&](const auto& pin) { return pin->Handle() == request.window; });
-        if (found == pins.end()) { return; }
-        PinWindow& pin = **found;
+        const auto findPin = [&](const HWND window) -> PinWindow* {
+            const auto found = std::find_if(pins.begin(), pins.end(),
+                                            [&](const auto& candidate) { return candidate->Handle() == window; });
+            return found == pins.end() ? nullptr : found->get();
+        };
+        PinWindow* pin = findPin(request.window);
+        if (!pin) { return; }
         if (request.action == PinAction::Menu) {
-            if (request.point.x == -1 && request.point.y == -1) { GetCursorPos(&request.point); }
-            const UINT command = pin.ShowMenu(request.point, english);
+            if (request.point.x == -1 && request.point.y == -1) {
+                const RECT bounds = pin->ContentBounds();
+                request.point = {bounds.left + (bounds.right - bounds.left) / 2,
+                                 bounds.top + (bounds.bottom - bounds.top) / 2};
+            }
+            UINT command = 0;
+            {
+                struct ModalGuard {
+                    const std::function<void(bool)>& notifyModal;
+                    explicit ModalGuard(const std::function<void(bool)>& callback) : notifyModal(callback) {
+                        if (notifyModal) { notifyModal(true); }
+                    }
+                    ~ModalGuard() {
+                        if (notifyModal) { notifyModal(false); }
+                    }
+                    ModalGuard(const ModalGuard&) = delete;
+                    ModalGuard& operator=(const ModalGuard&) = delete;
+                } modal(modalChanged);
+                command = pin->ShowMenu(request.point, english);
+            }
             if (command == 0) { return; }
+            pin = findPin(request.window);
+            if (!pin) { return; }
             if (command == 100) {
                 request.action = PinAction::Copy;
             } else if (command == 101) {
@@ -933,7 +1068,7 @@ struct PinManager::State {
                 Queue(request.window, PinAction::Restore);
                 return;
             } else {
-                pin.MenuCommand(command, request.point);
+                pin->MenuCommand(command, request.point);
                 return;
             }
         }
@@ -943,13 +1078,13 @@ struct PinManager::State {
             break;
         case PinAction::Copy:
         case PinAction::Cut: {
-            const auto image = pin.Export();
+            const auto image = pin->Export();
             CopyImage(owner, image.View());
             if (request.action == PinAction::Cut) { Close(request.window); }
             break;
         }
         case PinAction::Save:
-            if (save) { save(pin.Export()); }
+            if (save) { save(pin->Export()); }
             break;
         case PinAction::Paste: {
             auto image = ReadClipboardImage(owner);
@@ -974,12 +1109,13 @@ struct PinManager::State {
 };
 
 PinManager::PinManager(const HWND owner, std::function<void(Bitmap)> save,
-                       std::function<void(std::wstring, bool)> notify)
+                       std::function<void(std::wstring, bool)> notify, std::function<void(bool)> modalChanged)
     : state_(std::make_unique<State>()) {
     if (!owner) { throw std::invalid_argument("Pin manager requires an owner window"); }
     state_->owner = owner;
     state_->save = std::move(save);
     state_->notify = std::move(notify);
+    state_->modalChanged = std::move(modalChanged);
     try {
         state_->RefreshMonitors();
     } catch (const std::exception& error) { state_->NotifyFailure(error.what()); }

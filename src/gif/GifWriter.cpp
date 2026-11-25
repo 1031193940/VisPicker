@@ -1,4 +1,5 @@
 #include "gif/GifWriter.h"
+#include "platform/FileCommit.h"
 
 #include <algorithm>
 #include <array>
@@ -87,7 +88,7 @@ GifWriter::GifWriter(const std::filesystem::path& path, int width, int height,
     width_ = static_cast<std::uint16_t>(width);
     height_ = static_cast<std::uint16_t>(height);
     stream_.exceptions(std::ios::badbit | std::ios::failbit);
-    stream_.open(path, std::ios::binary | std::ios::trunc);
+    stream_.open(ExtendedFilePath(path), std::ios::binary | std::ios::trunc);
     const std::array<std::uint8_t, 6> signature{'G', 'I', 'F', '8', '9', 'a'};
     Bytes(signature);
     Word(width_);

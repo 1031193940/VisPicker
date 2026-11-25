@@ -50,7 +50,10 @@ struct AnnotationTextLine {
 struct Annotation {
     AnnotationTool tool = AnnotationTool::None;
     std::uint32_t color = 0;
+    int strokeWidth = 0; // Logical pixels; 0 falls back to scaling strokePixels.
     int strokePixels = 1;
+    int fontSize = 0;   // Logical pixels; 0 falls back to scaling font.lfHeight.
+    int mosaicSize = 0; // Logical pixels; 0 falls back to scaling mosaicPixels.
     int mosaicPixels = 1;
     std::vector<POINT> points; // Screen physical coordinates, independent of selection changes.
     RECT bounds{};             // Conservative paint bounds; text/mosaic also use this as their clip.
@@ -109,9 +112,10 @@ public:
     RECT Undo() noexcept;
     RECT Redo() noexcept;
     RECT AddText(RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
-                 std::vector<AnnotationTextLine> lines, std::wstring text = {}, unsigned dpi = 96);
+                 std::vector<AnnotationTextLine> lines, std::wstring text = {}, unsigned dpi = 96,
+                 int logicalFontSize = 0);
     RECT ReplaceText(std::size_t index, RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
-                     std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi);
+                     std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi, int logicalFontSize = 0);
 
 private:
     enum class ChangeKind { Add, Replace, Remove };

@@ -20,6 +20,7 @@ public:
     void SetLanguage(bool english) noexcept;
     void SetHotkeys(const Config::Hotkeys& hotkeys) noexcept;
     [[nodiscard]] static std::wstring ShortcutLabel(std::wstring_view label, Hotkey hotkey);
+    [[nodiscard]] bool IsMenuCallback(WPARAM parameter, LPARAM data) const noexcept;
     [[nodiscard]] AppCommand HandleCallback(WPARAM parameter, LPARAM data, bool autostartEnabled,
                                             bool pinsAcrossDesktops = false);
     [[nodiscard]] bool Notify(std::wstring_view title, std::wstring_view text, bool warning = false) noexcept;

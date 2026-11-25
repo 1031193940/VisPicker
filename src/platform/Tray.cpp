@@ -166,6 +166,13 @@ void Tray::SetLanguage(const bool english) noexcept {
     }
 }
 
+bool Tray::IsMenuCallback(const WPARAM parameter, const LPARAM data) const noexcept {
+    const UINT identifier = version4_ ? HIWORD(data) : static_cast<UINT>(parameter);
+    if (identifier != IconId) { return false; }
+    const UINT event = LOWORD(data);
+    return event == WM_CONTEXTMENU || (!version4_ && event == WM_RBUTTONUP);
+}
+
 AppCommand Tray::HandleCallback(const WPARAM parameter, const LPARAM data, const bool autostartEnabled,
                                 const bool pinsAcrossDesktops) {
     const UINT identifier = version4_ ? HIWORD(data) : static_cast<UINT>(parameter);

@@ -186,7 +186,14 @@ int App::Run(const LaunchOptions& options, const std::wstring& instanceWindowTit
     imageClipboard_ = std::make_unique<ImageClipboard>(Handle(), ClipboardReady);
     pins_ = std::make_unique<PinManager>(
         Handle(), [this](Bitmap image) { (void)SaveBitmap(std::move(image)); },
-        [this](std::wstring message, bool warning) { Report(message, warning); });
+        [this](std::wstring message, bool warning) { Report(message, warning); },
+        [this](const bool active) {
+            if (active) {
+                ++modalDepth_;
+            } else if (modalDepth_ > 0 && --modalDepth_ == 0) {
+                PostMessageW(Handle(), ProcessQueue, 0, 0);
+            }
+        });
     watcher_ = std::make_unique<ConfigWatcher>(configPath_, Handle(), ConfigurationChanged);
     watcher_->Start(); // Arm before reading again, including changes during initial startup.
     ReloadConfiguration(false);
@@ -361,11 +368,16 @@ bool App::SaveBitmap(Bitmap image, HWND dialogOwner) {
     }
     const ModalScope modal(modalDepth_, Handle());
     const auto settings = config_.save; // Config may reload inside the native dialog's message loop.
-    const auto destination = ChooseSavePath(dialogOwner ? dialogOwner : Handle(), settings, image.Width(),
-                                            image.Height(), {}, &lastSaveFolder_);
-    if (!destination || stopping_) { return false; }
-    imageSaver_->Start(Handle(), ImageSaved, std::move(image), *destination, settings.jpgQuality);
-    return true;
+    try {
+        const auto destination = ChooseSavePath(dialogOwner ? dialogOwner : Handle(), settings, image.Width(),
+                                                image.Height(), {}, &lastSaveFolder_, English());
+        if (!destination || stopping_) { return false; }
+        imageSaver_->Start(Handle(), ImageSaved, std::move(image), *destination, settings.jpgQuality);
+        return true;
+    } catch (const std::exception& error) {
+        Report(ExceptionMessage(error), true);
+        return false;
+    }
 }
 
 void App::PinAtCursor(Bitmap image) {
@@ -445,7 +457,8 @@ void App::RecordingFinished() {
             [this](HWND owner, int width, int height) -> std::optional<std::filesystem::path> {
                 const ModalScope modal(modalDepth_, Handle());
                 const auto settings = config_.save;
-                const auto selected = ChooseSavePath(owner, settings, width, height, L"gif", &lastSaveFolder_);
+                const auto selected =
+                    ChooseSavePath(owner, settings, width, height, L"gif", &lastSaveFolder_, English());
                 return selected && !stopping_ ? std::optional(selected->path) : std::nullopt;
             },
             English());
@@ -647,13 +660,23 @@ LRESULT App::OnMessage(UINT message, WPARAM parameter, LPARAM data) {
         return 0;
     }
     case TrayMessage: {
-        if (!tray_ || !autostart_) { return 0; }
+        if (!tray_ || !autostart_ || stopping_) { return 0; }
+        const bool menuCallback = tray_->IsMenuCallback(parameter, data);
+        if (menuCallback && modalDepth_) { return 0; }
         bool autostartEnabled = false;
-        try {
-            autostartEnabled = autostart_->Enabled();
-        } catch (const std::exception& error) { log_.Write(LogLevel::Warning, ExceptionMessage(error)); }
-        const auto command = tray_->HandleCallback(parameter, data, autostartEnabled, config_.pin.acrossDesktops);
-        if (command != AppCommand::None) {
+        if (menuCallback) {
+            try {
+                autostartEnabled = autostart_->Enabled();
+            } catch (const std::exception& error) { log_.Write(LogLevel::Warning, ExceptionMessage(error)); }
+        }
+        AppCommand command = AppCommand::None;
+        if (menuCallback) {
+            const ModalScope modal(modalDepth_, Handle());
+            command = tray_->HandleCallback(parameter, data, autostartEnabled, config_.pin.acrossDesktops);
+        } else {
+            command = tray_->HandleCallback(parameter, data, false, config_.pin.acrossDesktops);
+        }
+        if (command != AppCommand::None && !stopping_) {
             LaunchOptions request;
             request.command = command;
             Queue(std::move(request));

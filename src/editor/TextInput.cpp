@@ -80,13 +80,15 @@ struct TextInput::State {
         editingIndex.reset();
         originalText.clear();
         originalBounds = {};
+        originalFontSize = 0;
+        logicalFontSize = 0;
         bounds = {};
         viewportHeightLimit = 0;
         InvalidateBounds(dirty);
     }
 
     void Open(RECT maximum, RECT initial, const LOGFONTW& selectedFont, std::uint32_t selectedColor,
-              unsigned selectedDpi, const std::wstring& initialText);
+              unsigned selectedDpi, int selectedFontSize, const std::wstring& initialText);
 
     [[nodiscard]] std::wstring ReadText() const {
         const LRESULT length = SendMessageW(edit, WM_GETTEXTLENGTH, 0, 0);
@@ -221,8 +223,10 @@ struct TextInput::State {
     std::wstring originalText;
     RECT originalBounds{};
     LOGFONTW originalFont{};
+    int originalFontSize = 0;
     std::uint32_t originalColor = 0;
     std::uint32_t color = 0;
+    int logicalFontSize = 0;
     LOGFONTW actualFont{};
     UniqueGdiObject<HFONT> font;
     std::unique_ptr<DibSection> background;
@@ -251,11 +255,12 @@ std::optional<std::size_t> TextInput::EditingIndex() const noexcept {
 }
 
 void TextInput::State::Open(RECT maximum, RECT initial, const LOGFONTW& selectedFont, std::uint32_t selectedColor,
-                            unsigned selectedDpi, const std::wstring& initialText) {
+                            unsigned selectedDpi, int selectedFontSize, const std::wstring& initialText) {
     maximumBounds = maximum;
     actualFont = selectedFont;
     color = selectedColor;
     dpi = selectedDpi;
+    logicalFontSize = selectedFontSize;
     try {
         font.Reset(CreateFontIndirectW(&actualFont));
         if (font.Get() == nullptr) { TextError("Create text input font"); }
@@ -313,8 +318,23 @@ void TextInput::Begin(POINT screenPoint, unsigned dpi) {
     const auto selection = state_->model.Selection();
     if (!PtInRect(&selection, screenPoint)) { return; }
     const auto& style = state_->model.Style();
-    const auto width = std::min(selection.right - screenPoint.x, static_cast<LONG>(AnnotationPixels(400, dpi)));
-    const RECT maximum{screenPoint.x, screenPoint.y, screenPoint.x + width, selection.bottom};
+    const LONG desiredWidth = static_cast<LONG>(AnnotationPixels(400, dpi));
+    const LONG minimumWidth = static_cast<LONG>(AnnotationPixels(64, dpi));
+    const LONG selectionWidth = selection.right - selection.left;
+    const LONG availableRight = selection.right - screenPoint.x;
+    LONG left = screenPoint.x;
+    if (availableRight < minimumWidth && selectionWidth > availableRight) {
+        left = std::max(selection.left, selection.right - std::min(selectionWidth, minimumWidth));
+    }
+    const LONG width = std::min(selection.right - left, desiredWidth);
+    const LONG minimumHeight = static_cast<LONG>(AnnotationPixels(style.fontSize, dpi)) * 2;
+    const LONG selectionHeight = selection.bottom - selection.top;
+    const LONG availableBottom = selection.bottom - screenPoint.y;
+    LONG top = screenPoint.y;
+    if (availableBottom < minimumHeight && selectionHeight > availableBottom) {
+        top = std::max(selection.top, selection.bottom - std::min(selectionHeight, minimumHeight));
+    }
+    const RECT maximum{left, top, left + width, selection.bottom};
     LOGFONTW font{};
     font.lfHeight = -AnnotationPixels(style.fontSize, dpi);
     font.lfWeight = FW_NORMAL;
@@ -322,7 +342,8 @@ void TextInput::Begin(POINT screenPoint, unsigned dpi) {
     // Grayscale antialiasing avoids ClearType RGB fringes in captured/exported pixels.
     font.lfQuality = ANTIALIASED_QUALITY;
     wcscpy_s(font.lfFaceName, style.fontName.c_str());
-    state_->Open(maximum, {maximum.left, maximum.top, maximum.right, maximum.top}, font, style.color, dpi, L"");
+    state_->Open(maximum, {maximum.left, maximum.top, maximum.right, maximum.top}, font, style.color, dpi,
+                 style.fontSize, L"");
 }
 
 void TextInput::BeginEdit(std::size_t annotationIndex) {
@@ -344,13 +365,18 @@ void TextInput::BeginEdit(std::size_t annotationIndex) {
         }
     }
     state_->originalFont = annotation.font;
+    state_->originalFontSize =
+        annotation.fontSize > 0
+            ? annotation.fontSize
+            : std::max(1, MulDiv(std::abs(annotation.font.lfHeight), 96, static_cast<int>(annotation.dpi)));
     state_->originalColor = annotation.color;
     const auto selection = state_->model.Selection();
     auto maximum = annotation.bounds;
     maximum.bottom = std::max(maximum.bottom, selection.bottom);
     maximum.bottom = std::min(maximum.bottom, state_->model.DesktopBounds().bottom);
     state_->renderer.SetHiddenAnnotation(annotationIndex);
-    state_->Open(maximum, annotation.bounds, annotation.font, annotation.color, annotation.dpi, state_->originalText);
+    state_->Open(maximum, annotation.bounds, annotation.font, annotation.color, annotation.dpi,
+                 state_->originalFontSize, state_->originalText);
 }
 
 void TextInput::ApplyStyle(const AnnotationStyle& style) {
@@ -378,6 +404,7 @@ void TextInput::ApplyStyle(const AnnotationStyle& style) {
         state_->lineHeight = lineHeight;
         state_->FitText();
     }
+    state_->logicalFontSize = style.fontSize;
     state_->color = style.color;
     InvalidateRect(state_->edit, nullptr, TRUE);
 }
@@ -410,6 +437,7 @@ RECT TextInput::Commit() {
     try {
         const auto rawText = state_->ReadText();
         if (state_->editingIndex && rawText == state_->originalText && state_->color == state_->originalColor &&
+            state_->logicalFontSize == state_->originalFontSize &&
             std::memcmp(&state_->actualFont, &state_->originalFont, sizeof(LOGFONTW)) == 0) {
             state_->DestroyEdit();
             if (restoreFocus && GetForegroundWindow() == state_->parent) { SetFocus(state_->parent); }
@@ -455,11 +483,12 @@ RECT TextInput::Commit() {
         }
         RECT modelDirty{};
         if (state_->editingIndex) {
-            modelDirty = state_->model.ReplaceText(*state_->editingIndex, state_->bounds, state_->actualFont,
-                                                   state_->color, std::move(lines), rawText, state_->dpi);
+            modelDirty =
+                state_->model.ReplaceText(*state_->editingIndex, state_->bounds, state_->actualFont, state_->color,
+                                          std::move(lines), rawText, state_->dpi, state_->logicalFontSize);
         } else {
             modelDirty = state_->model.AddText(state_->bounds, state_->actualFont, state_->color, std::move(lines),
-                                               rawText, state_->dpi);
+                                               rawText, state_->dpi, state_->logicalFontSize);
         }
         UnionRect(&dirty, &dirty, &modelDirty);
     } catch (...) {

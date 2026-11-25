@@ -46,8 +46,8 @@ struct TimelineEntry {
 class PreparedGifCopy final {
 public:
     PreparedGifCopy(const std::filesystem::path& source, const std::optional<gif::GifTrimRange>& range,
-                    const std::function<bool()>& cancelled)
-        : data_(StageFile(source, file_.path, range, cancelled)) {}
+                    const std::function<bool()>& cancelled, bool dither)
+        : data_(StageFile(source, file_.path, range, cancelled, dither)) {}
 
     [[nodiscard]] GifClipboardFormats Publish(HWND owner) {
         const auto formats = data_.Publish(owner);
@@ -67,9 +67,9 @@ private:
     static const std::filesystem::path& StageFile(const std::filesystem::path& source,
                                                   const std::filesystem::path& destination,
                                                   const std::optional<gif::GifTrimRange>& range,
-                                                  const std::function<bool()>& cancelled) {
+                                                  const std::function<bool()>& cancelled, bool dither) {
         if (range) {
-            gif::TrimRecordedGif(source, destination, *range, cancelled);
+            gif::TrimRecordedGif(source, destination, *range, cancelled, dither);
         } else {
             std::filesystem::copy_file(ExtendedFilePath(source), ExtendedFilePath(destination),
                                        std::filesystem::copy_options::overwrite_existing);
@@ -80,6 +80,14 @@ private:
     recording::TemporaryGif file_{recording::TemporaryGifKind::Clipboard};
     GifClipboardData data_;
 };
+
+bool RemoveFileQuietly(const std::filesystem::path& path) noexcept {
+    if (path.empty()) { return false; }
+    std::error_code ignored;
+    try {
+        return std::filesystem::remove(ExtendedFilePath(path), ignored);
+    } catch (...) { return std::filesystem::remove(path, ignored); }
+}
 
 std::wstring FormatTime(std::int64_t milliseconds) {
     const auto seconds = milliseconds / 1000;
@@ -135,6 +143,7 @@ struct GifPreview::Implementation final : Window {
     UniqueGdiObject<HFONT> interfaceFont;
     UniqueGdiObject<HPEN> iconPen;
     PreviewAction hoveredAction = PreviewAction::None;
+    PreviewAction pressedAction = PreviewAction::None;
     std::optional<DibSection> paintBuffer;
     std::wstring durationText;
     std::wstring information;
@@ -170,16 +179,15 @@ struct GifPreview::Implementation final : Window {
         description << result.width << L"×" << result.height << L" · " << std::fixed << std::setprecision(1)
                     << static_cast<double>(result.durationCentiseconds) / 100.0 << (english ? L" s · " : L" 秒 · ")
                     << result.frameCount << (english ? L" frames · " : L" 帧 · ")
-                    << static_cast<double>(std::filesystem::file_size(result.path)) / (1024.0 * 1024.0) << L" MB";
+                    << static_cast<double>(std::filesystem::file_size(ExtendedFilePath(result.path))) /
+                           (1024.0 * 1024.0)
+                    << L" MB";
         information = description.str();
     }
     ~Implementation() override {
         JoinWorker();
         Destroy(); // Before state read by the window procedure is destroyed.
-        if (ownsTemporary) {
-            std::error_code ignored;
-            std::filesystem::remove(result.path, ignored);
-        }
+        if (ownsTemporary) { static_cast<void>(RemoveFileQuietly(result.path)); }
     }
 
     [[nodiscard]] bool Busy() const noexcept { return modal || saving || copying; }
@@ -229,12 +237,13 @@ struct GifPreview::Implementation final : Window {
                 try {
                     if (trim) {
                         std::error_code error;
-                        if (std::filesystem::equivalent(result.path, *destination, error)) {
+                        if (std::filesystem::equivalent(ExtendedFilePath(result.path), ExtendedFilePath(*destination),
+                                                        error)) {
                             throw std::invalid_argument(
                                 "The output path must differ from the recording's temporary file");
                         }
                         recording::TemporaryGif staged(recording::TemporaryGifKind::Recording);
-                        gif::TrimRecordedGif(result.path, staged.path, *trim);
+                        gif::TrimRecordedGif(result.path, staged.path, *trim, {}, result.dither);
                         recording::CommitFile(staged.path, *destination);
                     } else {
                         recording::CommitFile(result.path, *destination);
@@ -259,10 +268,13 @@ struct GifPreview::Implementation final : Window {
                     canvas.reset();
                 }
                 try {
-                    prepared = std::make_unique<PreparedGifCopy>(result.path, trim, [this] {
-                        const std::lock_guard lock(workerMutex);
-                        return stopWorker;
-                    });
+                    prepared = std::make_unique<PreparedGifCopy>(
+                        result.path, trim,
+                        [this] {
+                            const std::lock_guard lock(workerMutex);
+                            return stopWorker;
+                        },
+                        result.dither);
                 } catch (...) { failure = std::current_exception(); }
                 const std::lock_guard lock(workerMutex);
                 preparedCopy = std::move(prepared);
@@ -554,7 +566,13 @@ struct GifPreview::Implementation final : Window {
         const auto now = PreviewClock::now();
         const bool first = displayedPixels.empty();
         if (!first && !paused && !pendingSeek && PlaybackPosition(now) >= trimEnd) {
-            RequestSeek(trimBegin);
+            if (result.frameCount == 1) {
+                position = trimBegin;
+                playbackAnchor = now;
+                InvalidateProgress();
+            } else {
+                RequestSeek(trimBegin);
+            }
             Schedule();
             return;
         }
@@ -566,9 +584,14 @@ struct GifPreview::Implementation final : Window {
             failure = std::exchange(playbackFailure, {});
             if (!failure && !scrubPosition && prefetchedTiming && (first || pendingSeek || frameDue)) {
                 displayedPixels.swap(prefetchedPixels);
-                playbackAnchor = (first || pendingSeek)
-                                     ? now
-                                     : playbackAnchor + std::chrono::milliseconds(displayedTiming.end - position);
+                if (first || pendingSeek) {
+                    playbackAnchor = now;
+                } else {
+                    const auto stepped = playbackAnchor + std::chrono::milliseconds(displayedTiming.end - position);
+                    const auto lag = now - stepped;
+                    playbackAnchor =
+                        (lag > std::chrono::milliseconds(200) || lag < std::chrono::milliseconds(-200)) ? now : stepped;
+                }
                 displayedTiming = *prefetchedTiming;
                 position = pendingSeek.value_or(displayedTiming.begin);
                 pendingSeek.reset();
@@ -598,7 +621,13 @@ struct GifPreview::Implementation final : Window {
             KillTimer(Handle(), PlaybackTimer);
         } else {
             playbackAnchor = now;
-            if (!pendingSeek && (position < trimBegin || position >= trimEnd)) { RequestSeek(trimBegin); }
+            if (!pendingSeek && (position < trimBegin || position >= trimEnd)) {
+                if (result.frameCount == 1 && !displayedPixels.empty()) {
+                    position = trimBegin;
+                } else {
+                    RequestSeek(trimBegin);
+                }
+            }
         }
         paused = pause;
         if (!pause) { Schedule(); }
@@ -631,12 +660,16 @@ struct GifPreview::Implementation final : Window {
         SetPaused(true);
         if (action == PreviewAction::TrimStart) {
             if (displayedTiming.begin >= trimEnd) {
-                throw std::invalid_argument("The start frame must precede the end frame");
+                outputStatus = english ? L"The start frame must precede the end frame." : L"起始帧必须早于结束帧。";
+                InvalidateProgress();
+                return;
             }
             trimBegin = displayedTiming.begin;
         } else if (action == PreviewAction::TrimEnd) {
             if (displayedTiming.end <= trimBegin) {
-                throw std::invalid_argument("The end frame must follow the start frame");
+                outputStatus = english ? L"The end frame must follow the start frame." : L"结束帧必须晚于起始帧。";
+                InvalidateProgress();
+                return;
             }
             trimEnd = displayedTiming.end;
         } else {
@@ -680,8 +713,7 @@ struct GifPreview::Implementation final : Window {
         if (answer == IDYES) {
             Close();
             // The decoder is closed. A locked file is cleaned on a later startup.
-            std::error_code ignored;
-            if (std::filesystem::remove(result.path, ignored)) { ownsTemporary = false; }
+            if (RemoveFileQuietly(result.path)) { ownsTemporary = false; }
         } else if (resume) {
             SetPaused(false);
         }
@@ -994,8 +1026,10 @@ struct GifPreview::Implementation final : Window {
                 break;
             case WM_LBUTTONDOWN: {
                 const POINT point{GET_X_LPARAM(data), GET_Y_LPARAM(data)};
+                if (Busy() || closed) { return 0; }
                 const auto track = ProgressTrack();
-                if (!Busy() && !closed && !playbackUnavailable && PtInRect(&track, point)) {
+                if (!playbackUnavailable && PtInRect(&track, point)) {
+                    pressedAction = PreviewAction::None;
                     SetHoveredAction(PreviewAction::None);
                     resumeAfterScrub = !paused;
                     SetPaused(true);
@@ -1003,22 +1037,34 @@ struct GifPreview::Implementation final : Window {
                     SetCapture(Handle());
                     if (GetCapture() != Handle()) { FinishScrub(true); }
                     InvalidateProgress();
+                    return 0;
+                }
+                const auto action = ActionAt(point);
+                if (action != PreviewAction::None) {
+                    pressedAction = action;
+                    SetCapture(Handle());
+                    SetHoveredAction(action);
                 }
                 return 0;
             }
-            case WM_MOUSEMOVE:
+            case WM_MOUSEMOVE: {
+                const POINT point{GET_X_LPARAM(data), GET_Y_LPARAM(data)};
                 if (scrubPosition) {
-                    scrubPosition = SeekPosition(GET_X_LPARAM(data));
+                    scrubPosition = SeekPosition(point.x);
                     InvalidateProgress();
+                } else if (pressedAction != PreviewAction::None) {
+                    SetHoveredAction(ActionAt(point) == pressedAction ? pressedAction : PreviewAction::None);
                 } else {
-                    UpdateActionHover({GET_X_LPARAM(data), GET_Y_LPARAM(data)});
+                    UpdateActionHover(point);
                 }
                 return 0;
+            }
             case WM_MOUSELEAVE:
-                SetHoveredAction(PreviewAction::None);
+                if (pressedAction == PreviewAction::None) { SetHoveredAction(PreviewAction::None); }
                 return 0;
             case WM_CANCELMODE:
             case WM_CAPTURECHANGED:
+                pressedAction = PreviewAction::None;
                 FinishScrub(false);
                 SetHoveredAction(PreviewAction::None);
                 break;
@@ -1029,14 +1075,17 @@ struct GifPreview::Implementation final : Window {
                     FinishScrub(true);
                     return 0;
                 }
-                switch (ActionAt(point)) {
+                const auto pressed = std::exchange(pressedAction, PreviewAction::None);
+                if (GetCapture() == Handle()) { ReleaseCapture(); }
+                if (pressed == PreviewAction::None || ActionAt(point) != pressed) { return 0; }
+                switch (pressed) {
                 case PreviewAction::Copy:
                     Copy();
                     break;
                 case PreviewAction::TrimStart:
                 case PreviewAction::TrimEnd:
                 case PreviewAction::ResetTrim:
-                    Trim(ActionAt(point));
+                    Trim(pressed);
                     break;
                 case PreviewAction::Save:
                     Save();
@@ -1068,8 +1117,7 @@ GifPreview::GifPreview(RecordingResult result, Config::Save, HWND owner, UINT cl
         implementation_ = std::make_unique<Implementation>(std::move(result), temporary, owner, closedMessage,
                                                            std::move(chooseSavePath), english);
     } catch (...) {
-        std::error_code ignored;
-        std::filesystem::remove(temporary, ignored);
+        static_cast<void>(RemoveFileQuietly(temporary));
         throw;
     }
 }

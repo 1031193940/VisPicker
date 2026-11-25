@@ -1,11 +1,13 @@
 #include "output/SaveDialog.h"
 #include "core/Paths.h"
+#include "platform/FileCommit.h"
 #include <shobjidl.h>
 #include <shellapi.h>
 #include <wrl/client.h>
 #include <algorithm>
 #include <cwctype>
 #include <stdexcept>
+#include <utility>
 
 namespace vispick {
 namespace {
@@ -19,8 +21,40 @@ struct Apartment {
 };
 } // namespace
 
+SaveDestination ResolveSaveDestination(std::filesystem::path selectedPath, const UINT fileTypeIndex, const bool gif) {
+    if (selectedPath.empty() || selectedPath.filename().empty()) {
+        throw std::invalid_argument("Save destination must include a file name");
+    }
+    auto extension = selectedPath.extension().native();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](wchar_t letter) { return static_cast<wchar_t>(std::towlower(letter)); });
+    SaveDestination destination{std::move(selectedPath), SaveFormat::Png};
+    if (gif) {
+        if (extension != L".gif") { destination.path += L".gif"; }
+        return destination;
+    }
+    if (extension == L".png") {
+        destination.format = SaveFormat::Png;
+    } else if (extension == L".jpg" || extension == L".jpeg") {
+        destination.format = SaveFormat::Jpg;
+    } else if (extension == L".bmp") {
+        destination.format = SaveFormat::Bmp;
+    } else if (fileTypeIndex == 2U) {
+        destination.path += L".jpg";
+        destination.format = SaveFormat::Jpg;
+    } else if (fileTypeIndex == 3U) {
+        destination.path += L".bmp";
+        destination.format = SaveFormat::Bmp;
+    } else {
+        destination.path += L".png";
+        destination.format = SaveFormat::Png;
+    }
+    return destination;
+}
+
 std::optional<SaveDestination> ChooseSavePath(HWND owner, const Config::Save& settings, int width, int height,
-                                              std::wstring_view fixedExtension, std::filesystem::path* lastFolder) {
+                                              std::wstring_view fixedExtension, std::filesystem::path* lastFolder,
+                                              const bool english) {
     Apartment apartment;
     Microsoft::WRL::ComPtr<IFileSaveDialog> dialog;
     Check(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)),
@@ -62,24 +96,28 @@ std::optional<SaveDestination> ChooseSavePath(HWND owner, const Config::Save& se
     Check(dialog->GetResult(&selected), "Get save destination failed");
     PWSTR text = nullptr;
     Check(selected->GetDisplayName(SIGDN_FILESYSPATH, &text), "Read save destination failed");
-    SaveDestination destination;
+    std::filesystem::path selectedPath;
     try {
-        destination.path = text;
+        selectedPath = text;
     } catch (...) {
         CoTaskMemFree(text);
         throw;
     }
     CoTaskMemFree(text);
-    auto extension = destination.path.extension().native();
-    std::transform(extension.begin(), extension.end(), extension.begin(),
-                   [](wchar_t letter) { return static_cast<wchar_t>(std::towlower(letter)); });
-    if (gif ? extension != L".gif"
-            : extension != L".png" && extension != L".jpg" && extension != L".jpeg" && extension != L".bmp") {
-        throw std::invalid_argument("The file extension must match one of the supported formats");
+    UINT fileTypeIndex = 1;
+    (void)dialog->GetFileTypeIndex(&fileTypeIndex);
+    const auto originalPath = selectedPath;
+    auto destination = ResolveSaveDestination(std::move(selectedPath), fileTypeIndex, gif);
+    if (destination.path != originalPath) {
+        const auto extended = ExtendedFilePath(destination.path);
+        if (GetFileAttributesW(extended.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            const auto prompt = (english ? L"File already exists:\n" : L"文件已存在：\n") + destination.path.native() +
+                                (english ? L"\n\nReplace it?" : L"\n\n是否覆盖？");
+            if (MessageBoxW(owner, prompt.c_str(), L"VisPick", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) {
+                return std::nullopt;
+            }
+        }
     }
-    destination.format = extension == L".bmp"                            ? SaveFormat::Bmp
-                         : extension == L".jpg" || extension == L".jpeg" ? SaveFormat::Jpg
-                                                                         : SaveFormat::Png;
     if (lastFolder) { *lastFolder = destination.path.parent_path(); }
     return destination;
 }

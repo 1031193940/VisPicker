@@ -1,5 +1,6 @@
 #include "core/Config.h"
 #include "core/Paths.h"
+#include "platform/FileCommit.h"
 
 #include <windows.h>
 #include <algorithm>
@@ -318,7 +319,14 @@ ConfigLoadResult LoadConfig(const std::filesystem::path& path, const Config* pre
     if (previous != nullptr) { failure.config = *previous; }
     // One MiB comfortably exceeds the template while bounding accidental binary input.
     constexpr std::streamoff maximumBytes = 1024 * 1024;
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    std::filesystem::path sourcePath;
+    try {
+        sourcePath = ExtendedFilePath(path);
+    } catch (const std::exception&) {
+        failure.diagnostics.push_back({0, L"无法读取配置文件，或文件超过 1 MiB；保留已有配置。"});
+        return failure;
+    }
+    std::ifstream file(sourcePath, std::ios::binary | std::ios::ate);
     const std::streamoff size = file ? static_cast<std::streamoff>(file.tellg()) : -1;
     if (size < 0 || size > maximumBytes) {
         failure.diagnostics.push_back({0, L"无法读取配置文件，或文件超过 1 MiB；保留已有配置。"});

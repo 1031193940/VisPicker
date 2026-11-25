@@ -221,7 +221,9 @@ void CheckGifPreviewCopy(HWND owner) {
                 };
                 waitForFrame(0xFF33AA33U);
                 SendMessageW(preview.Handle(), WM_KEYDOWN, VK_OEM_6, 0); // Keep the first frame.
-                SendMessageW(preview.Handle(), WM_LBUTTONUP, 0, MAKELPARAM(MulDiv(158, dpi, 96), y)); // Reset.
+                const auto resetPoint = MAKELPARAM(MulDiv(158, dpi, 96), y);
+                SendMessageW(preview.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, resetPoint);
+                SendMessageW(preview.Handle(), WM_LBUTTONUP, 0, resetPoint); // Reset.
                 const int trackLeft = MulDiv(16, dpi, 96);
                 const int trackRight = client.right - MulDiv(124, dpi, 96) - 1;
                 const auto seek =
@@ -231,7 +233,11 @@ void CheckGifPreviewCopy(HWND owner) {
                 waitForFrame(0xFFFF1111U);
                 SendMessageW(preview.Handle(), WM_KEYDOWN, VK_OEM_4, 0); // Keep the second frame.
             }
-            SendMessageW(preview.Handle(), WM_LBUTTONUP, 0, MAKELPARAM(x, y));
+            const auto copyPoint = MAKELPARAM(x, y);
+            SendMessageW(preview.Handle(), WM_LBUTTONUP, 0, copyPoint);
+            Require(!preview.Busy(), "Stray mouse-up without mouse-down does not trigger GIF Copy");
+            SendMessageW(preview.Handle(), WM_LBUTTONDOWN, MK_LBUTTON, copyPoint);
+            SendMessageW(preview.Handle(), WM_LBUTTONUP, 0, copyPoint);
             if (!preview.Busy()) { throw std::runtime_error("GIF Copy button did not start publishing"); }
             const auto timeout = std::chrono::steady_clock::now() + std::chrono::seconds(5);
             while (preview.Busy() && std::chrono::steady_clock::now() < timeout) {

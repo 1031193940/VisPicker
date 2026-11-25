@@ -155,6 +155,8 @@ struct Overlay::State {
     bool active = false;
     bool saving = false;
     bool drawing = false;
+    std::optional<std::size_t> pendingSelectIndex;
+    std::size_t drawCommittedCount = 0;
     bool english = false;
     bool choosingGifFrameRate = false;
     int gifFramesPerSecond = 30;
@@ -356,7 +358,20 @@ struct Overlay::State {
         if (!button || !*button->hint || (choosingGifFrameRate && button->kind == ButtonKind::GifFrameRatePicker)) {
             return {};
         }
-        return PlaceToolbar(button->bounds, {Scale(210), Scale(25)}, MonitorAt(pointer), Scale(5));
+        const RECT monitor = MonitorAt(pointer);
+        LONG width = Scale(210);
+        if (backBuffer && font.Get()) {
+            const HDC context = backBuffer->DeviceContext();
+            const HGDIOBJ previous = SelectObject(context, font.Get());
+            RECT measured{};
+            if (DrawTextW(context, button->hint, -1, &measured, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX) != 0) {
+                const LONG minimumWidth = Scale(80);
+                width = std::clamp<LONG>(measured.right - measured.left + Scale(16), minimumWidth,
+                                         std::max<LONG>(minimumWidth, monitor.right - monitor.left));
+            }
+            if (previous != nullptr && previous != HGDI_ERROR) { SelectObject(context, previous); }
+        }
+        return PlaceToolbar(button->bounds, {width, Scale(25)}, monitor, Scale(5));
     }
 
     void AddDamage(const RECT rectangle) {
@@ -395,6 +410,12 @@ struct Overlay::State {
         AddDamage({overlap.right, overlap.top, source.right, overlap.bottom});
     }
 
+    [[nodiscard]] RECT TextEditorBounds() const noexcept {
+        RECT bounds{};
+        if (textInput && textInput->Active()) { GetWindowRect(textInput->Handle(), &bounds); }
+        return bounds;
+    }
+
     struct UiSnapshot {
         RECT selection;
         RECT label;
@@ -402,9 +423,11 @@ struct Overlay::State {
         RECT magnifier;
         RECT tooltip;
         RECT annotation;
+        RECT textEditor;
     };
     [[nodiscard]] UiSnapshot Snapshot() const noexcept {
-        return {VisualSelection(), LabelBounds(), toolbar, MagnifierBounds(), TooltipBounds(), AnnotationUiBounds()};
+        return {VisualSelection(), LabelBounds(),        toolbar,           MagnifierBounds(),
+                TooltipBounds(),   AnnotationUiBounds(), TextEditorBounds()};
     }
 
     void Changed(const UiSnapshot& old) {
@@ -413,6 +436,10 @@ struct Overlay::State {
         if (!EqualRect(old.selection, next.selection)) {
             Difference(old.selection, next.selection);
             Difference(next.selection, old.selection);
+        }
+        if (!EqualRect(old.textEditor, next.textEditor)) {
+            AddDamage(old.textEditor);
+            AddDamage(next.textEditor);
         }
         AddBorder(old.selection);
         AddBorder(next.selection);
@@ -648,13 +675,28 @@ struct Overlay::State {
         const auto source = frozen->Image();
         const auto destination = backBuffer->Pixels();
         const RECT dirty = Local(screenDirty);
+        const RECT selected = VisualSelection();
+        RECT clearLocal{};
+        const bool hasClear = IntersectRect(&clearLocal, &selected, &screenDirty) != FALSE;
+        if (hasClear) { OffsetRect(&clearLocal, -desktop.left, -desktop.top); }
         for (LONG row = dirty.top; row < dirty.bottom; ++row) {
-            auto* output = destination.data() + static_cast<std::size_t>(row) * source.Width() + dirty.left;
-            const auto* input = source.Row(row) + dirty.left;
-            for (LONG column = dirty.left; column < dirty.right; ++column) {
-                const auto color = *input++;
-                *output++ = 0xFF000000U | (((color >> 16U) & 255U) * brightness / 100U << 16U) |
-                            (((color >> 8U) & 255U) * brightness / 100U << 8U) | ((color & 255U) * brightness / 100U);
+            auto* rowOutput = destination.data() + static_cast<std::size_t>(row) * source.Width();
+            const auto* rowInput = source.Row(row);
+            const auto darkenSpan = [&](const LONG left, const LONG right) {
+                auto* output = rowOutput + left;
+                const auto* input = rowInput + left;
+                for (LONG column = left; column < right; ++column) {
+                    const auto color = *input++;
+                    *output++ = 0xFF000000U | (((color >> 16U) & 255U) * brightness / 100U << 16U) |
+                                (((color >> 8U) & 255U) * brightness / 100U << 8U) |
+                                ((color & 255U) * brightness / 100U);
+                }
+            };
+            if (hasClear && row >= clearLocal.top && row < clearLocal.bottom) {
+                if (dirty.left < clearLocal.left) { darkenSpan(dirty.left, clearLocal.left); }
+                if (clearLocal.right < dirty.right) { darkenSpan(clearLocal.right, dirty.right); }
+            } else {
+                darkenSpan(dirty.left, dirty.right);
             }
         }
     }
@@ -726,7 +768,8 @@ struct Overlay::State {
         if (hovered && *hovered->hint) {
             RECT hint = Local(TooltipBounds());
             Fill(context, hint, RGB(55, 58, 65));
-            DrawTextW(context, hovered->hint, -1, &hint, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            DrawTextW(context, hovered->hint, -1, &hint,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         }
         if (activationDeadline) {
             RECT hint = Local(activationHint);
@@ -744,14 +787,29 @@ struct Overlay::State {
         // All CPU writes precede the GDI draw batch. The previous paint may
         // still be reading the back buffer when this one starts.
         if (!GdiFlush()) { throw std::runtime_error("Overlay GDI batch failed"); }
+        RECT screenPaint = dirty;
+        OffsetRect(&screenPaint, desktop.left, desktop.top);
+        const bool hasScreenPaint = IntersectRect(&screenPaint, &screenPaint, &desktop) != FALSE;
         if (damage.empty()) {
-            RECT screenDirty = dirty;
-            OffsetRect(&screenDirty, desktop.left, desktop.top);
-            if (IntersectRect(&screenDirty, &screenDirty, &desktop)) {
-                PrepareMask(screenDirty);
-                Compose(screenDirty);
+            if (hasScreenPaint) {
+                PrepareMask(screenPaint);
+                Compose(screenPaint);
             }
         } else {
+            RECT damageUnion{};
+            for (const RECT screenDirty : damage) { UnionRect(&damageUnion, &damageUnion, &screenDirty); }
+            RECT overlap{};
+            if (hasScreenPaint && !IntersectRect(&overlap, &screenPaint, &damageUnion)) {
+                damage.push_back(screenPaint);
+            } else if (hasScreenPaint && !EqualRect(overlap, screenPaint)) {
+                const auto appendStrip = [&](const RECT strip) {
+                    if (!IsRectEmpty(&strip)) { damage.push_back(strip); }
+                };
+                appendStrip({screenPaint.left, screenPaint.top, screenPaint.right, overlap.top});
+                appendStrip({screenPaint.left, overlap.bottom, screenPaint.right, screenPaint.bottom});
+                appendStrip({screenPaint.left, overlap.top, overlap.left, overlap.bottom});
+                appendStrip({overlap.right, overlap.top, screenPaint.right, overlap.bottom});
+            }
             for (const RECT screenDirty : damage) { PrepareMask(screenDirty); }
             for (const RECT screenDirty : damage) { Compose(screenDirty); }
             damage.clear();
@@ -786,6 +844,8 @@ struct Overlay::State {
         EndActivationWait();
         saving = false;
         drawing = false;
+        pendingSelectIndex.reset();
+        drawCommittedCount = 0;
         choosingGifFrameRate = false;
         if (GetCapture() == window.Handle()) { ReleaseCapture(); }
         textInput.reset();
@@ -980,15 +1040,31 @@ struct Overlay::State {
         }
         const auto old = Snapshot();
         if (!CommitText()) { return; }
-        if (mode != CaptureMode::Gif && annotations && selection.HasSelection() &&
-            annotations->BeginEdit(point, Scale(5))) {
-            SetCapture(window.Handle());
-            Changed(old);
-            return;
+        const bool toolActive = mode != CaptureMode::Gif && annotations && annotations->Tool() != AnnotationTool::None;
+        std::optional<std::size_t> drawOverSelect;
+        if (mode != CaptureMode::Gif && annotations && selection.HasSelection()) {
+            const int tolerance = Scale(5);
+            const auto selectedHandle = annotations->HitSelected(point, tolerance);
+            const auto hitIndex = annotations->HitTest(point, tolerance);
+            bool editExisting = selectedHandle != AnnotationHandle::None;
+            if (!editExisting && hitIndex) {
+                const auto hitTool = annotations->Committed()[*hitIndex].tool;
+                const bool filledArea = hitTool == AnnotationTool::Mosaic || hitTool == AnnotationTool::Text;
+                if (!toolActive || !filledArea ||
+                    (annotations->Tool() == AnnotationTool::Text && hitTool == AnnotationTool::Text)) {
+                    editExisting = true;
+                } else if (annotations->Tool() != AnnotationTool::Text) {
+                    drawOverSelect = hitIndex;
+                }
+            }
+            if (editExisting && annotations->BeginEdit(point, tolerance)) {
+                SetCapture(window.Handle());
+                Changed(old);
+                return;
+            }
         }
         if (annotations) { annotations->ClearSelected(); }
         const auto hit = HitSelection(selection.Bounds(), point, Scale(5));
-        const bool toolActive = mode != CaptureMode::Gif && annotations && annotations->Tool() != AnnotationTool::None;
         if (selection.HasSelection() && hit == SelectionHandle::None && annotations &&
             (toolActive || annotations->CanUndo() || annotations->CanRedo())) {
             Changed(old);
@@ -1002,6 +1078,8 @@ struct Overlay::State {
                 return;
             }
             drawing = true;
+            pendingSelectIndex = drawOverSelect;
+            drawCommittedCount = annotations->Committed().size();
             AddDamage(annotations->PointerDown(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0, toolDpi));
         } else {
             if (!selection.HasSelection()) { UpdateDpi(point); }
@@ -1016,6 +1094,11 @@ struct Overlay::State {
         if (drawing) {
             AddDamage(annotations->PointerUp(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
             drawing = false;
+            const auto fallbackSelect = std::exchange(pendingSelectIndex, std::nullopt);
+            if (fallbackSelect && annotations->Committed().size() == drawCommittedCount &&
+                *fallbackSelect < annotations->Committed().size()) {
+                annotations->Select(fallbackSelect);
+            }
         } else if (annotations && annotations->Editing()) {
             AddDamage(annotations->UpdateEdit(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
             AddDamage(annotations->CommitEdit());
@@ -1036,6 +1119,8 @@ struct Overlay::State {
         const auto old = Snapshot();
         if (drawing) {
             drawing = false;
+            pendingSelectIndex.reset();
+            drawCommittedCount = 0;
             AddDamage(annotations->CancelPreview());
         }
         if (annotations && annotations->Editing()) { AddDamage(annotations->CancelEdit()); }
@@ -1055,7 +1140,8 @@ struct Overlay::State {
             return;
         }
         if (textInput && textInput->Active()) {
-            CommitText();
+            const auto old = Snapshot();
+            if (CommitText()) { Changed(old); }
             return;
         }
         if (mode != CaptureMode::Gif && annotations && annotations->Selected()) {
@@ -1087,7 +1173,11 @@ struct Overlay::State {
 
     void DoubleClick(const POINT point) {
         pointer = point;
-        if (HoverButton() || !selection.HasSelection()) { return; }
+        if (const Button* button = HoverButton()) {
+            Activate(*button);
+            return;
+        }
+        if (!selection.HasSelection()) { return; }
         const auto old = Snapshot();
         if (!CommitText()) { return; }
         if (mode != CaptureMode::Gif && annotations && annotations->SelectAt(point, Scale(5))) {
@@ -1117,7 +1207,8 @@ struct Overlay::State {
             if (choosingGifFrameRate) {
                 ToggleGifFrameRatePicker();
             } else if (textInput && textInput->Active()) {
-                CommitText();
+                const auto old = Snapshot();
+                if (CommitText()) { Changed(old); }
             } else if (selection.Dragging()) {
                 Finish(OverlayAction::Cancel);
             } else if (drawing || (annotations && annotations->Editing())) {
@@ -1133,6 +1224,10 @@ struct Overlay::State {
             return;
         }
         if (key == VK_RETURN) {
+            if (selection.Dragging() || drawing || (annotations && annotations->Editing())) {
+                CancelGesture();
+                if (GetCapture() == window.Handle()) { ReleaseCapture(); }
+            }
             if (mode != CaptureMode::Gif && annotations && annotations->Selected() &&
                 annotations->Selected()->tool == AnnotationTool::Text) {
                 BeginTextEdit();
@@ -1158,7 +1253,11 @@ struct Overlay::State {
             return;
         }
         if (!control && key == 'C') {
-            CopyText(window.Handle(), FormatSampledColor(SampledColor(), shift));
+            try {
+                CopyText(window.Handle(), FormatSampledColor(SampledColor(), shift));
+            } catch (const std::exception&) {
+                // Transient clipboard contention must not abort an active capture session.
+            }
             return;
         }
         if (!selection.HasSelection()) { return; }
@@ -1248,22 +1347,48 @@ struct Overlay::State {
         LPCWSTR cursor = IDC_CROSS;
         if (HoverButton()) {
             cursor = IDC_HAND;
-        } else if (mode != CaptureMode::Gif && annotations &&
-                   (annotations->HitSelected(pointer, Scale(5)) != AnnotationHandle::None ||
-                    annotations->HitTest(pointer, Scale(5)))) {
-            const auto handle = annotations->HitSelected(pointer, Scale(5));
-            if (handle == AnnotationHandle::TopLeft || handle == AnnotationHandle::BottomRight) {
-                cursor = IDC_SIZENWSE;
-            } else if (handle == AnnotationHandle::TopRight || handle == AnnotationHandle::BottomLeft) {
-                cursor = IDC_SIZENESW;
-            } else if (handle == AnnotationHandle::Top || handle == AnnotationHandle::Bottom) {
-                cursor = IDC_SIZENS;
-            } else if (handle == AnnotationHandle::Left || handle == AnnotationHandle::Right) {
-                cursor = IDC_SIZEWE;
-            } else if (handle == AnnotationHandle::Start || handle == AnnotationHandle::End) {
-                cursor = IDC_CROSS;
-            } else {
-                cursor = IDC_SIZEALL;
+        } else if (mode != CaptureMode::Gif && annotations) {
+            const int tolerance = Scale(5);
+            const auto handle = annotations->HitSelected(pointer, tolerance);
+            const auto hitIndex = annotations->HitTest(pointer, tolerance);
+            const bool toolActive = annotations->Tool() != AnnotationTool::None;
+            bool editExisting = handle != AnnotationHandle::None;
+            if (!editExisting && hitIndex) {
+                const auto hitTool = annotations->Committed()[*hitIndex].tool;
+                const bool filledArea = hitTool == AnnotationTool::Mosaic || hitTool == AnnotationTool::Text;
+                editExisting = !toolActive || !filledArea ||
+                               (annotations->Tool() == AnnotationTool::Text && hitTool == AnnotationTool::Text);
+            }
+            if (editExisting) {
+                if (handle == AnnotationHandle::TopLeft || handle == AnnotationHandle::BottomRight) {
+                    cursor = IDC_SIZENWSE;
+                } else if (handle == AnnotationHandle::TopRight || handle == AnnotationHandle::BottomLeft) {
+                    cursor = IDC_SIZENESW;
+                } else if (handle == AnnotationHandle::Top || handle == AnnotationHandle::Bottom) {
+                    cursor = IDC_SIZENS;
+                } else if (handle == AnnotationHandle::Left || handle == AnnotationHandle::Right) {
+                    cursor = IDC_SIZEWE;
+                } else if (handle == AnnotationHandle::Start || handle == AnnotationHandle::End) {
+                    cursor = IDC_CROSS;
+                } else {
+                    cursor = IDC_SIZEALL;
+                }
+            } else if (selection.HasSelection()) {
+                const auto selectionHandle = HitSelection(selection.Bounds(), pointer, tolerance);
+                if (selectionHandle == SelectionHandle::TopLeft || selectionHandle == SelectionHandle::BottomRight) {
+                    cursor = IDC_SIZENWSE;
+                } else if (selectionHandle == SelectionHandle::TopRight ||
+                           selectionHandle == SelectionHandle::BottomLeft) {
+                    cursor = IDC_SIZENESW;
+                } else if (selectionHandle == SelectionHandle::Top || selectionHandle == SelectionHandle::Bottom) {
+                    cursor = IDC_SIZENS;
+                } else if (selectionHandle == SelectionHandle::Left || selectionHandle == SelectionHandle::Right) {
+                    cursor = IDC_SIZEWE;
+                } else if (selectionHandle == SelectionHandle::Move && !toolActive) {
+                    cursor = IDC_SIZEALL;
+                } else if (selectionHandle == SelectionHandle::Move && annotations->Tool() == AnnotationTool::Text) {
+                    cursor = IDC_IBEAM;
+                }
             }
         } else if (selection.HasSelection()) {
             const auto handle = HitSelection(selection.Bounds(), pointer, Scale(5));
@@ -1275,11 +1400,8 @@ struct Overlay::State {
                 cursor = IDC_SIZENS;
             } else if (handle == SelectionHandle::Left || handle == SelectionHandle::Right) {
                 cursor = IDC_SIZEWE;
-            } else if (handle == SelectionHandle::Move &&
-                       (!annotations || annotations->Tool() == AnnotationTool::None)) {
+            } else if (handle == SelectionHandle::Move) {
                 cursor = IDC_SIZEALL;
-            } else if (annotations && annotations->Tool() == AnnotationTool::Text) {
-                cursor = IDC_IBEAM;
             }
         }
         SetCursor(LoadCursorW(nullptr, cursor));

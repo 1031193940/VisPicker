@@ -358,6 +358,50 @@ TEST_CASE("GIF trim preserves variable delays and composes the new first frame a
     CHECK(vispick::gif::InspectGif(trimmed, expected).mismatchedFrames == 0);
 }
 
+TEST_CASE("GIF trim preserves transparent delta subframes and duplicate frame delays") {
+    RecordingTestDirectory directory;
+    const auto source = directory.path / L"delta-source.gif";
+    const auto trimmed = directory.path / L"delta-trimmed.gif";
+    vispick::Bitmap frame0(64, 48);
+    std::fill(frame0.Pixels().begin(), frame0.Pixels().end(), 0xFF203040U);
+    auto frame1 = frame0;
+    frame1.Row(4)[5] = 0xFFDD3322U;
+    auto frame2 = frame1;
+    frame2.Row(10)[12] = 0xFF33CC55U;
+    frame2.Row(11)[13] = 0xFF33CC55U;
+    const auto frame3 = frame2; // Identical consecutive frame must retain its delay.
+    {
+        vispick::gif::GifWriter writer(source, 64, 48);
+        writer.WriteFrame(vispick::gif::EncodeFrame(frame0.Pixels()), 5);
+        writer.WriteFrame(vispick::gif::EncodeFrame(frame1.Pixels()), 7);
+        writer.WriteFrame(vispick::gif::EncodeFrame(frame2.Pixels()), 9);
+        writer.WriteFrame(vispick::gif::EncodeFrame(frame3.Pixels()), 11);
+        writer.Finish();
+    }
+    vispick::gif::TrimRecordedGif(source, trimmed, {5, 32});
+    const std::array expected{vispick::gif::PixelHash(frame1.Pixels()), vispick::gif::PixelHash(frame2.Pixels()),
+                              vispick::gif::PixelHash(frame3.Pixels())};
+    const auto inspection = vispick::gif::InspectGif(trimmed, expected);
+    CHECK(inspection.frameCount == 3);
+    CHECK(inspection.durationCentiseconds == 27);
+    CHECK(inspection.mismatchedFrames == 0);
+    vispick::gif::GifReader reader(trimmed);
+    const auto firstMeta = reader.ReadFrameMetadata(0);
+    const auto deltaMeta = reader.ReadFrameMetadata(1);
+    const auto duplicateMeta = reader.ReadFrameMetadata(2);
+    CHECK(firstMeta.width == 64);
+    CHECK(firstMeta.height == 48);
+    CHECK(deltaMeta.left == 12);
+    CHECK(deltaMeta.top == 10);
+    CHECK(deltaMeta.width == 2);
+    CHECK(deltaMeta.height == 2);
+    CHECK(deltaMeta.transparentColorIndex >= 0);
+    CHECK(deltaMeta.delayCentiseconds == 9);
+    CHECK(duplicateMeta.width == 1);
+    CHECK(duplicateMeta.height == 1);
+    CHECK(duplicateMeta.delayCentiseconds == 11);
+}
+
 TEST_CASE("GIF trim retains a minimum-delay final frame without extending duration") {
     RecordingTestDirectory directory;
     const auto source = directory.path / L"original.gif";
@@ -416,6 +460,22 @@ TEST_CASE("GIF overwrite accepts a Unicode destination beyond MAX_PATH") {
     CHECK(Contents(extended) == "replacement");
     CHECK(std::distance(std::filesystem::directory_iterator(extended.parent_path()),
                         std::filesystem::directory_iterator{}) == 1);
+    const auto longGif = nested / L"长路径录制.gif";
+    const auto longTrimmed = nested / L"长路径裁剪.gif";
+    const std::array first{0xFF112233U, 0xFF445566U};
+    const std::array second{0xFF112233U, 0xFF778899U};
+    {
+        vispick::gif::GifWriter writer(longGif, 2, 1);
+        writer.WriteFrame(vispick::gif::EncodeFrame(first), 4);
+        writer.WriteFrame(vispick::gif::EncodeFrame(second), 6);
+        writer.Finish();
+    }
+    vispick::gif::TrimRecordedGif(longGif, longTrimmed, {4, 10});
+    const std::array expected{vispick::gif::PixelHash(second)};
+    const auto inspected = vispick::gif::InspectGif(longTrimmed, expected);
+    CHECK(inspected.frameCount == 1);
+    CHECK(inspected.durationCentiseconds == 6);
+    CHECK(inspected.mismatchedFrames == 0);
 }
 
 TEST_CASE("Old recording cleanup only removes expired files with the exact owned pattern") {

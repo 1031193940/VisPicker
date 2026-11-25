@@ -1,4 +1,5 @@
 #include "core/Ini.h"
+#include "platform/FileCommit.h"
 
 #include <windows.h>
 #include <algorithm>
@@ -174,7 +175,8 @@ void UpdateIniValue(const std::filesystem::path& path, const std::wstring_view s
         parsed.entries.front().value != value || sectionName.empty() || keyName.empty()) {
         throw std::invalid_argument("INI update requires one unambiguous section, key and value");
     }
-    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    const auto extendedPath = ExtendedFilePath(path);
+    std::ifstream input(extendedPath, std::ios::binary | std::ios::ate);
     const std::streamoff size = input ? static_cast<std::streamoff>(input.tellg()) : -1;
     if (size < 0 || size > 1024 * 1024) {
         throw std::runtime_error("Cannot read configuration to save configuration value");
@@ -323,7 +325,7 @@ void UpdateIniValue(const std::filesystem::path& path, const std::wstring_view s
     } staged;
     static std::atomic<unsigned> serial{0};
     for (unsigned attempt = 0; attempt < 100; ++attempt) {
-        staged.path = path.native() + L".save-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+        staged.path = extendedPath.native() + L".save-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
                       std::to_wstring(serial.fetch_add(1));
         staged.handle =
             CreateFileW(staged.path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -342,7 +344,7 @@ void UpdateIniValue(const std::filesystem::path& path, const std::wstring_view s
     }
     CloseHandle(staged.handle);
     staged.handle = INVALID_HANDLE_VALUE;
-    if (!ReplaceFileW(path.c_str(), staged.path.c_str(), nullptr, 0, nullptr, nullptr)) {
+    if (!ReplaceFileW(extendedPath.c_str(), staged.path.c_str(), nullptr, 0, nullptr, nullptr)) {
         throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Save configuration value");
     }
     staged.path.clear();

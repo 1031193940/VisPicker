@@ -23,7 +23,8 @@ struct PinMemory {
 class PinManager {
 public:
     static constexpr UINT PendingMessage = WM_APP + 61;
-    PinManager(HWND owner, std::function<void(Bitmap)> save, std::function<void(std::wstring, bool)> notify);
+    PinManager(HWND owner, std::function<void(Bitmap)> save, std::function<void(std::wstring, bool)> notify,
+               std::function<void(bool)> modalChanged = {});
     ~PinManager();
     PinManager(const PinManager&) = delete;
     PinManager& operator=(const PinManager&) = delete;

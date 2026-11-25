@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include "core/Config.h"
 #include "core/Paths.h"
+#include "platform/FileCommit.h"
 
 #include <atomic>
 #include <fstream>
@@ -533,4 +534,35 @@ TEST_CASE("Config failed file load returns previous snapshot and a file diagnost
     CHECK(result.config.pin.opacity == 27);
     REQUIRE(result.diagnostics.size() == 1);
     CHECK(result.diagnostics[0].line == 0);
+}
+TEST_CASE("Config load and INI update work on Unicode paths beyond MAX_PATH") {
+    const ConfigurationFile root;
+    const auto base = root.path.parent_path();
+    const auto nested = base / std::wstring(80, L'配') / std::wstring(80, L'置') / std::wstring(80, L'目');
+    const auto longIni = nested / L"VisPick.ini";
+    REQUIRE(longIni.native().size() > MAX_PATH);
+    const auto extended = vispick::ExtendedFilePath(longIni);
+    const auto extendedRoot = vispick::ExtendedFilePath(base);
+    struct RemoveExtendedTree {
+        const std::filesystem::path& path;
+        ~RemoveExtendedTree() {
+            std::error_code ignored;
+            std::filesystem::remove_all(path, ignored);
+        }
+    } cleanup{extendedRoot};
+    std::filesystem::create_directories(extended.parent_path());
+    {
+        std::ofstream output(extended, std::ios::binary);
+        output << "[Pin]\r\nAcrossDesktops=false\r\nOpacity=77\r\n";
+        REQUIRE(static_cast<bool>(output));
+    }
+    const auto loaded = vispick::LoadConfig(longIni);
+    REQUIRE(loaded.accepted);
+    CHECK(loaded.config.pin.opacity == 77);
+    CHECK_FALSE(loaded.config.pin.acrossDesktops);
+    vispick::SavePinAcrossDesktops(longIni, true);
+    const auto reloaded = vispick::LoadConfig(longIni);
+    REQUIRE(reloaded.accepted);
+    CHECK(reloaded.config.pin.acrossDesktops);
+    CHECK(reloaded.config.pin.opacity == 77);
 }

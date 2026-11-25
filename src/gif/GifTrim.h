@@ -17,6 +17,6 @@ struct GifTrimRange {
 // Cancellation is checked between frames; a cancelled partial stage belongs
 // to the caller and must be removed. Memory does not grow with frame count.
 void TrimRecordedGif(const std::filesystem::path& source, const std::filesystem::path& destination, GifTrimRange range,
-                     const std::function<bool()>& cancelled = {});
+                     const std::function<bool()>& cancelled = {}, bool dither = false);
 
 } // namespace vispick::gif

@@ -86,9 +86,11 @@ bool SamePoint(POINT first, POINT second) noexcept {
 }
 
 bool SameAnnotation(const Annotation& first, const Annotation& second) noexcept {
-    return first.tool == second.tool && first.color == second.color && first.strokePixels == second.strokePixels &&
-           first.mosaicPixels == second.mosaicPixels && first.dpi == second.dpi && first.text == second.text &&
-           EqualRect(&first.bounds, &second.bounds) && std::memcmp(&first.font, &second.font, sizeof(LOGFONTW)) == 0 &&
+    return first.tool == second.tool && first.color == second.color && first.strokeWidth == second.strokeWidth &&
+           first.strokePixels == second.strokePixels && first.fontSize == second.fontSize &&
+           first.mosaicSize == second.mosaicSize && first.mosaicPixels == second.mosaicPixels &&
+           first.dpi == second.dpi && first.text == second.text && EqualRect(&first.bounds, &second.bounds) &&
+           std::memcmp(&first.font, &second.font, sizeof(LOGFONTW)) == 0 &&
            std::equal(first.points.begin(), first.points.end(), second.points.begin(), second.points.end(),
                       SamePoint) &&
            std::equal(first.textLines.begin(), first.textLines.end(), second.textLines.begin(), second.textLines.end(),
@@ -144,7 +146,8 @@ bool HitGeometry(const Annotation& annotation, POINT point, int tolerance) noexc
             normalizedHorizontal * normalizedHorizontal + normalizedVertical * normalizedVertical - 1;
         const double gradient =
             2 * std::hypot(normalizedHorizontal / horizontalRadius, normalizedVertical / verticalRadius);
-        return gradient != 0 && std::abs(implicit) <= radius * gradient;
+        if (gradient == 0) { return std::min(horizontalRadius, verticalRadius) <= radius; }
+        return std::abs(implicit) <= radius * gradient;
     }
     if (annotation.tool == AnnotationTool::Arrow) {
         if (SegmentDistance(point, first, last) <= radius) { return true; }
@@ -208,8 +211,10 @@ bool HasText(const std::vector<AnnotationTextLine>& lines) noexcept {
 }
 
 Annotation MakeText(RECT bounds, const LOGFONTW& font, std::uint32_t color, std::vector<AnnotationTextLine> lines,
-                    std::wstring text, unsigned dpi) {
-    if (color > 0xFFFFFF || dpi < 48 || dpi > 960) { throw std::invalid_argument("Invalid text style"); }
+                    std::wstring text, unsigned dpi, int logicalFontSize) {
+    if (color > 0xFFFFFF || dpi < 48 || dpi > 960 || logicalFontSize < 0 || logicalFontSize > 2048) {
+        throw std::invalid_argument("Invalid text style");
+    }
     if (text.empty()) {
         for (std::size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
             if (lineIndex != 0) { text += L"\r\n"; }
@@ -220,6 +225,7 @@ Annotation MakeText(RECT bounds, const LOGFONTW& font, std::uint32_t color, std:
     annotation.tool = AnnotationTool::Text;
     annotation.bounds = bounds;
     annotation.color = color;
+    annotation.fontSize = logicalFontSize;
     annotation.font = font;
     annotation.textLines = std::move(lines);
     annotation.text = std::move(text);
@@ -337,13 +343,21 @@ AnnotationStyle AnnotationModel::SelectedStyle() const {
     if (const auto* annotation = Selected()) {
         result.color = annotation->color;
         if (annotation->tool == AnnotationTool::Mosaic) {
-            result.mosaicSize = std::max(1, MulDiv(annotation->mosaicPixels, 96, static_cast<int>(annotation->dpi)));
+            result.mosaicSize =
+                annotation->mosaicSize > 0
+                    ? annotation->mosaicSize
+                    : std::max(1, MulDiv(annotation->mosaicPixels, 96, static_cast<int>(annotation->dpi)));
         } else if (annotation->tool == AnnotationTool::Text) {
             result.fontSize =
-                std::max(1, MulDiv(std::abs(annotation->font.lfHeight), 96, static_cast<int>(annotation->dpi)));
+                annotation->fontSize > 0
+                    ? annotation->fontSize
+                    : std::max(1, MulDiv(std::abs(annotation->font.lfHeight), 96, static_cast<int>(annotation->dpi)));
             if (*annotation->font.lfFaceName) { result.fontName = annotation->font.lfFaceName; }
         } else {
-            result.strokeWidth = std::max(1, MulDiv(annotation->strokePixels, 96, static_cast<int>(annotation->dpi)));
+            result.strokeWidth =
+                annotation->strokeWidth > 0
+                    ? annotation->strokeWidth
+                    : std::max(1, MulDiv(annotation->strokePixels, 96, static_cast<int>(annotation->dpi)));
         }
     }
     return result;
@@ -543,13 +557,17 @@ RECT AnnotationModel::ApplySelectedStyle(const AnnotationStyle& style) {
     auto changed = *Selected();
     if (changed.tool == AnnotationTool::Mosaic) {
         const int pixels = AnnotationPixels(style.mosaicSize, changed.dpi);
-        if (pixels != changed.mosaicPixels) {
-            changed.mosaicPixels = pixels;
-            RefreshGeometry(changed);
+        if (pixels != changed.mosaicPixels || style.mosaicSize != changed.mosaicSize) {
+            changed.mosaicSize = style.mosaicSize;
+            if (pixels != changed.mosaicPixels) {
+                changed.mosaicPixels = pixels;
+                RefreshGeometry(changed);
+            }
         }
     } else {
         changed.color = style.color;
         if (changed.tool != AnnotationTool::Text) {
+            changed.strokeWidth = style.strokeWidth;
             changed.strokePixels = AnnotationPixels(style.strokeWidth, changed.dpi);
             RefreshGeometry(changed);
         }
@@ -571,7 +589,9 @@ RECT AnnotationModel::PointerDown(POINT screenPoint, bool shift, unsigned dpi) {
     annotation.tool = tool_;
     annotation.dpi = dpi;
     annotation.color = style_.color;
+    annotation.strokeWidth = style_.strokeWidth;
     annotation.strokePixels = AnnotationPixels(style_.strokeWidth, dpi);
+    annotation.mosaicSize = style_.mosaicSize;
     annotation.mosaicPixels = AnnotationPixels(style_.mosaicSize, dpi);
     annotation.points.push_back(screenPoint);
     if (tool_ != AnnotationTool::Pen) { annotation.points.push_back(screenPoint); }
@@ -718,19 +738,21 @@ RECT AnnotationModel::Redo() noexcept {
 }
 
 RECT AnnotationModel::AddText(RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
-                              std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi) {
+                              std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi,
+                              int logicalFontSize) {
     if (!HasText(lines)) { return {}; }
     const auto bounds = Intersect(screenBounds, desktopBounds_);
     if (IsRectEmpty(&bounds)) { return {}; }
     if (bounds.left != screenBounds.left || bounds.top != screenBounds.top || color > 0xFFFFFF) {
         throw std::invalid_argument("Invalid text annotation origin or color");
     }
-    Commit(MakeText(bounds, actualFont, color, std::move(lines), std::move(text), dpi));
+    Commit(MakeText(bounds, actualFont, color, std::move(lines), std::move(text), dpi, logicalFontSize));
     return bounds;
 }
 
 RECT AnnotationModel::ReplaceText(std::size_t index, RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
-                                  std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi) {
+                                  std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi,
+                                  int logicalFontSize) {
     CancelEdit();
     if (index >= annotations_.size() || annotations_[index].tool != AnnotationTool::Text) {
         throw std::out_of_range("Text annotation replacement index");
@@ -740,7 +762,7 @@ RECT AnnotationModel::ReplaceText(std::size_t index, RECT screenBounds, const LO
     if (IsRectEmpty(&bounds) || bounds.left != screenBounds.left || bounds.top != screenBounds.top) {
         throw std::invalid_argument("Invalid replacement text bounds");
     }
-    return Replace(index, MakeText(bounds, actualFont, color, std::move(lines), std::move(text), dpi));
+    return Replace(index, MakeText(bounds, actualFont, color, std::move(lines), std::move(text), dpi, logicalFontSize));
 }
 
 } // namespace vispick

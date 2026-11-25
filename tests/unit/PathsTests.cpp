@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include "core/Paths.h"
 #include "core/Config.h"
+#include "output/SaveDialog.h"
 
 #include <atomic>
 #include <fstream>
@@ -213,4 +214,25 @@ TEST_CASE("Paths resolves the current executable and diagnostics directories") {
     const auto directories = vispick::DiagnosticDirectories();
     REQUIRE_FALSE(directories.empty());
     CHECK(directories.front() == vispick::ExecutablePath().parent_path());
+}
+TEST_CASE("Save destination resolves dotted filenames using the active filter extension") {
+    const auto png = vispick::ResolveSaveDestination(L"C:\\Shots\\release-v1.2.3", 1U, false);
+    CHECK(png.path == std::filesystem::path(L"C:\\Shots\\release-v1.2.3.png"));
+    CHECK(png.format == vispick::SaveFormat::Png);
+    const auto jpg = vispick::ResolveSaveDestination(L"C:\\Shots\\release-v1.2.3", 2U, false);
+    CHECK(jpg.path == std::filesystem::path(L"C:\\Shots\\release-v1.2.3.jpg"));
+    CHECK(jpg.format == vispick::SaveFormat::Jpg);
+    const auto bmp = vispick::ResolveSaveDestination(L"C:\\Shots\\release-v1.2.3", 3U, false);
+    CHECK(bmp.path == std::filesystem::path(L"C:\\Shots\\release-v1.2.3.bmp"));
+    CHECK(bmp.format == vispick::SaveFormat::Bmp);
+    const auto gif = vispick::ResolveSaveDestination(L"C:\\Shots\\clip.v2", 1U, true);
+    CHECK(gif.path == std::filesystem::path(L"C:\\Shots\\clip.v2.gif"));
+    const auto explicitJpg = vispick::ResolveSaveDestination(L"C:\\Shots\\photo.JPEG", 1U, false);
+    CHECK(explicitJpg.path == std::filesystem::path(L"C:\\Shots\\photo.JPEG"));
+    CHECK(explicitJpg.format == vispick::SaveFormat::Jpg);
+    const auto explicitGif = vispick::ResolveSaveDestination(L"C:\\Shots\\demo.GIF", 1U, true);
+    CHECK(explicitGif.path == std::filesystem::path(L"C:\\Shots\\demo.GIF"));
+    CHECK_THROWS_AS(static_cast<void>(vispick::ResolveSaveDestination(L"", 1U, false)), std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(vispick::ResolveSaveDestination(L"C:\\Shots\\", 1U, false)),
+                    std::invalid_argument);
 }
