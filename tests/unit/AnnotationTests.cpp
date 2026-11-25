@@ -771,3 +771,89 @@ TEST_CASE("TextInput double-buffered painting handles insert, delete, and line s
     CHECK(model.Committed().front().text == L"Hello orld");
     host.input = nullptr;
 }
+
+TEST_CASE("TextInput defaults to centered alignment and supports live horizontal and vertical alignment switching") {
+    class HiddenAlignHost final : public vispick::Window {
+    public:
+        HiddenAlignHost() {
+            Create({L"VisPick.Tests.TextAlignHost", 0, IDC_ARROW}, L"hidden align host", WS_POPUP | WS_CLIPCHILDREN,
+                   WS_EX_TOOLWINDOW, {0, 0, 420, 260}, vispick::WindowActivation::Passive);
+        }
+        ~HiddenAlignHost() override { Destroy(); }
+        vispick::TextInput* input = nullptr;
+
+    protected:
+        LRESULT OnMessage(const UINT message, const WPARAM parameter, const LPARAM data) override {
+            if ((message == WM_CTLCOLOREDIT || message == WM_CTLCOLORSTATIC) && input != nullptr) {
+                if (const HBRUSH brush =
+                        input->ControlColor(reinterpret_cast<HDC>(parameter), reinterpret_cast<HWND>(data))) {
+                    return reinterpret_cast<LRESULT>(brush);
+                }
+            }
+            return Window::OnMessage(message, parameter, data);
+        }
+    };
+
+    const auto image = Pattern(420, 260);
+    vispick::AnnotationModel model(image.View(), {});
+    CHECK(model.Style().textAlign == vispick::TextHorizontalAlign::Center);
+    CHECK(model.Style().textVerticalAlign == vispick::TextVerticalAlign::Center);
+    model.SetSelection({10, 10, 410, 250});
+    model.SetTool(vispick::AnnotationTool::Text);
+    vispick::EditorRenderer renderer(model);
+    HiddenAlignHost host;
+    vispick::TextInput input(model, renderer, host.Handle(), WM_APP + 93, WM_APP + 94);
+    host.input = &input;
+
+    input.Begin({20, 20}, 96);
+    REQUIRE(input.Active());
+    REQUIRE(SendMessageW(input.Handle(), WM_SETTEXT, 0, reinterpret_cast<LPARAM>(L"Hi")) != FALSE);
+
+    const auto charPosition = [](const HWND edit) {
+        const LRESULT raw = SendMessageW(edit, EM_POSFROMCHAR, 0, 0);
+        REQUIRE(raw != -1);
+        return POINT{static_cast<short>(LOWORD(raw)), static_cast<short>(HIWORD(raw))};
+    };
+
+    const POINT defaultPos = charPosition(input.Handle());
+    CHECK(defaultPos.x > 0);
+    CHECK(defaultPos.y > 0);
+
+    auto style = model.Style();
+    style.textAlign = vispick::TextHorizontalAlign::Left;
+    style.textVerticalAlign = vispick::TextVerticalAlign::Top;
+    input.ApplyStyle(style);
+    const POINT leftTopPos = charPosition(input.Handle());
+    CHECK(leftTopPos.x < defaultPos.x);
+    CHECK(leftTopPos.y == 0);
+
+    style.textAlign = vispick::TextHorizontalAlign::Right;
+    style.textVerticalAlign = vispick::TextVerticalAlign::Center;
+    input.ApplyStyle(style);
+    const POINT rightMiddlePos = charPosition(input.Handle());
+    CHECK(rightMiddlePos.x > defaultPos.x);
+    CHECK(rightMiddlePos.y == defaultPos.y);
+
+    input.Commit();
+    REQUIRE(model.Committed().size() == 1);
+    CHECK(model.Committed().front().text == L"Hi");
+    CHECK(model.Committed().front().textAlign == vispick::TextHorizontalAlign::Right);
+    CHECK(model.Committed().front().textVerticalAlign == vispick::TextVerticalAlign::Center);
+    model.Select(0);
+    CHECK(model.SelectedStyle().textAlign == vispick::TextHorizontalAlign::Right);
+    CHECK(model.SelectedStyle().textVerticalAlign == vispick::TextVerticalAlign::Center);
+
+    // Changing only alignment during re-edit must create a new revision and move the rendered glyph.
+    const auto beforePixels = renderer.Flatten(model.Selection());
+    const auto beforeRevision = model.Revision();
+    input.BeginEdit(0);
+    style.textAlign = vispick::TextHorizontalAlign::Left;
+    style.textVerticalAlign = vispick::TextVerticalAlign::Top;
+    input.ApplyStyle(style);
+    input.Commit();
+    CHECK(model.Revision() == beforeRevision + 1);
+    CHECK(model.Committed().front().textAlign == vispick::TextHorizontalAlign::Left);
+    CHECK(model.Committed().front().textVerticalAlign == vispick::TextVerticalAlign::Top);
+    CHECK_FALSE(SamePixels(beforePixels, renderer.Flatten(model.Selection())));
+    host.input = nullptr;
+}

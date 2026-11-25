@@ -25,7 +25,12 @@ enum class ToolbarIcon {
     Play,
     TrimStart,
     TrimEnd,
-    Reset
+    Reset,
+    AlignLeft,
+    AlignCenter,
+    AlignRight,
+    AlignTop,
+    AlignMiddle
 };
 
 [[nodiscard]] UniqueGdiObject<HPEN> CreateToolbarIconPen(int dpi);

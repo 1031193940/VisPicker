@@ -8,6 +8,7 @@
 #include <windows.h>
 #include <psapi.h>
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -360,6 +361,34 @@ void CheckIncrementalEdits(const vispick::Bitmap& frozen) {
             "Incremental insert/delete left ghost pixels in native EDIT");
 }
 
+void CheckTextAlignments(const vispick::Bitmap& frozen) {
+    constexpr std::array horizontals{vispick::TextHorizontalAlign::Left, vispick::TextHorizontalAlign::Center,
+                                     vispick::TextHorizontalAlign::Right};
+    constexpr std::array verticals{vispick::TextVerticalAlign::Top, vispick::TextVerticalAlign::Center};
+    for (const auto horizontal : horizontals) {
+        for (const auto vertical : verticals) {
+            Session session(frozen, 96, 20);
+            auto style = session.model.Style();
+            style.textAlign = horizontal;
+            style.textVerticalAlign = vertical;
+            session.input->ApplyStyle(style);
+            Require(SendMessageW(session.input->Handle(), WM_SETTEXT, 0,
+                                 reinterpret_cast<LPARAM>(L"对齐测试\r\nShort")) != FALSE,
+                    "Set aligned text fixture failed");
+            RECT bounds{};
+            Require(GetWindowRect(session.input->Handle(), &bounds) != FALSE, "Read aligned bounds failed");
+            const auto native = PrintNativeEdit(session.input->Handle());
+            session.input->Commit();
+            Require(session.model.Committed().size() == 1 &&
+                        session.model.Committed().front().textAlign == horizontal &&
+                        session.model.Committed().front().textVerticalAlign == vertical,
+                    "Committed text lost alignment properties");
+            Require(SamePixels(native, session.renderer.Flatten(bounds)),
+                    "Aligned native EDIT pixels differ from committed output");
+        }
+    }
+}
+
 void CheckLimitedTextViewport(const vispick::Bitmap& frozen) {
     const std::wstring originalText =
         L"首行\tTabbed\t中文\r\n第二行 ABCDEFGHIJKLMNOPQRSTUVWXYZ 自动换行 continued text\r\n"
@@ -463,6 +492,7 @@ int wmain(int argumentCount, wchar_t** arguments) {
         CheckTextReediting(frozen);
         CheckLiveTextStyle(frozen);
         CheckIncrementalEdits(frozen);
+        CheckTextAlignments(frozen);
         CheckLimitedTextViewport(frozen);
         constexpr const wchar_t* content =
             L"中文标注：位置与换行一致\r\nTab\tAligned\t测试\r\n自动换行 Mixed English 中文文字 0123456789 "

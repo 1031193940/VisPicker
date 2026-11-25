@@ -89,7 +89,8 @@ bool SameAnnotation(const Annotation& first, const Annotation& second) noexcept 
     return first.tool == second.tool && first.color == second.color && first.strokeWidth == second.strokeWidth &&
            first.strokePixels == second.strokePixels && first.fontSize == second.fontSize &&
            first.mosaicSize == second.mosaicSize && first.mosaicPixels == second.mosaicPixels &&
-           first.dpi == second.dpi && first.text == second.text && EqualRect(&first.bounds, &second.bounds) &&
+           first.dpi == second.dpi && first.text == second.text && first.textAlign == second.textAlign &&
+           first.textVerticalAlign == second.textVerticalAlign && EqualRect(&first.bounds, &second.bounds) &&
            std::memcmp(&first.font, &second.font, sizeof(LOGFONTW)) == 0 &&
            std::equal(first.points.begin(), first.points.end(), second.points.begin(), second.points.end(),
                       SamePoint) &&
@@ -211,7 +212,8 @@ bool HasText(const std::vector<AnnotationTextLine>& lines) noexcept {
 }
 
 Annotation MakeText(RECT bounds, const LOGFONTW& font, std::uint32_t color, std::vector<AnnotationTextLine> lines,
-                    std::wstring text, unsigned dpi, int logicalFontSize) {
+                    std::wstring text, unsigned dpi, int logicalFontSize, TextHorizontalAlign horizontalAlign,
+                    TextVerticalAlign verticalAlign) {
     if (color > 0xFFFFFF || dpi < 48 || dpi > 960 || logicalFontSize < 0 || logicalFontSize > 2048) {
         throw std::invalid_argument("Invalid text style");
     }
@@ -229,6 +231,8 @@ Annotation MakeText(RECT bounds, const LOGFONTW& font, std::uint32_t color, std:
     annotation.font = font;
     annotation.textLines = std::move(lines);
     annotation.text = std::move(text);
+    annotation.textAlign = horizontalAlign;
+    annotation.textVerticalAlign = verticalAlign;
     annotation.dpi = dpi;
     return annotation;
 }
@@ -353,6 +357,8 @@ AnnotationStyle AnnotationModel::SelectedStyle() const {
                     ? annotation->fontSize
                     : std::max(1, MulDiv(std::abs(annotation->font.lfHeight), 96, static_cast<int>(annotation->dpi)));
             if (*annotation->font.lfFaceName) { result.fontName = annotation->font.lfFaceName; }
+            result.textAlign = annotation->textAlign;
+            result.textVerticalAlign = annotation->textVerticalAlign;
         } else {
             result.strokeWidth =
                 annotation->strokeWidth > 0
@@ -739,20 +745,23 @@ RECT AnnotationModel::Redo() noexcept {
 
 RECT AnnotationModel::AddText(RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
                               std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi,
-                              int logicalFontSize) {
+                              int logicalFontSize, TextHorizontalAlign horizontalAlign,
+                              TextVerticalAlign verticalAlign) {
     if (!HasText(lines)) { return {}; }
     const auto bounds = Intersect(screenBounds, desktopBounds_);
     if (IsRectEmpty(&bounds)) { return {}; }
     if (bounds.left != screenBounds.left || bounds.top != screenBounds.top || color > 0xFFFFFF) {
         throw std::invalid_argument("Invalid text annotation origin or color");
     }
-    Commit(MakeText(bounds, actualFont, color, std::move(lines), std::move(text), dpi, logicalFontSize));
+    Commit(MakeText(bounds, actualFont, color, std::move(lines), std::move(text), dpi, logicalFontSize, horizontalAlign,
+                    verticalAlign));
     return bounds;
 }
 
 RECT AnnotationModel::ReplaceText(std::size_t index, RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
                                   std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi,
-                                  int logicalFontSize) {
+                                  int logicalFontSize, TextHorizontalAlign horizontalAlign,
+                                  TextVerticalAlign verticalAlign) {
     CancelEdit();
     if (index >= annotations_.size() || annotations_[index].tool != AnnotationTool::Text) {
         throw std::out_of_range("Text annotation replacement index");
@@ -762,7 +771,8 @@ RECT AnnotationModel::ReplaceText(std::size_t index, RECT screenBounds, const LO
     if (IsRectEmpty(&bounds) || bounds.left != screenBounds.left || bounds.top != screenBounds.top) {
         throw std::invalid_argument("Invalid replacement text bounds");
     }
-    return Replace(index, MakeText(bounds, actualFont, color, std::move(lines), std::move(text), dpi, logicalFontSize));
+    return Replace(index, MakeText(bounds, actualFont, color, std::move(lines), std::move(text), dpi, logicalFontSize,
+                                   horizontalAlign, verticalAlign));
 }
 
 } // namespace vispick

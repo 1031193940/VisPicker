@@ -95,19 +95,73 @@ struct TextInput::State {
         printing = false;
         suppressDirectPaint = false;
         redrawDisabled = false;
+        swappingEdit = false;
         font.Reset();
         editingIndex.reset();
         originalText.clear();
         originalBounds = {};
         originalFontSize = 0;
+        originalHorizontalAlign = TextHorizontalAlign::Center;
+        originalVerticalAlign = TextVerticalAlign::Center;
         logicalFontSize = 0;
+        horizontalAlign = TextHorizontalAlign::Center;
+        verticalAlign = TextVerticalAlign::Center;
         bounds = {};
         viewportHeightLimit = 0;
         InvalidateBounds(dirty);
     }
 
     void Open(RECT maximum, RECT initial, const LOGFONTW& selectedFont, std::uint32_t selectedColor,
-              unsigned selectedDpi, int selectedFontSize, const std::wstring& initialText);
+              unsigned selectedDpi, int selectedFontSize, TextHorizontalAlign selectedHorizontal,
+              TextVerticalAlign selectedVertical, const std::wstring& initialText);
+
+    [[nodiscard]] static DWORD AlignmentStyle(const TextHorizontalAlign align) noexcept {
+        switch (align) {
+        case TextHorizontalAlign::Left:
+            return ES_LEFT;
+        case TextHorizontalAlign::Right:
+            return ES_RIGHT;
+        case TextHorizontalAlign::Center:
+        default:
+            return ES_CENTER;
+        }
+    }
+
+    [[nodiscard]] HWND CreateEditWindow(LONG clientX, LONG clientY, LONG width, LONG height, TextHorizontalAlign align,
+                                        const std::wstring& initialText, WNDPROC& outOriginalProcedure) {
+        const DWORD style = WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_WANTRETURN | ES_NOHIDESEL | ES_AUTOVSCROLL |
+                            AlignmentStyle(align);
+        HWND created = CreateWindowExW(WS_EX_NOPARENTNOTIFY, L"EDIT", L"", style, static_cast<int>(clientX),
+                                       static_cast<int>(clientY), static_cast<int>(width), static_cast<int>(height),
+                                       parent, nullptr, GetModuleHandleW(nullptr), nullptr);
+        if (created == nullptr) { TextError("Create native text input"); }
+        SendMessageW(created, WM_SETFONT, reinterpret_cast<WPARAM>(font.Get()), FALSE);
+        SendMessageW(created, EM_SETLIMITTEXT, 65535, 0);
+        SendMessageW(created, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
+        RECT formatting{0, 0, width, height};
+        SendMessageW(created, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&formatting));
+        const int tabDialogUnits = 32; // Native EDIT default: eight average character widths.
+        SendMessageW(created, EM_SETTABSTOPS, 1, reinterpret_cast<LPARAM>(&tabDialogUnits));
+        if (initialText.size() > 65535) {
+            DestroyWindow(created);
+            throw std::length_error("Native text exceeds limit");
+        }
+        if (!initialText.empty() &&
+            SendMessageW(created, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(initialText.c_str())) == FALSE) {
+            DestroyWindow(created);
+            TextError("Restore native text input content");
+        }
+        SetWindowLongPtrW(created, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+        SetLastError(ERROR_SUCCESS);
+        outOriginalProcedure = reinterpret_cast<WNDPROC>(
+            SetWindowLongPtrW(created, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&State::EditProcedure)));
+        if (outOriginalProcedure == nullptr) {
+            SetWindowLongPtrW(created, GWLP_USERDATA, 0);
+            DestroyWindow(created);
+            TextError("Subclass text input");
+        }
+        return created;
+    }
 
     [[nodiscard]] std::wstring ReadText() const {
         const LRESULT length = SendMessageW(edit, WM_GETTEXTLENGTH, 0, 0);
@@ -139,6 +193,32 @@ struct TextInput::State {
         return viewportHeightLimit > 0 ? std::min(height, viewportHeightLimit) : height;
     }
 
+    void UpdateFormattingRect(const bool updateCaret = true) {
+        if (edit == nullptr) { return; }
+        RECT client{};
+        if (!GetClientRect(edit, &client)) { TextError("Read text input viewport"); }
+        const LONG width = client.right;
+        const LONG height = client.bottom;
+        LONG topOffset = 0;
+        if (verticalAlign == TextVerticalAlign::Center) {
+            const LRESULT lineCount = std::max<LRESULT>(1, SendMessageW(edit, EM_GETLINECOUNT, 0, 0));
+            const auto textHeight = static_cast<std::int64_t>(lineCount) * lineHeight;
+            if (textHeight < height) { topOffset = static_cast<LONG>((height - textHeight) / 2); }
+        }
+        const RECT desired{0, topOffset, width, height};
+        RECT current{};
+        SendMessageW(edit, EM_GETRECT, 0, reinterpret_cast<LPARAM>(&current));
+        if (!EqualRect(&current, &desired)) {
+            SendMessageW(edit, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&desired));
+            if (updateCaret && GetFocus() == edit) {
+                DWORD selStart = 0;
+                DWORD selEnd = 0;
+                SendMessageW(edit, EM_GETSEL, reinterpret_cast<WPARAM>(&selStart), reinterpret_cast<LPARAM>(&selEnd));
+                SendMessageW(edit, EM_SETSEL, static_cast<WPARAM>(selStart), static_cast<LPARAM>(selEnd));
+            }
+        }
+    }
+
     void ResizeViewport() {
         RECT current{};
         if (!GetClientRect(edit, &current)) { TextError("Read text input viewport"); }
@@ -148,8 +228,7 @@ struct TextInput::State {
         if (!SetWindowPos(edit, nullptr, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)) {
             TextError("Resize text input viewport");
         }
-        RECT formatting{0, 0, width, height};
-        SendMessageW(edit, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&formatting));
+        UpdateFormattingRect(false);
         if (layoutMessage != 0) { PostMessageW(parent, layoutMessage, editGeneration, 0); }
     }
 
@@ -164,28 +243,63 @@ struct TextInput::State {
                           SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW)) {
             TextError("Restore text layout for commit");
         }
-        RECT formatting{0, 0, width, height};
-        SendMessageW(edit, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&formatting));
+        UpdateFormattingRect(false);
     }
 
     void FitText() {
         const auto lineCount = SendMessageW(edit, EM_GETLINECOUNT, 0, 0);
         const auto desired = std::min<LRESULT>(maximumBounds.bottom - maximumBounds.top,
                                                std::max<LRESULT>(2, lineCount + 1) * lineHeight);
-        if (desired == bounds.bottom - bounds.top) { return; }
-        const RECT previousBounds = bounds;
-        auto resized = bounds;
-        resized.bottom = resized.top + static_cast<LONG>(desired);
-        SetBackground(resized);
-        ResizeViewport();
-        if (desired <= ViewportHeight() && desired < maximumBounds.bottom - maximumBounds.top) {
+        if (desired != bounds.bottom - bounds.top) {
+            const RECT previousBounds = bounds;
+            auto resized = bounds;
+            resized.bottom = resized.top + static_cast<LONG>(desired);
+            SetBackground(resized);
+            ResizeViewport();
+            RECT dirtyParent{};
+            UnionRect(&dirtyParent, &previousBounds, &resized);
+            InvalidateBounds(dirtyParent);
+            InvalidateRect(edit, nullptr, FALSE);
+        }
+        UpdateFormattingRect();
+        const auto textHeight = static_cast<std::int64_t>(std::max<LRESULT>(1, lineCount)) * lineHeight;
+        if (textHeight <= ViewportHeight()) {
             const auto first = SendMessageW(edit, EM_GETFIRSTVISIBLELINE, 0, 0);
             if (first != 0) { SendMessageW(edit, EM_LINESCROLL, 0, -first); }
         }
-        RECT dirtyParent{};
-        UnionRect(&dirtyParent, &previousBounds, &resized);
-        InvalidateBounds(dirtyParent);
-        InvalidateRect(edit, nullptr, FALSE);
+    }
+
+    void RecreateEdit(const TextHorizontalAlign nextHorizontal) {
+        if (edit == nullptr || horizontalAlign == nextHorizontal) { return; }
+        const auto currentText = ReadText();
+        DWORD selStart = 0;
+        DWORD selEnd = 0;
+        SendMessageW(edit, EM_GETSEL, reinterpret_cast<WPARAM>(&selStart), reinterpret_cast<LPARAM>(&selEnd));
+        const LRESULT firstVisible = SendMessageW(edit, EM_GETFIRSTVISIBLELINE, 0, 0);
+        const bool hadFocus = GetFocus() == edit;
+        POINT origin{bounds.left, bounds.top};
+        if (!ScreenToClient(parent, &origin)) { TextError("Map text input origin"); }
+        const LONG width = bounds.right - bounds.left;
+        const LONG height = ViewportHeight();
+        WNDPROC nextOriginalProcedure = nullptr;
+        const ScopedFlag swapping(swappingEdit, true);
+        HWND replacement =
+            CreateEditWindow(origin.x, origin.y, width, height, nextHorizontal, currentText, nextOriginalProcedure);
+        const HWND previous = edit;
+        const WNDPROC previousProcedure = originalProcedure;
+        edit = replacement;
+        originalProcedure = nextOriginalProcedure;
+        horizontalAlign = nextHorizontal;
+        UpdateFormattingRect(false);
+        if (firstVisible > 0) { SendMessageW(edit, EM_LINESCROLL, 0, firstVisible); }
+        SendMessageW(edit, EM_SETSEL, static_cast<WPARAM>(selStart), static_cast<LPARAM>(selEnd));
+        if (hadFocus || IsWindowVisible(parent)) { SetFocus(edit); }
+        if (previousProcedure != nullptr) {
+            SetWindowLongPtrW(previous, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(previousProcedure));
+        }
+        SetWindowLongPtrW(previous, GWLP_USERDATA, 0);
+        DestroyWindow(previous);
+        FitText();
     }
 
     void BlitBackground(HDC target, LONG width, LONG height) const noexcept {
@@ -263,7 +377,7 @@ struct TextInput::State {
             SendMessageW(window, EM_SETSEL, 0, -1);
             return 0;
         }
-        if (message == WM_KILLFOCUS) { state->PostCommit(); }
+        if (message == WM_KILLFOCUS && !state->swappingEdit) { state->PostCommit(); }
         if (message == WM_IME_STARTCOMPOSITION || (message == WM_IME_COMPOSITION && (data & GCS_COMPSTR) != 0)) {
             state->composing = true;
         } else if (message == WM_IME_ENDCOMPOSITION) {
@@ -318,6 +432,7 @@ struct TextInput::State {
     bool printing = false;
     bool suppressDirectPaint = false;
     bool redrawDisabled = false;
+    bool swappingEdit = false;
     WNDPROC originalProcedure = nullptr;
     RECT bounds{};
     RECT maximumBounds{};
@@ -329,9 +444,13 @@ struct TextInput::State {
     RECT originalBounds{};
     LOGFONTW originalFont{};
     int originalFontSize = 0;
+    TextHorizontalAlign originalHorizontalAlign = TextHorizontalAlign::Center;
+    TextVerticalAlign originalVerticalAlign = TextVerticalAlign::Center;
     std::uint32_t originalColor = 0;
     std::uint32_t color = 0;
     int logicalFontSize = 0;
+    TextHorizontalAlign horizontalAlign = TextHorizontalAlign::Center;
+    TextVerticalAlign verticalAlign = TextVerticalAlign::Center;
     LOGFONTW actualFont{};
     UniqueGdiObject<HFONT> font;
     std::unique_ptr<DibSection> background;
@@ -361,12 +480,15 @@ std::optional<std::size_t> TextInput::EditingIndex() const noexcept {
 }
 
 void TextInput::State::Open(RECT maximum, RECT initial, const LOGFONTW& selectedFont, std::uint32_t selectedColor,
-                            unsigned selectedDpi, int selectedFontSize, const std::wstring& initialText) {
+                            unsigned selectedDpi, int selectedFontSize, TextHorizontalAlign selectedHorizontal,
+                            TextVerticalAlign selectedVertical, const std::wstring& initialText) {
     maximumBounds = maximum;
     actualFont = selectedFont;
     color = selectedColor;
     dpi = selectedDpi;
     logicalFontSize = selectedFontSize;
+    horizontalAlign = selectedHorizontal;
+    verticalAlign = selectedVertical;
     try {
         font.Reset(CreateFontIndirectW(&actualFont));
         if (font.Get() == nullptr) { TextError("Create text input font"); }
@@ -385,30 +507,12 @@ void TextInput::State::Open(RECT maximum, RECT initial, const LOGFONTW& selected
         if (!ScreenToClient(parent, &client)) { TextError("Map text input origin"); }
         const LONG width = bounds.right - bounds.left;
         const LONG height = bounds.bottom - bounds.top;
-        edit = CreateWindowExW(WS_EX_NOPARENTNOTIFY, L"EDIT", L"",
-                               WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_WANTRETURN | ES_NOHIDESEL | ES_AUTOVSCROLL,
-                               client.x, client.y, width, height, parent, nullptr, GetModuleHandleW(nullptr), nullptr);
-        if (edit == nullptr) { TextError("Create native text input"); }
-        SendMessageW(edit, WM_SETFONT, reinterpret_cast<WPARAM>(font.Get()), FALSE);
-        SendMessageW(edit, EM_SETLIMITTEXT, 65535, 0);
-        SendMessageW(edit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
-        RECT formatting{0, 0, width, height};
-        SendMessageW(edit, EM_SETRECTNP, 0, reinterpret_cast<LPARAM>(&formatting));
-        const int tabDialogUnits = 32; // Native EDIT default: eight average character widths.
-        SendMessageW(edit, EM_SETTABSTOPS, 1, reinterpret_cast<LPARAM>(&tabDialogUnits));
-        SetWindowLongPtrW(edit, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
-        SetLastError(ERROR_SUCCESS);
-        originalProcedure = reinterpret_cast<WNDPROC>(
-            SetWindowLongPtrW(edit, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&State::EditProcedure)));
-        if (originalProcedure == nullptr) { TextError("Subclass text input"); }
+        edit = CreateEditWindow(client.x, client.y, width, height, horizontalAlign, initialText, originalProcedure);
         editGeneration = NextEditGeneration();
-        if (initialText.size() > 65535) { throw std::length_error("Native text exceeds limit"); }
-        if (!initialText.empty() &&
-            SendMessageW(edit, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(initialText.c_str())) == FALSE) {
-            TextError("Restore native text input content");
-        }
+        FitText();
         if (IsWindowVisible(parent)) { SetFocus(edit); }
         InvalidateBounds(originalBounds);
+        InvalidateBounds(bounds);
         InvalidateRect(edit, nullptr, FALSE);
         RefreshDisplay();
     } catch (...) {
@@ -450,7 +554,7 @@ void TextInput::Begin(POINT screenPoint, unsigned dpi) {
     font.lfQuality = ANTIALIASED_QUALITY;
     wcscpy_s(font.lfFaceName, style.fontName.c_str());
     state_->Open(maximum, {maximum.left, maximum.top, maximum.right, maximum.top}, font, style.color, dpi,
-                 style.fontSize, L"");
+                 style.fontSize, style.textAlign, style.textVerticalAlign, L"");
 }
 
 void TextInput::BeginEdit(std::size_t annotationIndex) {
@@ -476,6 +580,8 @@ void TextInput::BeginEdit(std::size_t annotationIndex) {
         annotation.fontSize > 0
             ? annotation.fontSize
             : std::max(1, MulDiv(std::abs(annotation.font.lfHeight), 96, static_cast<int>(annotation.dpi)));
+    state_->originalHorizontalAlign = annotation.textAlign;
+    state_->originalVerticalAlign = annotation.textVerticalAlign;
     state_->originalColor = annotation.color;
     const auto selection = state_->model.Selection();
     auto maximum = annotation.bounds;
@@ -483,7 +589,7 @@ void TextInput::BeginEdit(std::size_t annotationIndex) {
     maximum.bottom = std::min(maximum.bottom, state_->model.DesktopBounds().bottom);
     state_->renderer.SetHiddenAnnotation(annotationIndex);
     state_->Open(maximum, annotation.bounds, annotation.font, annotation.color, annotation.dpi,
-                 state_->originalFontSize, state_->originalText);
+                 state_->originalFontSize, annotation.textAlign, annotation.textVerticalAlign, state_->originalText);
 }
 
 void TextInput::ApplyStyle(const AnnotationStyle& style) {
@@ -513,6 +619,12 @@ void TextInput::ApplyStyle(const AnnotationStyle& style) {
     }
     state_->logicalFontSize = style.fontSize;
     state_->color = style.color;
+    state_->verticalAlign = style.textVerticalAlign;
+    if (style.textAlign != state_->horizontalAlign) {
+        state_->RecreateEdit(style.textAlign);
+    } else {
+        state_->UpdateFormattingRect();
+    }
     InvalidateRect(state_->edit, nullptr, FALSE);
     state_->RefreshDisplay();
 }
@@ -547,6 +659,8 @@ RECT TextInput::Commit() {
         const auto rawText = state_->ReadText();
         if (state_->editingIndex && rawText == state_->originalText && state_->color == state_->originalColor &&
             state_->logicalFontSize == state_->originalFontSize &&
+            state_->horizontalAlign == state_->originalHorizontalAlign &&
+            state_->verticalAlign == state_->originalVerticalAlign &&
             std::memcmp(&state_->actualFont, &state_->originalFont, sizeof(LOGFONTW)) == 0) {
             state_->DestroyEdit();
             if (restoreFocus && GetForegroundWindow() == state_->parent) { SetFocus(state_->parent); }
@@ -592,12 +706,13 @@ RECT TextInput::Commit() {
         }
         RECT modelDirty{};
         if (state_->editingIndex) {
-            modelDirty =
-                state_->model.ReplaceText(*state_->editingIndex, state_->bounds, state_->actualFont, state_->color,
-                                          std::move(lines), rawText, state_->dpi, state_->logicalFontSize);
+            modelDirty = state_->model.ReplaceText(
+                *state_->editingIndex, state_->bounds, state_->actualFont, state_->color, std::move(lines), rawText,
+                state_->dpi, state_->logicalFontSize, state_->horizontalAlign, state_->verticalAlign);
         } else {
             modelDirty = state_->model.AddText(state_->bounds, state_->actualFont, state_->color, std::move(lines),
-                                               rawText, state_->dpi, state_->logicalFontSize);
+                                               rawText, state_->dpi, state_->logicalFontSize, state_->horizontalAlign,
+                                               state_->verticalAlign);
         }
         UnionRect(&dirty, &dirty, &modelDirty);
     } catch (...) {

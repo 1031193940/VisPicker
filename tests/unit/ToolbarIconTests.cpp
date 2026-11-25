@@ -23,7 +23,7 @@ TEST_CASE("Toolbar glyphs draw inside their bounds at each supported UI scale") 
         const LONG size = MulDiv(32, dpi, 96);
         const RECT bounds{8, 8, 8 + size, 8 + size};
         for (int value = static_cast<int>(vispick::ToolbarIcon::Rectangle);
-             value <= static_cast<int>(vispick::ToolbarIcon::Reset); ++value) {
+             value <= static_cast<int>(vispick::ToolbarIcon::AlignMiddle); ++value) {
             Clear(image);
             const auto icon = static_cast<vispick::ToolbarIcon>(value);
             vispick::DrawToolbarIcon(context, bounds, icon, dpi, pen.Get(), 2);
@@ -75,7 +75,7 @@ TEST_CASE("Toolbar GDI fallback preserves a geometric pen and restores the devic
 TEST_CASE("Repeated toolbar drawing releases per-draw resources") {
     vispick::DibSection image(64, 64);
     const auto pen = vispick::CreateToolbarIconPen(192);
-    for (int value = 1; value <= static_cast<int>(vispick::ToolbarIcon::Reset); ++value) {
+    for (int value = 1; value <= static_cast<int>(vispick::ToolbarIcon::AlignMiddle); ++value) {
         vispick::DrawToolbarIcon(image.DeviceContext(), {0, 0, 64, 64}, static_cast<vispick::ToolbarIcon>(value), 192,
                                  pen.Get(), 2);
     }

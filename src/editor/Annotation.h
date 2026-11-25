@@ -12,6 +12,8 @@
 namespace vispick {
 
 enum class AnnotationTool { None, Rectangle, Ellipse, Arrow, Pen, Text, Mosaic };
+enum class TextHorizontalAlign { Left, Center, Right };
+enum class TextVerticalAlign { Top, Center };
 
 enum class AnnotationHandle {
     None,
@@ -39,6 +41,8 @@ struct AnnotationStyle {
     int fontSize = 20;
     std::wstring fontName = L"Microsoft YaHei";
     int mosaicSize = 10;
+    TextHorizontalAlign textAlign = TextHorizontalAlign::Center;
+    TextVerticalAlign textVerticalAlign = TextVerticalAlign::Center;
 };
 
 struct AnnotationTextLine {
@@ -60,6 +64,8 @@ struct Annotation {
     LOGFONTW font{};
     std::vector<AnnotationTextLine> textLines;
     std::wstring text; // Original EDIT contents; visual wrapping does not insert hard line breaks.
+    TextHorizontalAlign textAlign = TextHorizontalAlign::Center;
+    TextVerticalAlign textVerticalAlign = TextVerticalAlign::Center;
     unsigned dpi = 96;
     std::shared_ptr<const Bitmap> mosaic;
 };
@@ -113,9 +119,12 @@ public:
     RECT Redo() noexcept;
     RECT AddText(RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
                  std::vector<AnnotationTextLine> lines, std::wstring text = {}, unsigned dpi = 96,
-                 int logicalFontSize = 0);
+                 int logicalFontSize = 0, TextHorizontalAlign horizontalAlign = TextHorizontalAlign::Center,
+                 TextVerticalAlign verticalAlign = TextVerticalAlign::Center);
     RECT ReplaceText(std::size_t index, RECT screenBounds, const LOGFONTW& actualFont, std::uint32_t color,
-                     std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi, int logicalFontSize = 0);
+                     std::vector<AnnotationTextLine> lines, std::wstring text, unsigned dpi, int logicalFontSize = 0,
+                     TextHorizontalAlign horizontalAlign = TextHorizontalAlign::Center,
+                     TextVerticalAlign verticalAlign = TextVerticalAlign::Center);
 
 private:
     enum class ChangeKind { Add, Replace, Remove };

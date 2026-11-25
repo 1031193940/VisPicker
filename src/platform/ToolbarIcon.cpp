@@ -230,6 +230,33 @@ void DrawToolbarIcon(HDC context, RECT bounds, ToolbarIcon icon, int dpi, HPEN s
         path({{5, 10}, {8, 5}, {16, 5}, {20, 10}, {19, 17}, {13, 20}, {7, 17}});
         path({{4, 4}, {4, 11}, {11, 11}});
         break;
+    case ToolbarIcon::AlignLeft:
+        path({{4, 6}, {20, 6}});
+        path({{4, 12}, {15, 12}});
+        path({{4, 18}, {18, 18}});
+        break;
+    case ToolbarIcon::AlignCenter:
+        path({{4, 6}, {20, 6}});
+        path({{7, 12}, {17, 12}});
+        path({{5, 18}, {19, 18}});
+        break;
+    case ToolbarIcon::AlignRight:
+        path({{4, 6}, {20, 6}});
+        path({{9, 12}, {20, 12}});
+        path({{6, 18}, {20, 18}});
+        break;
+    case ToolbarIcon::AlignTop:
+        path({{4, 5}, {20, 5}});
+        path({{12, 9}, {12, 19}});
+        path({{8, 13}, {12, 9}, {16, 13}});
+        break;
+    case ToolbarIcon::AlignMiddle:
+        path({{4, 12}, {20, 12}});
+        path({{12, 4}, {12, 9}});
+        path({{9, 6}, {12, 9}, {15, 6}});
+        path({{12, 20}, {12, 15}});
+        path({{9, 18}, {12, 15}, {15, 18}});
+        break;
     case ToolbarIcon::None:
         break;
     }

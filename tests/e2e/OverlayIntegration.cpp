@@ -236,21 +236,26 @@ RECT ActiveTextBounds(const vispick::Overlay& overlay) {
 }
 
 RECT ScreenshotToolbarBounds(const RECT selection, const vispick::MonitorInfo& monitor, const bool properties = false,
-                             const RECT excluded = {}) {
+                             const RECT excluded = {}, const bool textProperties = false) {
     const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
     const LONG width = std::min<LONG>(scale(400), monitor.bounds.right - monitor.bounds.left);
-    return vispick::PlaceToolbar(selection, {width, scale(properties ? 70 : 36)}, monitor.bounds, scale(6), excluded);
+    return vispick::PlaceToolbar(selection,
+                                 {width, scale(textProperties ? 104
+                                               : properties   ? 70
+                                                              : 36)},
+                                 monitor.bounds, scale(6), excluded);
 }
 
 void ClickAnnotationProperty(vispick::Overlay& overlay, const RECT selection, const RECT desktop,
-                             const vispick::MonitorInfo& monitor, const LONG property, const LONG count = 11) {
+                             const vispick::MonitorInfo& monitor, const LONG property, const LONG count = 11,
+                             const bool textProperties = false) {
     vispick::PumpWindowMessages();
     const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
-    const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true, ActiveTextBounds(overlay));
+    const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true, ActiveTextBounds(overlay), textProperties);
     const LONG margin = scale(4);
     const LONG slotWidth = (toolbar.right - toolbar.left - margin * 2) / count;
     const POINT point{toolbar.left + margin + property * slotWidth + slotWidth / 2,
-                      (toolbar.top + scale(38) + toolbar.bottom - margin) / 2};
+                      (toolbar.top + scale(38) + toolbar.top + scale(66)) / 2};
     const HWND edit = FindWindowExW(overlay.Handle(), nullptr, L"EDIT", nullptr);
     POINT client = point;
     Require(ScreenToClient(overlay.Handle(), &client) != FALSE, "Cannot locate an annotation property");
@@ -577,7 +582,7 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
     CheckSamePixels(redoneTextPixels.View(), changedTextPixels.View(), "Text replacement redo changed its pixels");
 
     // Text uses the same eleven slots, but its last three are font sizes, not stroke widths.
-    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10, 11, true);
     PressKey(overlay, VK_RETURN);
     edit = NativeTextEdit(overlay);
     Require(edit && NativeText(edit) == changedText && overlay.Active(), "Enter did not reopen selected text");
@@ -591,12 +596,12 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
                 "Text properties changed stroke width instead of the native font size");
     };
     checkFontSize(28);
-    ClickAnnotationProperty(overlay, selection, desktop, monitor, 8);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 8, 11, true);
     Require(NativeTextEdit(overlay) != nullptr, "Changing text size unexpectedly closed the active editor");
     checkFontSize(14);
-    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10, 11, true);
     checkFontSize(28);
-    ClickAnnotationProperty(overlay, selection, desktop, monitor, 1);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 1, 11, true);
     Require(NativeText(NativeTextEdit(overlay)) == changedText, "Editing text properties lost its content");
     CommitNativeText(overlay);
     DragAnnotation(overlay, pointAt(90, 80), pointAt(50, 110), desktop);
@@ -626,7 +631,7 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
     begin();
     PressKey(overlay, 'T');
     const auto scale = [&](int logical) { return MulDiv(logical, static_cast<int>(monitor.dpiX), 96); };
-    const RECT bottomToolbar = ScreenshotToolbarBounds(selection, monitor, true);
+    const RECT bottomToolbar = ScreenshotToolbarBounds(selection, monitor, true, {}, true);
     const POINT bottomTextOrigin{bottomToolbar.left + scale(10), bottomToolbar.top - scale(90)};
     Click(overlay, bottomTextOrigin, desktop);
     edit = NativeTextEdit(overlay);
@@ -648,7 +653,7 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
     const auto checkTextToolbar = [&] {
         vispick::PumpWindowMessages();
         const RECT editBounds = ActiveTextBounds(overlay);
-        const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true, editBounds);
+        const RECT toolbar = ScreenshotToolbarBounds(selection, monitor, true, editBounds, true);
         Require(!IntersectRect(&intersection, &editBounds, &toolbar),
                 "Growing native text covers its contextual toolbar");
         UpdateWindow(overlay.Handle());
@@ -664,14 +669,14 @@ void RunAnnotationEditingTests(const RECT desktop, const vispick::MonitorInfo& m
     };
     saveVisual(L"text-editing-properties.png", grownEditBounds);
     checkTextToolbar();
-    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10);
+    ClickAnnotationProperty(overlay, selection, desktop, monitor, 10, 11, true);
     checkFontSize(28);
     checkTextToolbar();
     Require(NativeText(NativeTextEdit(overlay)) == bottomText, "Changing bottom text font size lost multiline content");
     saveVisual(L"text-editing-large-font.png", ActiveTextBounds(overlay));
 
     // A real toolbar hit must also commit the active text before switching back to drawing.
-    const RECT activeToolbar = ScreenshotToolbarBounds(selection, monitor, true, ActiveTextBounds(overlay));
+    const RECT activeToolbar = ScreenshotToolbarBounds(selection, monitor, true, ActiveTextBounds(overlay), true);
     const LONG margin = scale(4);
     const LONG toolWidth = (activeToolbar.right - activeToolbar.left - margin * 2) / 11;
     const POINT rectangleTool{activeToolbar.left + margin + toolWidth / 2,

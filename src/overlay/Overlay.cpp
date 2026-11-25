@@ -76,20 +76,27 @@ void Fill(const HDC context, const RECT rectangle, const COLORREF color) {
     FillRect(context, &rectangle, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
 }
 
-void DrawDashedFrame(const HDC context, RECT frame, const COLORREF accent, const int layers) {
-    if (IsRectEmpty(&frame)) { return; }
-    const UniqueGdiObject<HPEN> dashedPen(CreatePen(PS_DASH, 1, accent));
-    if (!dashedPen.Get()) { throw std::runtime_error("Create dashed overlay pen failed"); }
-    const SavedDc saved(context);
-    SetBkMode(context, TRANSPARENT);
-    SelectObject(context, dashedPen.Get());
-    SelectObject(context, GetStockObject(NULL_BRUSH));
-    SetDCBrushColor(context, RGB(255, 255, 255));
-    const auto whiteBrush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
-    for (int layer = 0; layer < layers; ++layer) {
-        FrameRect(context, &frame, whiteBrush);
-        Rectangle(context, frame.left, frame.top, frame.right, frame.bottom);
-        InflateRect(&frame, 1, 1);
+void DrawDashedFrame(const HDC context, const RECT frame, const COLORREF color, const LONG dash, const LONG gap,
+                     const LONG thickness) noexcept {
+    if (IsRectEmpty(&frame) || dash <= 0 || thickness <= 0) { return; }
+    const LONG step = dash + std::max(1L, gap);
+    SetDCBrushColor(context, color);
+    const auto brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
+    const LONG horizontalThickness = std::min(thickness, frame.bottom - frame.top);
+    const LONG verticalThickness = std::min(thickness, frame.right - frame.left);
+    for (LONG x = frame.left; x < frame.right; x += step) {
+        const LONG end = std::min(x + dash, frame.right);
+        const RECT topSegment{x, frame.top, end, frame.top + horizontalThickness};
+        const RECT bottomSegment{x, frame.bottom - horizontalThickness, end, frame.bottom};
+        FillRect(context, &topSegment, brush);
+        FillRect(context, &bottomSegment, brush);
+    }
+    for (LONG y = frame.top; y < frame.bottom; y += step) {
+        const LONG end = std::min(y + dash, frame.bottom);
+        const RECT leftSegment{frame.left, y, frame.left + verticalThickness, end};
+        const RECT rightSegment{frame.right - verticalThickness, y, frame.right, end};
+        FillRect(context, &leftSegment, brush);
+        FillRect(context, &rightSegment, brush);
     }
 }
 
@@ -149,6 +156,8 @@ enum class ButtonKind {
     Color,
     Width,
     Font,
+    TextAlign,
+    TextVerticalAlign,
     MosaicSize,
     GifFrameRatePicker,
     GifFrameRate
@@ -561,10 +570,12 @@ struct Overlay::State {
         const RECT monitor = MonitorAt({selected.right - 1, selected.bottom - 1});
         const auto propertyTool = PropertyTool();
         const bool properties = propertyTool != AnnotationTool::None;
+        const bool textProperties = propertyTool == AnnotationTool::Text;
         const LONG width = std::min<LONG>(Scale(mode == CaptureMode::Gif ? 320 : 400), monitor.right - monitor.left);
         RECT editorBounds{};
         if (textInput && textInput->Active()) { GetWindowRect(textInput->Handle(), &editorBounds); }
-        toolbar = PlaceToolbar(selected, {width, Scale(properties ? 70 : 36)}, monitor, Scale(6), editorBounds);
+        const LONG toolbarHeight = Scale(textProperties ? 104 : properties ? 70 : 36);
+        toolbar = PlaceToolbar(selected, {width, toolbarHeight}, monitor, Scale(6), editorBounds);
         RECT overlap{};
         if (IntersectRect(&overlap, &toolbar, &editorBounds)) {
             // A tall editor on a narrow monitor may leave no adjacent space.
@@ -620,6 +631,8 @@ struct Overlay::State {
         const bool mosaic = propertyTool == AnnotationTool::Mosaic;
         const int propertyCount = mosaic ? 3 : 11;
         const LONG propertySlot = (width - margin * 2) / propertyCount;
+        const LONG rowTwoTop = toolbar.top + Scale(38);
+        const LONG rowTwoBottom = toolbar.top + Scale(66);
         left = toolbar.left + margin;
         for (int index = 0; index < propertyCount; ++index) {
             const auto kind = mosaic                                 ? ButtonKind::MosaicSize
@@ -634,12 +647,36 @@ struct Overlay::State {
                               : kind == ButtonKind::Width ? Text(ChineseWidths[value], EnglishWidths[value])
                               : kind == ButtonKind::Font  ? Text(ChineseFonts[value], EnglishFonts[value])
                                                           : Text(ChineseMosaics[value], EnglishMosaics[value]);
-            buttons.push_back({{left, toolbar.top + Scale(38), left + propertySlot, toolbar.bottom - margin},
-                               kind,
-                               value,
-                               hint,
-                               icon});
+            buttons.push_back({{left, rowTwoTop, left + propertySlot, rowTwoBottom}, kind, value, hint, icon});
             left += propertySlot;
+        }
+        if (!textProperties) { return; }
+        const LONG rowThreeTop = toolbar.top + Scale(72);
+        const LONG rowThreeBottom = toolbar.bottom - margin;
+        const LONG alignSlot = (width - margin * 2) / 5;
+        left = toolbar.left + margin;
+        static constexpr std::array<const wchar_t*, 3> ChineseHAlign{L"左对齐", L"居中对齐", L"右对齐"};
+        static constexpr std::array<const wchar_t*, 3> EnglishHAlign{L"Align left", L"Align center", L"Align right"};
+        static constexpr std::array horizontalIcons{ToolbarIcon::AlignLeft, ToolbarIcon::AlignCenter,
+                                                    ToolbarIcon::AlignRight};
+        for (int index = 0; index < 3; ++index) {
+            buttons.push_back({{left, rowThreeTop, left + alignSlot, rowThreeBottom},
+                               ButtonKind::TextAlign,
+                               index,
+                               Text(ChineseHAlign[index], EnglishHAlign[index]),
+                               horizontalIcons[index]});
+            left += alignSlot;
+        }
+        static constexpr std::array<const wchar_t*, 2> ChineseVAlign{L"顶端对齐", L"垂直居中"};
+        static constexpr std::array<const wchar_t*, 2> EnglishVAlign{L"Align top", L"Align middle"};
+        static constexpr std::array verticalIcons{ToolbarIcon::AlignTop, ToolbarIcon::AlignMiddle};
+        for (int index = 0; index < 2; ++index) {
+            buttons.push_back({{left, rowThreeTop, left + alignSlot, rowThreeBottom},
+                               ButtonKind::TextVerticalAlign,
+                               index,
+                               Text(ChineseVAlign[index], EnglishVAlign[index]),
+                               verticalIcons[index]});
+            left += alignSlot;
         }
     }
 
@@ -651,11 +688,15 @@ struct Overlay::State {
             bool selected = false;
             if (annotations) {
                 const auto style = PropertyStyle();
-                selected = (button.kind == ButtonKind::Tool && static_cast<int>(PropertyTool()) == button.value) ||
-                           (button.kind == ButtonKind::Color && style.color == PresetColors[button.value]) ||
-                           (button.kind == ButtonKind::Width && style.strokeWidth == StrokeWidths[button.value]) ||
-                           (button.kind == ButtonKind::Font && style.fontSize == FontSizes[button.value]) ||
-                           (button.kind == ButtonKind::MosaicSize && style.mosaicSize == MosaicSizes[button.value]);
+                selected =
+                    (button.kind == ButtonKind::Tool && static_cast<int>(PropertyTool()) == button.value) ||
+                    (button.kind == ButtonKind::Color && style.color == PresetColors[button.value]) ||
+                    (button.kind == ButtonKind::Width && style.strokeWidth == StrokeWidths[button.value]) ||
+                    (button.kind == ButtonKind::Font && style.fontSize == FontSizes[button.value]) ||
+                    (button.kind == ButtonKind::TextAlign && static_cast<int>(style.textAlign) == button.value) ||
+                    (button.kind == ButtonKind::TextVerticalAlign &&
+                     static_cast<int>(style.textVerticalAlign) == button.value) ||
+                    (button.kind == ButtonKind::MosaicSize && style.mosaicSize == MosaicSizes[button.value]);
             }
             if (selected || button.kind == ButtonKind::Confirm ||
                 (button.kind == ButtonKind::GifFrameRate && button.value == gifFramesPerSecond)) {
@@ -663,7 +704,8 @@ struct Overlay::State {
             } else if (PtInRect(&button.bounds, pointer)) {
                 Fill(context, local, RGB(75, 78, 85));
             }
-            if (button.kind == ButtonKind::Save) {
+            if (button.kind == ButtonKind::Save ||
+                (button.kind == ButtonKind::TextVerticalAlign && button.value == 0)) {
                 Fill(context, {local.left, local.top + Scale(5), local.left + Scale(1), local.bottom - Scale(5)},
                      RGB(79, 83, 91));
             }
@@ -783,8 +825,10 @@ struct Overlay::State {
         const RECT editor = TextEditorBounds();
         if (IsRectEmpty(&editor)) { return; }
         RECT frame = Local(editor);
-        InflateRect(&frame, 1, 1);
-        DrawDashedFrame(context, frame, Accent(), std::clamp(Scale(1), 1, 2));
+        const LONG pad = std::max(1L, static_cast<LONG>(Scale(2)));
+        InflateRect(&frame, pad, pad);
+        DrawDashedFrame(context, frame, Accent(), std::max(4L, static_cast<LONG>(Scale(5))),
+                        std::max(3L, static_cast<LONG>(Scale(4))), std::clamp<LONG>(Scale(1), 1, 2));
     }
 
     void Compose(const RECT screenDirty) {
@@ -807,11 +851,15 @@ struct Overlay::State {
         SetBkMode(context, TRANSPARENT);
         SetTextColor(context, RGB(245, 245, 245));
         const RECT lastGuide = LastSelectionGuideBounds();
-        if (!IsRectEmpty(&lastGuide)) { DrawDashedFrame(context, Local(lastGuide), Accent(), 1); }
+        if (!IsRectEmpty(&lastGuide)) {
+            DrawDashedFrame(context, Local(lastGuide), Accent(), std::max(5L, static_cast<LONG>(Scale(6))),
+                            std::max(3L, static_cast<LONG>(Scale(4))), std::clamp<LONG>(Scale(1), 1, 2));
+        }
         if (!IsRectEmpty(&selected)) {
             const RECT outline = Local(selected);
             if (PreviewingLastSelection()) {
-                DrawDashedFrame(context, outline, Accent(), std::clamp(Scale(1), 1, 2));
+                DrawDashedFrame(context, outline, Accent(), std::max(5L, static_cast<LONG>(Scale(6))),
+                                std::max(3L, static_cast<LONG>(Scale(4))), std::clamp<LONG>(Scale(1), 1, 2));
             } else {
                 SetDCBrushColor(context, Accent());
                 FrameRect(context, &outline, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
@@ -1032,6 +1080,10 @@ struct Overlay::State {
         if (button.kind == ButtonKind::Color) { style.color = PresetColors[button.value]; }
         if (button.kind == ButtonKind::Width) { style.strokeWidth = StrokeWidths[button.value]; }
         if (button.kind == ButtonKind::Font) { style.fontSize = FontSizes[button.value]; }
+        if (button.kind == ButtonKind::TextAlign) { style.textAlign = static_cast<TextHorizontalAlign>(button.value); }
+        if (button.kind == ButtonKind::TextVerticalAlign) {
+            style.textVerticalAlign = static_cast<TextVerticalAlign>(button.value);
+        }
         if (button.kind == ButtonKind::MosaicSize) { style.mosaicSize = MosaicSizes[button.value]; }
         if (textInput && textInput->Active()) {
             textInput->ApplyStyle(style);
@@ -1054,6 +1106,7 @@ struct Overlay::State {
 
     void Activate(const Button button) {
         if (button.kind == ButtonKind::Color || button.kind == ButtonKind::Width || button.kind == ButtonKind::Font ||
+            button.kind == ButtonKind::TextAlign || button.kind == ButtonKind::TextVerticalAlign ||
             button.kind == ButtonKind::MosaicSize) {
             ChangeProperty(button);
             return;
