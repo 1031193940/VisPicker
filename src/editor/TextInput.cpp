@@ -64,8 +64,10 @@ struct TextInput::State {
         if (IsRectEmpty(&rectangle)) { return; }
         POINT origin{rectangle.left, rectangle.top};
         if (!ScreenToClient(parent, &origin)) { return; }
-        const RECT client{origin.x, origin.y, origin.x + rectangle.right - rectangle.left,
-                          origin.y + rectangle.bottom - rectangle.top};
+        RECT client{origin.x, origin.y, origin.x + rectangle.right - rectangle.left,
+                    origin.y + rectangle.bottom - rectangle.top};
+        const LONG borderMargin = std::max(4L, static_cast<LONG>(MulDiv(4, static_cast<int>(dpi), 96)));
+        InflateRect(&client, borderMargin, borderMargin);
         InvalidateRect(parent, &client, FALSE);
     }
 
@@ -171,10 +173,7 @@ struct TextInput::State {
         const auto desired = std::min<LRESULT>(maximumBounds.bottom - maximumBounds.top,
                                                std::max<LRESULT>(2, lineCount + 1) * lineHeight);
         if (desired == bounds.bottom - bounds.top) { return; }
-        POINT oldOrigin{bounds.left, bounds.top};
-        ScreenToClient(parent, &oldOrigin);
-        const RECT oldClient{oldOrigin.x, oldOrigin.y, oldOrigin.x + bounds.right - bounds.left,
-                             oldOrigin.y + bounds.bottom - bounds.top};
+        const RECT previousBounds = bounds;
         auto resized = bounds;
         resized.bottom = resized.top + static_cast<LONG>(desired);
         SetBackground(resized);
@@ -183,7 +182,9 @@ struct TextInput::State {
             const auto first = SendMessageW(edit, EM_GETFIRSTVISIBLELINE, 0, 0);
             if (first != 0) { SendMessageW(edit, EM_LINESCROLL, 0, -first); }
         }
-        InvalidateRect(parent, &oldClient, FALSE);
+        RECT dirtyParent{};
+        UnionRect(&dirtyParent, &previousBounds, &resized);
+        InvalidateBounds(dirtyParent);
         InvalidateRect(edit, nullptr, FALSE);
     }
 

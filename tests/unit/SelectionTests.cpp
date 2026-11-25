@@ -358,3 +358,47 @@ TEST_CASE("Toolbar fallback stays below text that begins above a later screensho
     RECT overlap{};
     CHECK(IntersectRect(&overlap, &settled, &viewport) == FALSE);
 }
+
+TEST_CASE("Last selection clipping discards off-desktop regions and clamps partial overlaps") {
+    CHECK_FALSE(vispick::ClipLastSelection(std::nullopt, Desktop).has_value());
+    CHECK_FALSE(vispick::ClipLastSelection(RECT{3000, 2000, 3200, 2200}, Desktop).has_value());
+    const auto inside = vispick::ClipLastSelection(RECT{-400, -300, 200, 150}, Desktop);
+    REQUIRE(inside.has_value());
+    CHECK(Same(*inside, {-400, -300, 200, 150}));
+    const auto partial = vispick::ClipLastSelection(RECT{-2400, -100, 200, 1800}, Desktop);
+    REQUIRE(partial.has_value());
+    CHECK(Same(*partial, {-1920, -100, 200, 1440}));
+}
+
+TEST_CASE("Last selection edge snapping aligns dragged corners, resizes, and moved boxes within threshold") {
+    constexpr RECT last{100, 120, 500, 420};
+    // Closer edge wins on each axis; coordinates outside threshold stay untouched.
+    const POINT snapped = vispick::SnapPointToRectEdges({105, 414}, last, 8);
+    CHECK(snapped.x == 100);
+    CHECK(snapped.y == 420);
+    const POINT unsnapped = vispick::SnapPointToRectEdges({109, 411}, last, 8);
+    CHECK(unsnapped.x == 109);
+    CHECK(unsnapped.y == 411);
+
+    // Dragging a new box snaps its active corner to last selection edges when snap target is provided.
+    vispick::Selection selection;
+    selection.Reset(Desktop);
+    selection.Begin({100, 120}, 4);
+    selection.Drag({495, 426}, last, 8);
+    CHECK(Same(selection.Bounds(), last));
+    selection.End({495, 426}, Desktop, last, 8);
+    CHECK(Same(selection.Bounds(), last));
+
+    // Moving a selection snaps its edges to the last selection while preserving its size.
+    selection.Set({200, 200, 350, 300});
+    selection.Begin({250, 250}, 4);
+    selection.Drag({155, 174}, last, 8); // Unsnapped left=105 -> snaps to 100; top=124 -> snaps to 120.
+    CHECK(Same(selection.Bounds(), {100, 120, 250, 220}));
+    selection.End({155, 174}, Desktop, last, 8);
+    CHECK(Same(selection.Bounds(), {100, 120, 250, 220}));
+
+    // Resizing a handle snaps the dragged edge to the last selection boundary.
+    selection.Begin({250, 220}, 4);
+    selection.Drag({506, 415}, last, 8);
+    CHECK(Same(selection.Bounds(), last));
+}

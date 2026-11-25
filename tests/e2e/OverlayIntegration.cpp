@@ -889,6 +889,32 @@ void Run(const std::filesystem::path& visualOutput, bool focusOnly, bool selecti
         "Ctrl+A / Ctrl+arrows did not select the pointer display and resize its right/bottom edges in physical pixels");
     result.reset();
 
+    // Pressing Ctrl while picking a region shows and snaps to the previous completed capture region.
+    const RECT remembered{monitor.left + 72, monitor.top + 64, monitor.left + 212, monitor.top + 164};
+    begin(vispick::CaptureMode::Screenshot);
+    Drag(overlay, remembered, desktop);
+    PressKey(overlay, VK_RETURN);
+    Require(result && result->action == vispick::OverlayAction::Copy && EqualRect(&result->selection, &remembered),
+            "Could not establish previous capture region");
+    result.reset();
+
+    // A cancelled session must not overwrite the remembered capture region.
+    begin(vispick::CaptureMode::Screenshot);
+    Drag(overlay, rectangle, desktop);
+    PressKey(overlay, VK_ESCAPE);
+    Require(result && result->action == vispick::OverlayAction::Cancel, "Cancel did not preserve previous region");
+    result.reset();
+
+    begin(vispick::CaptureMode::Screenshot);
+    PressKey(overlay, VK_CONTROL, true);
+    Click(overlay, {monitor.left + 12, monitor.top + 12}, desktop);
+    SendMessageW(overlay.Handle(), WM_KEYUP, VK_CONTROL, 0);
+    PressKey(overlay, VK_RETURN);
+    Require(result && result->action == vispick::OverlayAction::Copy && EqualRect(&result->selection, &remembered),
+            "Holding Ctrl and clicking did not snap to the previous capture region");
+    CheckPixels(*result, remembered);
+    result.reset();
+
     // Save cancellation keeps the complete editor session; accepted save hands
     // ownership of the image to the callback and then completes with no duplicate.
     bool chooseSave = false;

@@ -51,6 +51,50 @@ RECT ResizeSelection(RECT selection, const SelectionHandle handle, POINT point, 
     return selection;
 }
 
+std::optional<RECT> ClipLastSelection(const std::optional<RECT> lastSelection, const RECT desktop) noexcept {
+    if (!lastSelection) { return std::nullopt; }
+    RECT clipped{};
+    if (!IntersectRect(&clipped, &*lastSelection, &desktop) || IsRectEmpty(&clipped)) { return std::nullopt; }
+    return clipped;
+}
+
+POINT SnapPointToRectEdges(POINT point, const RECT target, const int threshold) noexcept {
+    if (threshold <= 0 || IsRectEmpty(&target)) { return point; }
+    const auto snapAxis = [threshold](const LONG coordinate, const LONG firstEdge, const LONG secondEdge) noexcept {
+        const auto firstDistance = std::abs(static_cast<std::int64_t>(coordinate) - firstEdge);
+        const auto secondDistance = std::abs(static_cast<std::int64_t>(coordinate) - secondEdge);
+        if (firstDistance <= threshold && firstDistance <= secondDistance) { return firstEdge; }
+        if (secondDistance <= threshold) { return secondEdge; }
+        return coordinate;
+    };
+    point.x = snapAxis(point.x, target.left, target.right);
+    point.y = snapAxis(point.y, target.top, target.bottom);
+    return point;
+}
+
+RECT SnapMovedRectToEdges(const RECT moved, const RECT target, const RECT desktop, const int threshold) noexcept {
+    if (threshold <= 0 || IsRectEmpty(&moved) || IsRectEmpty(&target)) { return moved; }
+    const auto bestDelta = [threshold](const LONG first, const LONG second, const LONG targetFirst,
+                                       const LONG targetSecond) noexcept -> LONG {
+        const std::array<std::int64_t, 4> candidates{
+            static_cast<std::int64_t>(targetFirst) - first, static_cast<std::int64_t>(targetSecond) - second,
+            static_cast<std::int64_t>(targetSecond) - first, static_cast<std::int64_t>(targetFirst) - second};
+        std::int64_t chosen = 0;
+        std::int64_t bestDistance = static_cast<std::int64_t>(threshold) + 1;
+        for (const auto delta : candidates) {
+            const auto distance = std::abs(delta);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                chosen = delta;
+            }
+        }
+        return bestDistance <= threshold ? static_cast<LONG>(chosen) : 0L;
+    };
+    const LONG deltaX = bestDelta(moved.left, moved.right, target.left, target.right);
+    const LONG deltaY = bestDelta(moved.top, moved.bottom, target.top, target.bottom);
+    return deltaX != 0 || deltaY != 0 ? MoveSelection(moved, deltaX, deltaY, desktop) : moved;
+}
+
 std::array<POINT, 8> SelectionHandles(const RECT selection) noexcept {
     const LONG middleX = selection.left + (selection.right - selection.left) / 2;
     const LONG middleY = selection.top + (selection.bottom - selection.top) / 2;
@@ -179,20 +223,25 @@ void Selection::Begin(const POINT point, const int handleRadius) noexcept {
     if (handle_ == SelectionHandle::None) { rectangle_ = {point.x, point.y, point.x, point.y}; }
 }
 
-void Selection::Drag(const POINT point) noexcept {
+void Selection::Drag(const POINT point, const std::optional<RECT> snapTarget, const int snapThreshold) noexcept {
     if (!dragging_) { return; }
+    const bool snapping = snapTarget.has_value() && snapThreshold > 0 && !IsRectEmpty(&*snapTarget);
     if (handle_ == SelectionHandle::None) {
-        rectangle_ = NormalizeSelection(anchor_, point, desktop_);
+        const POINT target = snapping ? SnapPointToRectEdges(point, *snapTarget, snapThreshold) : point;
+        rectangle_ = NormalizeSelection(anchor_, target, desktop_);
     } else if (handle_ == SelectionHandle::Move) {
-        rectangle_ = MoveSelection(initial_, point.x - anchor_.x, point.y - anchor_.y, desktop_);
+        const RECT moved = MoveSelection(initial_, point.x - anchor_.x, point.y - anchor_.y, desktop_);
+        rectangle_ = snapping ? SnapMovedRectToEdges(moved, *snapTarget, desktop_, snapThreshold) : moved;
     } else {
-        rectangle_ = ResizeSelection(initial_, handle_, point, desktop_);
+        const POINT target = snapping ? SnapPointToRectEdges(point, *snapTarget, snapThreshold) : point;
+        rectangle_ = ResizeSelection(initial_, handle_, target, desktop_);
     }
 }
 
-void Selection::End(const POINT point, const RECT clickTarget) noexcept {
+void Selection::End(const POINT point, const RECT clickTarget, const std::optional<RECT> snapTarget,
+                    const int snapThreshold) noexcept {
     if (!dragging_) { return; }
-    Drag(point);
+    Drag(point, snapTarget, snapThreshold);
     if (handle_ == SelectionHandle::None && (IsRectEmpty(&rectangle_) || (rectangle_.right - rectangle_.left < 4 &&
                                                                           rectangle_.bottom - rectangle_.top < 4))) {
         Set(clickTarget);

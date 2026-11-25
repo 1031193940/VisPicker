@@ -15,6 +15,9 @@ enum class SelectionHandle { None, Move, TopLeft, Top, TopRight, Right, BottomRi
 [[nodiscard]] RECT NormalizeSelection(POINT first, POINT second, RECT desktop) noexcept;
 [[nodiscard]] RECT MoveSelection(RECT selection, LONG deltaX, LONG deltaY, RECT desktop) noexcept;
 [[nodiscard]] RECT ResizeSelection(RECT selection, SelectionHandle handle, POINT point, RECT desktop) noexcept;
+[[nodiscard]] std::optional<RECT> ClipLastSelection(std::optional<RECT> lastSelection, RECT desktop) noexcept;
+[[nodiscard]] POINT SnapPointToRectEdges(POINT point, RECT target, int threshold) noexcept;
+[[nodiscard]] RECT SnapMovedRectToEdges(RECT moved, RECT target, RECT desktop, int threshold) noexcept;
 [[nodiscard]] std::array<POINT, 8> SelectionHandles(RECT selection) noexcept;
 [[nodiscard]] SelectionHandle HitSelection(RECT selection, POINT point, int radius) noexcept;
 [[nodiscard]] RECT PlaceToolbar(RECT selection, SIZE size, RECT monitor, int gap, RECT excluded = {}) noexcept;
@@ -38,8 +41,9 @@ public:
     void Clear() noexcept;
     void Set(RECT rectangle) noexcept;
     void Begin(POINT point, int handleRadius) noexcept;
-    void Drag(POINT point) noexcept;
-    void End(POINT point, RECT clickTarget) noexcept;
+    void Drag(POINT point, std::optional<RECT> snapTarget = std::nullopt, int snapThreshold = 0) noexcept;
+    void End(POINT point, RECT clickTarget, std::optional<RECT> snapTarget = std::nullopt,
+             int snapThreshold = 0) noexcept;
     void CancelDrag() noexcept;
     void Nudge(LONG deltaX, LONG deltaY) noexcept;
     void ResizeBy(LONG widthDelta, LONG heightDelta) noexcept;

@@ -76,6 +76,23 @@ void Fill(const HDC context, const RECT rectangle, const COLORREF color) {
     FillRect(context, &rectangle, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
 }
 
+void DrawDashedFrame(const HDC context, RECT frame, const COLORREF accent, const int layers) {
+    if (IsRectEmpty(&frame)) { return; }
+    const UniqueGdiObject<HPEN> dashedPen(CreatePen(PS_DASH, 1, accent));
+    if (!dashedPen.Get()) { throw std::runtime_error("Create dashed overlay pen failed"); }
+    const SavedDc saved(context);
+    SetBkMode(context, TRANSPARENT);
+    SelectObject(context, dashedPen.Get());
+    SelectObject(context, GetStockObject(NULL_BRUSH));
+    SetDCBrushColor(context, RGB(255, 255, 255));
+    const auto whiteBrush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
+    for (int layer = 0; layer < layers; ++layer) {
+        FrameRect(context, &frame, whiteBrush);
+        Rectangle(context, frame.left, frame.top, frame.right, frame.bottom);
+        InflateRect(&frame, 1, 1);
+    }
+}
+
 struct WindowSnapshot {
     HWND excluded;
     RECT desktop;
@@ -159,11 +176,15 @@ struct Overlay::State {
     std::size_t drawCommittedCount = 0;
     bool english = false;
     bool choosingGifFrameRate = false;
+    bool lastRegionActive = false;
     int gifFramesPerSecond = 30;
     UINT dpi = 96;
     RECT desktop{};
     RECT hover{};
     RECT toolbar{};
+    RECT pendingClickSnap{};
+    RECT trackedTextEditor{};
+    std::optional<RECT> lastSelection;
     POINT pointer{};
     HWND previousForeground = nullptr;
     std::optional<std::chrono::steady_clock::time_point> activationDeadline;
@@ -313,7 +334,25 @@ struct Overlay::State {
         }
     }
 
+    [[nodiscard]] std::optional<RECT> AvailableLastSelection() const noexcept {
+        return ClipLastSelection(lastSelection, desktop);
+    }
+
+    [[nodiscard]] bool PreviewingLastSelection() const noexcept {
+        return lastRegionActive && !selection.HasSelection() && !selection.Dragging() &&
+               AvailableLastSelection().has_value();
+    }
+
+    [[nodiscard]] RECT LastSelectionGuideBounds() const noexcept {
+        return lastRegionActive && selection.Dragging() ? AvailableLastSelection().value_or(RECT{}) : RECT{};
+    }
+
+    [[nodiscard]] int LastSelectionSnapThreshold() const noexcept { return Scale(8); }
+
     [[nodiscard]] RECT SnapAt(const POINT point) const noexcept {
+        if (lastRegionActive) {
+            if (const auto last = AvailableLastSelection()) { return *last; }
+        }
         if (config.capture.windowSnap) {
             for (const RECT candidate : windows) {
                 if (PtInRect(&candidate, point)) { return candidate; }
@@ -326,7 +365,7 @@ struct Overlay::State {
         const RECT rectangle = VisualSelection();
         if (IsRectEmpty(&rectangle)) { return {}; }
         const RECT monitor = MonitorAt({rectangle.left, rectangle.top});
-        const LONG width = Scale(160);
+        const LONG width = Scale(PreviewingLastSelection() ? 200 : 160);
         const LONG height = Scale(23);
         const LONG left = std::clamp(rectangle.left, monitor.left, std::max(monitor.left, monitor.right - width));
         const LONG top = rectangle.top - height >= monitor.top ? rectangle.top - height : rectangle.top;
@@ -424,10 +463,17 @@ struct Overlay::State {
         RECT tooltip;
         RECT annotation;
         RECT textEditor;
+        RECT lastGuide;
     };
     [[nodiscard]] UiSnapshot Snapshot() const noexcept {
-        return {VisualSelection(), LabelBounds(),        toolbar,           MagnifierBounds(),
-                TooltipBounds(),   AnnotationUiBounds(), TextEditorBounds()};
+        return {VisualSelection(),
+                LabelBounds(),
+                toolbar,
+                MagnifierBounds(),
+                TooltipBounds(),
+                AnnotationUiBounds(),
+                TextEditorBounds(),
+                LastSelectionGuideBounds()};
     }
 
     void Changed(const UiSnapshot& old) {
@@ -440,11 +486,22 @@ struct Overlay::State {
         if (!EqualRect(old.textEditor, next.textEditor)) {
             AddDamage(old.textEditor);
             AddDamage(next.textEditor);
+            AddBorder(old.textEditor);
+            AddBorder(next.textEditor);
+        }
+        if (!EqualRect(trackedTextEditor, next.textEditor)) {
+            AddDamage(trackedTextEditor);
+            AddDamage(next.textEditor);
+            AddBorder(trackedTextEditor);
+            AddBorder(next.textEditor);
+            trackedTextEditor = next.textEditor;
         }
         AddBorder(old.selection);
         AddBorder(next.selection);
         AddBorder(old.annotation);
         AddBorder(next.annotation);
+        AddBorder(old.lastGuide);
+        AddBorder(next.lastGuide);
         for (const RECT rectangle : {old.label, next.label, old.toolbar, next.toolbar, old.magnifier, next.magnifier,
                                      old.tooltip, next.tooltip}) {
             AddDamage(rectangle);
@@ -722,6 +779,14 @@ struct Overlay::State {
         }
     }
 
+    void DrawTextEditorBorder(const HDC context) const {
+        const RECT editor = TextEditorBounds();
+        if (IsRectEmpty(&editor)) { return; }
+        RECT frame = Local(editor);
+        InflateRect(&frame, 1, 1);
+        DrawDashedFrame(context, frame, Accent(), std::clamp(Scale(1), 1, 2));
+    }
+
     void Compose(const RECT screenDirty) {
         const HDC context = backBuffer->DeviceContext();
         const SavedDc saved(context);
@@ -741,10 +806,16 @@ struct Overlay::State {
         SelectObject(context, font.Get());
         SetBkMode(context, TRANSPARENT);
         SetTextColor(context, RGB(245, 245, 245));
+        const RECT lastGuide = LastSelectionGuideBounds();
+        if (!IsRectEmpty(&lastGuide)) { DrawDashedFrame(context, Local(lastGuide), Accent(), 1); }
         if (!IsRectEmpty(&selected)) {
             const RECT outline = Local(selected);
-            SetDCBrushColor(context, Accent());
-            FrameRect(context, &outline, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+            if (PreviewingLastSelection()) {
+                DrawDashedFrame(context, outline, Accent(), std::clamp(Scale(1), 1, 2));
+            } else {
+                SetDCBrushColor(context, Accent());
+                FrameRect(context, &outline, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+            }
             if (selection.HasSelection() && !selection.Creating() &&
                 (mode == CaptureMode::Gif || !annotations || !annotations->Selected())) {
                 for (const POINT point : SelectionHandles(outline)) {
@@ -757,11 +828,14 @@ struct Overlay::State {
             }
             RECT label = Local(LabelBounds());
             Fill(context, label, RGB(30, 32, 36));
-            const auto dimensions = std::to_wstring(selected.right - selected.left) + L" × " +
-                                    std::to_wstring(selected.bottom - selected.top);
+            const auto sizeText = std::to_wstring(selected.right - selected.left) + L" × " +
+                                  std::to_wstring(selected.bottom - selected.top);
+            const auto dimensions =
+                PreviewingLastSelection() ? std::wstring(Text(L"上次区域 ", L"Last ")) + sizeText : sizeText;
             DrawTextW(context, dimensions.c_str(), -1, &label, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
         DrawAnnotationSelection(context);
+        DrawTextEditorBorder(context);
         DrawToolbar(context);
         DrawMagnifier(context);
         const Button* hovered = HoverButton();
@@ -847,6 +921,7 @@ struct Overlay::State {
         pendingSelectIndex.reset();
         drawCommittedCount = 0;
         choosingGifFrameRate = false;
+        lastRegionActive = false;
         if (GetCapture() == window.Handle()) { ReleaseCapture(); }
         textInput.reset();
         renderer.reset();
@@ -862,6 +937,8 @@ struct Overlay::State {
         selection.Clear();
         hover = {};
         toolbar = {};
+        pendingClickSnap = {};
+        trackedTextEditor = {};
         completion = {};
         saveRequested = {};
     }
@@ -884,6 +961,7 @@ struct Overlay::State {
             if (!CommitText()) { return; }
             result.image = renderer->Flatten(result.selection);
         }
+        if (action != OverlayAction::Cancel && !IsRectEmpty(&result.selection)) { lastSelection = result.selection; }
         auto completed = std::move(completion);
         const HWND restoreFocus = previousForeground;
         const bool restorePrevious = GetForegroundWindow() == window.Handle();
@@ -1011,18 +1089,40 @@ struct Overlay::State {
         }
     }
 
+    void SetLastRegionActive(const bool enabled) {
+        if (lastRegionActive == enabled) { return; }
+        if (enabled && !AvailableLastSelection()) { return; }
+        const auto old = Snapshot();
+        lastRegionActive = enabled;
+        if (selection.Dragging()) {
+            const auto snap = lastRegionActive ? AvailableLastSelection() : std::nullopt;
+            selection.Drag(pointer, snap, LastSelectionSnapThreshold());
+            if (annotations) { annotations->SetSelection(selection.Bounds()); }
+        } else if (!selection.HasSelection()) {
+            hover = SnapAt(pointer);
+            if (lastRegionActive) {
+                UpdateDpi({hover.left, hover.top});
+            } else {
+                UpdateDpi(pointer);
+            }
+        }
+        Changed(old);
+    }
+
     void PointerMove(const POINT point) {
         const auto old = Snapshot();
         pointer = point;
+        if (lastRegionActive && (GetKeyState(VK_CONTROL) & 0x8000) == 0) { lastRegionActive = false; }
         if (drawing) {
             AddDamage(annotations->PointerMove(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
         } else if (annotations && annotations->Editing()) {
             AddDamage(annotations->UpdateEdit(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
         } else if (selection.Dragging()) {
-            selection.Drag(point);
+            const auto snap = lastRegionActive ? AvailableLastSelection() : std::nullopt;
+            selection.Drag(point, snap, LastSelectionSnapThreshold());
             if (annotations) { annotations->SetSelection(selection.Bounds()); }
         } else if (!selection.HasSelection()) {
-            UpdateDpi(point);
+            if (!lastRegionActive) { UpdateDpi(point); }
             hover = SnapAt(point);
         }
         Changed(old);
@@ -1082,7 +1182,9 @@ struct Overlay::State {
             drawCommittedCount = annotations->Committed().size();
             AddDamage(annotations->PointerDown(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0, toolDpi));
         } else {
-            if (!selection.HasSelection()) { UpdateDpi(point); }
+            const bool hadSelection = selection.HasSelection();
+            if (!hadSelection) { UpdateDpi(point); }
+            pendingClickSnap = hadSelection ? SnapAt(point) : hover;
             selection.Begin(point, Scale(5));
         }
         SetCapture(window.Handle());
@@ -1103,7 +1205,10 @@ struct Overlay::State {
             AddDamage(annotations->UpdateEdit(point, (GetKeyState(VK_SHIFT) & 0x8000) != 0));
             AddDamage(annotations->CommitEdit());
         } else if (selection.Dragging()) {
-            selection.End(point, SnapAt(point));
+            const auto snap = lastRegionActive ? AvailableLastSelection() : std::nullopt;
+            const RECT clickTarget = IsRectEmpty(&pendingClickSnap) ? SnapAt(point) : pendingClickSnap;
+            pendingClickSnap = {};
+            selection.End(point, clickTarget, snap, LastSelectionSnapThreshold());
             if (annotations) { annotations->SetSelection(selection.Bounds()); }
         } else {
             return;
@@ -1124,6 +1229,7 @@ struct Overlay::State {
             AddDamage(annotations->CancelPreview());
         }
         if (annotations && annotations->Editing()) { AddDamage(annotations->CancelEdit()); }
+        pendingClickSnap = {};
         selection.CancelDrag();
         if (annotations) { annotations->SetSelection(selection.Bounds()); }
         UpdateSelectionDpi();
@@ -1203,6 +1309,10 @@ struct Overlay::State {
     }
 
     void Key(const WPARAM key) {
+        if (key == VK_CONTROL) {
+            if (!textInput || !textInput->Active()) { SetLastRegionActive(true); }
+            return;
+        }
         if (key == VK_ESCAPE) {
             if (choosingGifFrameRate) {
                 ToggleGifFrameRatePicker();
@@ -1227,6 +1337,10 @@ struct Overlay::State {
             if (selection.Dragging() || drawing || (annotations && annotations->Editing())) {
                 CancelGesture();
                 if (GetCapture() == window.Handle()) { ReleaseCapture(); }
+            }
+            if (!selection.HasSelection() && PreviewingLastSelection()) {
+                if (const auto last = AvailableLastSelection()) { SelectBounds(*last); }
+                return;
             }
             if (mode != CaptureMode::Gif && annotations && annotations->Selected() &&
                 annotations->Selected()->tool == AnnotationTool::Text) {
@@ -1562,6 +1676,9 @@ LRESULT Overlay::OnMessage(const UINT message, const WPARAM parameter, const LPA
         return 0;
     case WM_KEYDOWN:
         state_->Key(parameter);
+        return 0;
+    case WM_KEYUP:
+        if (parameter == VK_CONTROL) { state_->SetLastRegionActive(false); }
         return 0;
     case WM_SETCURSOR:
         state_->SetPointerCursor();
