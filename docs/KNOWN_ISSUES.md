@@ -1,6 +1,6 @@
 # 已知限制与待验收项目
 
-当前便携版为 0.7.0，Release 仅提供 x64 的 `VisPick_0.7.0.exe`，同时保留 x86 源码构建和 CI 验证。主要验证平台为 Windows 11 x64，2026-11-10 已在双 4K、175% DPI、60 Hz 本地会话补测；完整兼容矩阵仍待验证。 [0.7.0 发布说明](releases/VisPick-0.7.0.md) · [本轮实施与结果](reviews/Implementation-Optimization-2026-11-10.md) · [验收清单](P6_CHECKLIST.md)
+当前便携版为 0.8.0，Release 仅提供 x64 的 `VisPick_0.8.0.exe`，同时保留 x86 源码构建和 CI 验证。主要验证平台为 Windows 11 x64，2026-11-10 已在双 4K、175% DPI、60 Hz 本地会话补测；完整兼容矩阵仍待验证。 [0.8.0 发布说明](releases/VisPick-0.8.0.md) · [本轮实施与结果](reviews/Implementation-Optimization-2026-11-10.md) · [验收清单](P6_CHECKLIST.md)
 
 | 项目 | 当前边界与下一步 |
 |---|---|
